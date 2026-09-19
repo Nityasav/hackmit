@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 AgentId = Literal["cfo", "ap", "py", "gr", "au"]
-WorkspaceId = Literal["sandbox", "mit"]
+WorkspaceId = str
 TabId = Literal[
     "command", "board", "workflows", "findings", "approvals", "reports", "reasoning", "learning"
 ]
@@ -29,12 +29,15 @@ class Workspace(BaseModel):
     name: str
     kind: Literal["synthetic", "public"]
     period: str
-    mode: Literal["live", "recorded", "scripted"]
+    mode: Literal["live", "recorded", "scripted", "not_started"]
     snapshot_id: str
     disabled_tabs: list[TabId]
     model: str
     run_budget: RunBudget
     source_url: str | None = None
+    intake: bool = False
+    currency: str = "USD"
+    profile: str | None = None
 
 
 class Agent(BaseModel):
@@ -256,6 +259,7 @@ class Report(BaseModel):
 
 
 class Bundle(BaseModel):
+    contract_version: int = 2
     workspace: Workspace
     agents: list[Agent]
     briefing: Briefing

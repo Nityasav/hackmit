@@ -2,7 +2,7 @@
 // Change all three together.
 
 export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
-export type WorkspaceId = "sandbox" | "mit";
+export type WorkspaceId = string;
 export type TabId =
   | "command"
   | "board"
@@ -18,12 +18,15 @@ export interface Workspace {
   name: string;
   kind: "synthetic" | "public";
   period: string;
-  mode: "live" | "recorded" | "scripted";
+  mode: "live" | "recorded" | "scripted" | "not_started";
   snapshot_id: string;
   disabled_tabs: TabId[];
   model: string;
   run_budget: { used: number; total: number };
   source_url?: string;
+  intake?: boolean;
+  currency?: string;
+  profile?: string;
 }
 
 export interface Agent {
@@ -186,6 +189,7 @@ export interface Report {
 }
 
 export interface Bundle {
+  contract_version?: number;
   workspace: Workspace;
   agents: Agent[];
   briefing: Briefing;
@@ -198,4 +202,50 @@ export interface Bundle {
   playbooks: Playbook[];
   ablation: Ablation | null;
   report: Report;
+}
+
+export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice" | "service" | "policy" | "document";
+export interface IntakeWorkspace {
+  id: string; name: string; kind: "synthetic" | "public";
+  entity_type: "school" | "district" | "board" | "university";
+  jurisdiction: string; currency: "USD" | "CAD" | "EUR" | "GBP";
+  start: string; end: string; scope: string; profile: string; revision: number;
+}
+export interface SourceOptions {
+  role: SourceRole; source_system: string; source_version: number;
+  external_id: string; applies_to: string; mapping: Record<string, string>;
+  amount_unit: "major" | "minor"; expected_rows?: number | null;
+  expected_debit?: string | null; expected_credit?: string | null;
+  excluded: boolean; exclusion_reason: string;
+}
+export interface ImportFile {
+  id: string; name: string; sha256: string; options: SourceOptions;
+  headers: string[]; required_fields: string[]; row_count: number;
+  preview: { key: string; locator: number; payload: Record<string, string | number> }[];
+  totals: Record<string, number>; duplicate_of: string | null;
+}
+export interface ImportBatch {
+  id: string; workspace_id: string; status: string; version: number; base_revision: number;
+  created_at: string; snapshot_id: string | null; files: ImportFile[];
+  counts: { parsed: number; valid_records: number; new_records: number; duplicate_records: number; issues: number };
+  totals: { debit_cents: number; credit_cents: number };
+  issues: { code: string; message: string; source_id: string; locator?: number; field?: string }[];
+  issues_truncated: boolean;
+  changes: { record_key: string; role: string; previous: unknown; next: unknown }[];
+  coverage_note: string;
+}
+export interface EvidenceRequest {
+  id: string; title: string; role: SourceRole; task_id: string | null;
+  status: string; source_id: string | null; snapshot_id: string | null; version: number;
+}
+export interface Coverage {
+  workspace: IntakeWorkspace; snapshot: { id: string; revision: number; created_at: string } | null;
+  counts: Record<string, number>;
+  capabilities: { id: string; label: string; status: string; missing: string[]; note: string }[];
+  sources: { id: string; name: string; sha256: string; role: SourceRole; active: boolean }[];
+  requests: EvidenceRequest[]; coverage_verified: boolean; note: string;
+}
+export interface SourceDetail {
+  id: string; name: string; sha256: string; committed: boolean; options: SourceOptions;
+  line_count: number; lines: { number: number; text: string }[];
 }

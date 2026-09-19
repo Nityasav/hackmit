@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useData } from "@/lib/data";
+import { SourcesPanel } from "@/components/SourcesPanel";
 import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
 import {
@@ -26,12 +27,15 @@ export default function CommandCenter() {
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
   const pending = pendingApprovals.length;
 
+  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} subtitle={`snapshot ${workspace.snapshot_id}`} /><SourcesPanel key={workspace.id} /></>;
+
   return (
     <>
       <PageHeader
         title={`${workspace.name} · ${workspace.period}`}
         subtitle={`snapshot ${workspace.snapshot_id}`}
       />
+      <SourcesPanel key={workspace.id} />
 
       {/* CFO agent briefing */}
       <div className="mb-2.5 rounded-xl border border-green-300 bg-gradient-to-b from-green-50 to-transparent p-3.5">
@@ -116,7 +120,7 @@ export default function CommandCenter() {
           {kpis.map((k) => (
             <div key={k.label} className="p-3">
               <small className="block text-[10.5px] text-ink-dim">{k.label}</small>
-              <b className="font-display text-xl font-bold tracking-tight">{k.value}</b>
+              <b className="font-display text-xl font-bold">{k.value}</b>
               <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-accent-good"}`}>
                 {k.note}
               </em>
@@ -124,7 +128,7 @@ export default function CommandCenter() {
           ))}
           <div className="p-3">
             <small className="block text-[10.5px] text-ink-dim">Tasks done</small>
-            <b className="font-display text-xl font-bold tracking-tight tabular-nums">
+            <b className="font-display text-xl font-bold">
               {done} / {tasks.length}
             </b>
             <em className="block text-[10.5px] not-italic text-ink-dim">

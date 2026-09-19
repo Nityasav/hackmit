@@ -72,9 +72,22 @@ export function AppSidebar() {
 
 function SidebarContent() {
   const { open } = useSidebar();
-  const { bundle, ws, setWs } = useData();
+  const { bundle, ws, setWs, intakeWorkspaces } = useData();
   const pathname = usePathname();
   const pending = bundle.approvals.filter((a) => a.status === "pending").length;
+
+  // Demo workspaces plus anything imported through intake. Clicking cycles through them.
+  const workspaces = [
+    { id: "sandbox", name: "Sandbox University", short: "SU" },
+    { id: "mit", name: "MIT FY2025", short: "MIT" },
+    ...intakeWorkspaces.map((w) => ({ id: w.id, name: w.name, short: initials(w.name) })),
+  ];
+  const currentIndex = Math.max(
+    0,
+    workspaces.findIndex((w) => w.id === ws),
+  );
+  const current = workspaces[currentIndex] ?? { name: bundle.workspace.name, short: initials(bundle.workspace.name) };
+  const nextWorkspace = workspaces[(currentIndex + 1) % workspaces.length];
 
   const links = TABS.map((tab) => ({
     id: tab.id,
@@ -94,18 +107,18 @@ function SidebarContent() {
         {/* Same markup as SidebarLink, as a button: it switches workspace instead of navigating. */}
         <button
           type="button"
-          onClick={() => setWs(ws === "mit" ? "sandbox" : "mit")}
-          title="Switch workspace"
+          onClick={() => setWs(nextWorkspace.id)}
+          title={`Switch to ${nextWorkspace.name}`}
           className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-surface-3"
         >
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-ink text-[10px] font-bold text-white">
-            {ws === "mit" ? "MIT" : "SU"}
+            {current.short}
           </span>
           <motion.span
             animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
             className="m-0! inline-block whitespace-pre p-0! text-sm text-ink-dim transition duration-150 group-hover/sidebar:translate-x-1"
           >
-            {ws === "mit" ? "MIT FY2025" : "Sandbox University"}
+            {current.name}
           </motion.span>
         </button>
 
@@ -150,6 +163,14 @@ function SidebarContent() {
       </div>
     </>
   );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 function isActive(pathname: string, href: string) {

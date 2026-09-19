@@ -1,145 +1,104 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import sandboxFixture from "../fixtures/sandbox.json";
-import mitFixture from "../fixtures/mit.json";
-import type { ApprovalStatus, Bundle, WorkspaceId } from "./types";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import sandboxFixture from "../../../contracts/fixtures/sandbox.json";
+import mitFixture from "../../../contracts/fixtures/mit.json";
+import type { ApprovalStatus, Bundle, IntakeWorkspace } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const POLL_MS = 2000;
-
-const FIXTURES: Record<WorkspaceId, Bundle> = {
-  sandbox: sandboxFixture as unknown as Bundle,
-  mit: mitFixture as unknown as Bundle,
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const FIXTURES: Record<string, Bundle> = {
+  sandbox: sandboxFixture as unknown as Bundle, mit: mitFixture as unknown as Bundle,
 };
-
+export async function intakeApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(API_URL + path, { ...init, cache: "no-store", headers: {
+    ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    "X-SchoolTrace-Reviewer": "local-reviewer", ...init.headers,
+  } });
+  const data = await response.json();
+  if (!response.ok) {
+    const d = data.detail;
+    throw new Error(typeof d === "string" ? d : Array.isArray(d)
+      ? d.map((e: { msg: string }) => e.msg).join("; ") : d?.message || `API ${response.status}`);
+  }
+  return data;
+}
+function empty(ws: string, info?: IntakeWorkspace): Bundle {
+  return { workspace: { id: ws, name: info?.name || "Your institution", kind: info?.kind || "synthetic",
+    period: info ? `${info.start} — ${info.end}` : "Loading", mode: "not_started",
+    snapshot_id: "No records loaded", disabled_tabs: ["workflows", "approvals", "learning"],
+    model: "Not configured", run_budget: { used: 0, total: 0 }, intake: true },
+    agents: [], briefing: { generated_at: "—", text: "Upload records to get started. No investigation has run.", actions: [] },
+    kpis: [], workflows: [], tasks: [], findings: [], approvals: [], decisions: [], playbooks: [], ablation: null,
+    report: { title: "No investigation report yet", sections: [], comparisons: [] } };
+}
 interface DataContextValue {
-  ws: WorkspaceId;
-  setWs: (ws: WorkspaceId) => void;
-  bundle: Bundle;
-  /** "fixtures" = offline replay of src/fixtures; "api" = polling the FastAPI server. */
-  source: "fixtures" | "api";
-  apiError: string | null;
+  ws: string; setWs: (ws: string) => void; bundle: Bundle; source: "fixtures" | "api"; apiError: string | null;
+  intakeWorkspaces: IntakeWorkspace[]; refreshWorkspaces: () => Promise<void>; refreshBundle: () => Promise<void>;
   decideApproval: (id: string, decision: Exclude<ApprovalStatus, "pending">) => void;
 }
-
 const DataContext = createContext<DataContextValue | null>(null);
-
-/** Remembered workspace. Read through useSyncExternalStore so SSR renders the default, then hydrates. */
-function subscribeStorage(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  return () => window.removeEventListener("storage", onChange);
-}
-
-function readStoredWs(): string | null {
-  try {
-    return localStorage.getItem("st.ws");
-  } catch {
-    return null;
-  }
-}
-
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [chosen, setChosen] = useState<WorkspaceId | null>(null);
-  const [bundles, setBundles] = useState<Record<WorkspaceId, Bundle>>(FIXTURES);
+  const [ws, setWsState] = useState("sandbox");
+  const [bundles, setBundles] = useState<Record<string, Bundle>>(FIXTURES);
+  const [intakeWorkspaces, setIntakeWorkspaces] = useState<IntakeWorkspace[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
-  const source = API_URL ? "api" : "fixtures";
-
-  const stored = useSyncExternalStore(subscribeStorage, readStoredWs, () => null);
-  const ws: WorkspaceId = chosen ?? (stored === "mit" || stored === "sandbox" ? stored : "sandbox");
-
-  const setWs = useCallback((next: WorkspaceId) => {
-    setChosen(next);
-    try {
-      localStorage.setItem("st.ws", next);
-    } catch {}
+  const [restored, setRestored] = useState(false);
+  const source = process.env.NEXT_PUBLIC_API_URL || !FIXTURES[ws] ? "api" : "fixtures";
+  const refreshWorkspaces = useCallback(async () => {
+    setIntakeWorkspaces(await intakeApi<IntakeWorkspace[]>("/api/workspaces"));
   }, []);
-
-  // Live mode: poll the API for the active workspace's bundle.
   useEffect(() => {
-    if (!API_URL) return;
+    queueMicrotask(() => {
+      try {
+        const saved = localStorage.getItem("st.ws");
+        if (saved && /^(sandbox|mit|ws-[a-f0-9]{16})$/.test(saved)) setWsState(saved);
+      } catch {}
+      setRestored(true);
+    });
+    intakeApi<IntakeWorkspace[]>("/api/workspaces").then(setIntakeWorkspaces).catch(() => {});
+  }, []);
+  const setWs = useCallback((next: string) => {
+    setWsState(next); setApiError(null);
+    try { localStorage.setItem("st.ws", next); } catch {}
+  }, []);
+  const refreshBundle = useCallback(async () => {
+    if (source !== "api") return;
+    const next = await intakeApi<Bundle>(`/api/workspaces/${encodeURIComponent(ws)}/bundle`);
+    setBundles((b) => ({ ...b, [ws]: next })); setApiError(null);
+  }, [source, ws]);
+  useEffect(() => {
+    if (source !== "api") return;
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/workspaces/${ws}/bundle`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const next = (await res.json()) as Bundle;
-        if (!cancelled) {
-          setBundles((b) => ({ ...b, [ws]: next }));
-          setApiError(null);
-        }
-      } catch (e) {
-        if (!cancelled) setApiError(e instanceof Error ? e.message : "API unreachable");
-      }
+        const next = await intakeApi<Bundle>(`/api/workspaces/${encodeURIComponent(ws)}/bundle`);
+        if (!cancelled) { setBundles((b) => ({ ...b, [ws]: next })); setApiError(null); }
+      } catch (e) { if (!cancelled) setApiError(e instanceof Error ? e.message : "API unreachable"); }
     };
-    load();
-    const id = setInterval(load, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [ws]);
-
-  // Offline replay: advance in-flight tasks so the recorded run plays back.
-  useEffect(() => {
-    if (API_URL) return;
-    const id = setInterval(() => {
-      setBundles((b) => {
-        const cur = b.sandbox;
-        const tasks = cur.tasks.map((t) => {
-          if (t.column !== "working" && t.column !== "auditor_review") return t;
-          const bump = Math.random() < 0.35 ? 1 : 0;
-          return {
-            ...t,
-            progress: Math.min(95, t.progress + bump),
-            eta_s: t.eta_s == null ? null : Math.max(3, t.eta_s - 1),
-          };
-        });
-        return { ...b, sandbox: { ...cur, tasks } };
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const decideApproval = useCallback(
-    (id: string, decision: Exclude<ApprovalStatus, "pending">) => {
-      setBundles((b) => {
-        const cur = b[ws];
-        const approvals = cur.approvals.map((a) => (a.id === id ? { ...a, status: decision } : a));
-        const tasks = cur.tasks.map((t) =>
-          t.approval_id === id ? { ...t, column: "done" as const, progress: 100 } : t,
-        );
-        return { ...b, [ws]: { ...cur, approvals, tasks } };
-      });
-      if (API_URL) {
-        fetch(`${API_URL}/api/approvals/${id}/decision`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspace: ws, decision }),
-        }).catch(() => setApiError("Could not save decision"));
-      }
-    },
-    [ws],
-  );
-
-  const value = useMemo<DataContextValue>(
-    () => ({ ws, setWs, bundle: bundles[ws], source, apiError, decideApproval }),
-    [ws, setWs, bundles, source, apiError, decideApproval],
-  );
-
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+    void load(); const id = setInterval(load, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [source, ws]);
+  const decideApproval = useCallback((id: string, decision: Exclude<ApprovalStatus, "pending">) => {
+    if (source === "api") {
+      intakeApi<Bundle>(`/api/approvals/${id}/decision`, { method: "POST", body: JSON.stringify({ workspace: ws, decision }) })
+        .then((next) => setBundles((b) => ({ ...b, [ws]: next }))).catch((e) => setApiError(e.message));
+      return;
+    }
+    setBundles((b) => ({ ...b, [ws]: { ...b[ws],
+      approvals: b[ws].approvals.map((a) => a.id === id ? { ...a, status: decision } : a),
+      tasks: b[ws].tasks.map((t) => t.approval_id === id && decision === "approved"
+        ? { ...t, column: "done" as const, progress: 100 } : t),
+    } }));
+  }, [source, ws]);
+  const bundle = useMemo(() => bundles[ws] || empty(ws, intakeWorkspaces.find((w) => w.id === ws)),
+    [bundles, ws, intakeWorkspaces]);
+  const value = useMemo<DataContextValue>(() => ({ ws, setWs, bundle, source, apiError, decideApproval,
+    intakeWorkspaces, refreshWorkspaces, refreshBundle }),
+    [ws, setWs, bundle, source, apiError, decideApproval, intakeWorkspaces, refreshWorkspaces, refreshBundle]);
+  return <DataContext.Provider value={value}>{restored ? children : <p className="p-6 text-sm text-slate-500">Loading workspace…</p>}</DataContext.Provider>;
 }
-
-export function useData(): DataContextValue {
+export function useData() {
   const ctx = useContext(DataContext);
-  if (!ctx) throw new Error("useData must be used inside <DataProvider>");
+  if (!ctx) throw new Error("useData must be used inside DataProvider");
   return ctx;
 }

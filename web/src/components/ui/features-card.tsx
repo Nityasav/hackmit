@@ -75,7 +75,7 @@ export const Component = () => {
             {workspace.mode === "live" ? "Running live" : `Mode: ${workspace.mode}`}
           </span>
         </div>
-        <h2 className="font-display text-xl font-bold tracking-tight">How the agents learn</h2>
+        <h2 className="font-display text-xl font-bold">How the agents learn</h2>
         <p className="text-[12.5px] leading-relaxed text-ink-dim">
           Agents write playbooks from cases they have seen before. A playbook only takes
           effect once a replay of earlier months adds no false positives and you approve it.
@@ -229,7 +229,7 @@ export const Component = () => {
             >
               <Icon className="mb-2 h-4 w-4 text-accent-good" aria-hidden />
               <p className="text-[10.5px] text-ink-dim">{stat.label}</p>
-              <p className="mt-0.5 font-display text-xl font-bold tracking-tight tabular-nums">
+              <p className="mt-0.5 font-display text-xl font-bold">
                 {stat.value}
               </p>
             </div>

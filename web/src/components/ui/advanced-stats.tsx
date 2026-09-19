@@ -83,7 +83,7 @@ export default function AdvancedStats() {
             </div>
             <div className="mt-4">
               <div className="mb-1.5 flex items-end justify-between">
-                <span className="font-display text-2xl font-bold tracking-tight tabular-nums">
+                <span className="font-display text-2xl font-bold">
                   {settledPct}%
                 </span>
                 <span className="mb-1 text-[11px] text-ink-dim">
@@ -136,7 +136,7 @@ export default function AdvancedStats() {
           >
             <p className="mb-1.5 text-[10.5px] text-ink-dim">{kpi.label}</p>
             <div className="flex items-baseline justify-between gap-2">
-              <p className="font-display text-xl font-bold tracking-tight">{kpi.value}</p>
+              <p className="font-display text-xl font-bold">{kpi.value}</p>
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10.5px] font-semibold",
@@ -157,7 +157,7 @@ export default function AdvancedStats() {
         >
           <p className="mb-1.5 text-[10.5px] text-ink-dim">Waiting on you</p>
           <div className="flex items-baseline justify-between gap-2">
-            <p className="font-display text-xl font-bold tracking-tight tabular-nums">
+            <p className="font-display text-xl font-bold">
               {approvals.filter((a) => a.status === "pending").length}
             </p>
             <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-dim">

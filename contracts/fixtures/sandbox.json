@@ -1,0 +1,302 @@
+{
+  "workspace": {
+    "id": "sandbox",
+    "name": "Sandbox University",
+    "kind": "synthetic",
+    "period": "September close",
+    "mode": "recorded",
+    "snapshot_id": "SNAP-SEP-02",
+    "disabled_tabs": [],
+    "model": "claude-sonnet-5",
+    "run_budget": { "used": 63, "total": 150 }
+  },
+  "agents": [
+    { "id": "cfo", "name": "CFO Agent", "short": "CF", "role": "Runs the team, writes briefings and reports", "status": "working", "doing": "Coordinating 4 tasks, drafting briefing" },
+    { "id": "ap", "name": "AP & Payments", "short": "AP", "role": "Invoices, POs, receipts, payment batches, bank", "status": "working", "doing": "Matching invoice 46 of 60 to PO + receipt" },
+    { "id": "py", "name": "Payroll & Budget", "short": "PY", "role": "Payroll tie-out, fund allocations, budget variance", "status": "working", "doing": "Computing 60/40 split from service record" },
+    { "id": "gr", "name": "Grants & Compliance", "short": "GR", "role": "Award terms, allowability, restricted funds", "status": "working", "doing": "Checking service dates vs award window" },
+    { "id": "au", "name": "Internal Auditor", "short": "AU", "role": "Independently re-checks every claim", "status": "waiting", "doing": "Waiting: 1 item queued for re-check" }
+  ],
+  "briefing": {
+    "generated_at": "14:06",
+    "text": "Your agent team has worked the September close for **4m 12s** across 12 sources. So far: **1 payroll charge billed to the wrong fund** ($4,000, a reclassification with no cash impact). **2 false alarms cleared**, and the payroll increase explained (substitute coverage + a rate change). Payment batch #9 is ready but **held for your release**. I need **3 decisions and 1 document** from you.",
+    "actions": [
+      { "label": "Review approvals", "href": "approvals", "primary": true },
+      { "label": "Watch agents work", "href": "board" },
+      { "label": "Why these conclusions?", "href": "reasoning" }
+    ]
+  },
+  "kpis": [
+    { "label": "Flagged by agents", "value": "$4,000", "note": "reclass · cash $0", "tone": "good" },
+    { "label": "Learned playbooks used", "value": "2", "note": "1 rejected as stale", "tone": "warn" },
+    { "label": "Questions to you", "value": "4", "note": "vs 9 in August run", "tone": "good" }
+  ],
+  "workflows": [
+    { "id": "close", "name": "Month-end close · September", "owner": "cfo", "progress": 60, "stages": [
+      { "name": "Import 12 sources", "state": "done" }, { "name": "Tie opening balances", "state": "done" }, { "name": "Investigate exceptions", "state": "running" },
+      { "name": "Approve adjustments", "state": "human" }, { "name": "Recompute statements", "state": "todo" }, { "name": "Close report", "state": "todo" } ] },
+    { "id": "payroll", "name": "Payroll · Sept run (80 staff)", "owner": "py", "progress": 57, "stages": [
+      { "name": "Gross-to-net tie-out", "state": "done" }, { "name": "Employer costs", "state": "done" }, { "name": "Fund allocation check", "state": "running" },
+      { "name": "Variance bridge", "state": "todo" }, { "name": "Approve reallocation", "state": "human" } ] },
+    { "id": "ap", "name": "AP & payments · 60 invoices", "owner": "ap", "progress": 75, "stages": [
+      { "name": "3-way match 45/60", "state": "running" }, { "name": "Duplicate scan", "state": "done" }, { "name": "Vendor-change check", "state": "done" },
+      { "name": "Build payment batch", "state": "todo" }, { "name": "Release payments", "state": "human" } ] },
+    { "id": "grants", "name": "Grant compliance · 2 awards", "owner": "gr", "progress": 30, "stages": [
+      { "name": "Read award terms", "state": "done" }, { "name": "Service-window test", "state": "running" }, { "name": "Upload service record", "state": "human" },
+      { "name": "Allowability", "state": "todo" }, { "name": "Award schedule", "state": "todo" } ] },
+    { "id": "audit", "name": "Audit prep", "owner": "au", "progress": 0, "stages": [
+      { "name": "Re-perform key calcs", "state": "todo" }, { "name": "Sample cleared items", "state": "todo" }, { "name": "Workpaper bundle", "state": "todo" }, { "name": "PBC export", "state": "todo" } ] }
+  ],
+  "tasks": [
+    { "id": "T-110", "agent": "ap", "title": "Bank reconciliation · Sept", "workflow": "AP & payments", "column": "queued", "progress": 0, "eta_s": null, "started_at": null, "tool_calls": { "used": 0, "budget": 12 }, "note": "waits on 3-way match",
+      "steps": [ { "title": "Load bank items and book cash", "state": "todo" }, { "title": "Match deposits and payments", "state": "todo" }, { "title": "List timing vs unresolved differences", "state": "todo" } ],
+      "todos": [], "rationale": null },
+    { "id": "T-111", "agent": "py", "title": "Payroll variance bridge (+$18,450)", "workflow": "Payroll", "column": "queued", "progress": 0, "eta_s": null, "started_at": null, "tool_calls": { "used": 0, "budget": 12 }, "note": "after allocation fix",
+      "steps": [ { "title": "Split change into headcount, rate, hours, benefits", "state": "todo" }, { "title": "Label unexplained residual", "state": "todo" } ],
+      "todos": [], "rationale": null },
+
+    { "id": "T-104", "agent": "py", "title": "Fix Sept payroll allocation · PAY-104", "workflow": "Payroll", "column": "working", "progress": 57, "eta_s": 40, "started_at": "14:04:10", "tool_calls": { "used": 7, "budget": 12 },
+      "steps": [
+        { "title": "Pull payroll record PAY-104", "detail": "query_financial_records → $10,000.00, 100% → student-support", "state": "done" },
+        { "title": "Tie gross-to-net", "detail": "calculate(gross_to_net) → ties, residual $0.00", "state": "done" },
+        { "title": "Check memory for a precedent", "detail": "PB-03 “60/40 transport” → rejected: different contract", "state": "done", "memory": true },
+        { "title": "Compute split from service record", "detail": "calculate(alloc_split, SVC-REC-SEP) → running…", "state": "running" },
+        { "title": "Draft reclassification journal", "detail": "propose_adjustment · must be balanced, cash Δ $0", "state": "todo" },
+        { "title": "Send to Internal Auditor", "detail": "auditor re-performs calc from originals", "state": "todo" },
+        { "title": "Ask you to approve", "detail": "lands in Approvals", "state": "todo" }
+      ],
+      "todos": [ "Confirm FTE for EMP-044 in assignments file", "Ask Grants agent: does 60% fit award purpose §4.2?", "Flag budget sheet (says 100%) as outdated" ],
+      "rationale": "Budget sheet says 100% award, but the September service record shows 24 of 40 hours on award work. A budgeted % isn't proof of actual work, so the service record wins." },
+    { "id": "T-106", "agent": "ap", "title": "3-way match · 60 September invoices", "workflow": "AP & payments", "column": "working", "progress": 75, "eta_s": 70, "started_at": "14:02:12", "tool_calls": { "used": 9, "budget": 12 },
+      "steps": [
+        { "title": "Load invoices, POs, receipts", "detail": "search_sources → 60 invoices, 30 POs, 40 receipts", "state": "done" },
+        { "title": "Match 45 invoices", "detail": "45 matched within tolerance", "state": "done" },
+        { "title": "Duplicate check INV-2291 / 2291A", "detail": "2 receipt batches → cleared", "state": "done", "memory": false },
+        { "title": "Match remaining 15 invoices", "detail": "now: INV-2317 vs PO-889…", "state": "running" },
+        { "title": "Build payment batch #9", "detail": "held for your release", "state": "todo" },
+        { "title": "Send exceptions to Auditor", "state": "todo" }
+      ],
+      "todos": [ "Vendor V-12 changed bank details → escalate, do not pay", "Apply credit memo CM-77 to INV-2240" ],
+      "rationale": "Same vendor and same amount isn't enough to call a duplicate. Separate delivery receipts mean two real purchases." },
+    { "id": "T-105", "agent": "gr", "title": "Test student-support award window", "workflow": "Grant compliance", "column": "working", "progress": 30, "eta_s": 120, "started_at": "14:03:02", "tool_calls": { "used": 4, "budget": 12 },
+      "steps": [
+        { "title": "Open award GRANT-SS (amendment v2)", "detail": "read_source_span → award terms", "state": "done" },
+        { "title": "Read clause §4.2 allowable purpose", "detail": "purpose: student-support services", "state": "done" },
+        { "title": "Check service dates vs award window", "detail": "Sep 1 – Jun 30 · 38 charges · 12 checked…", "state": "running" },
+        { "title": "Allowability + duplicate-funding checks", "state": "todo" },
+        { "title": "Update award schedule", "state": "todo" },
+        { "title": "Send to Auditor", "state": "todo" }
+      ],
+      "todos": [ "Need October service record (asked you)", "Tech-grant charge $1,850: service date Aug 28?" ],
+      "rationale": "The invoice date is after the window opened, but what counts is the service date, not the invoice date." },
+
+    { "id": "T-120", "approval_id": "EV-31", "agent": "gr", "title": "Upload October service record", "workflow": "Grant compliance", "column": "needs_you", "progress": 50, "eta_s": null, "started_at": "14:03:40", "tool_calls": { "used": 3, "budget": 12 }, "note": "evidence request", "note_tone": "warn",
+      "steps": [ { "title": "Search sources for service_allocation 2026-10", "detail": "0 results", "state": "done" }, { "title": "Request document from you", "detail": "request_evidence → Approvals", "state": "done" }, { "title": "Waiting for upload", "state": "running" }, { "title": "Re-test tech-grant charge", "state": "todo" } ],
+      "todos": [ "Re-open T-105 when document arrives" ],
+      "rationale": "The tech-grant charge can't be judged without knowing when the service happened. Guessing would be worse than waiting." },
+    { "id": "T-121", "approval_id": "ADJ-12", "agent": "py", "title": "Approve $4,000 reclassification", "workflow": "Payroll", "column": "needs_you", "progress": 90, "eta_s": null, "started_at": "14:04:22", "tool_calls": { "used": 8, "budget": 12 }, "note": "auditor verified", "note_tone": "warn",
+      "steps": [ { "title": "Draft ADJ-12 (balanced)", "state": "done" }, { "title": "Auditor re-performed CALC-ALLOC-07", "state": "done" }, { "title": "Waiting for your approval", "state": "running" }, { "title": "Apply to scenario + recompute reports", "state": "todo" } ],
+      "todos": [], "rationale": "Agents can propose a correction but only a human can apply it." },
+    { "id": "T-122", "approval_id": "PAY-B9", "agent": "ap", "title": "Release payment batch #9", "workflow": "AP & payments", "column": "needs_you", "progress": 90, "eta_s": null, "started_at": "14:03:55", "tool_calls": { "used": 6, "budget": 12 }, "note": "$38,210 · 1 held", "note_tone": "warn",
+      "steps": [ { "title": "Batch 44 matched, approved invoices", "state": "done" }, { "title": "Hold INV-2302 (vendor V-12 bank change)", "state": "done" }, { "title": "Waiting for your release (simulated)", "state": "running" } ],
+      "todos": [ "Verify V-12 bank change by phone before paying INV-2302" ],
+      "rationale": "A bank-detail change right before payment is a classic fraud pattern, so that invoice stays out of the batch until verified." },
+
+    { "id": "T-130", "agent": "au", "title": "Re-perform CALC-ALLOC-07", "workflow": "Audit prep", "column": "auditor_review", "progress": 40, "eta_s": 30, "started_at": "14:04:30", "tool_calls": { "used": 3, "budget": 12 }, "note": "re-reading originals", "note_tone": "info",
+      "steps": [ { "title": "Read SVC-REC-SEP rows 3–9 directly", "state": "done" }, { "title": "Recompute 60/40 split independently", "state": "running" }, { "title": "Check cash Δ = 0 and journal balances", "state": "todo" }, { "title": "Accept / reject / needs evidence", "state": "todo" } ],
+      "todos": [ "Sample 2 cleared invoices for re-check" ],
+      "rationale": "The auditor never trusts another agent's summary. It re-reads the source and redoes the math." },
+
+    { "id": "T-100", "agent": "cfo", "title": "Plan: 3 hypotheses, 6 tasks", "workflow": "Month-end close", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:01:58", "tool_calls": { "used": 2, "budget": 12 },
+      "steps": [ { "title": "Check source coverage", "state": "done" }, { "title": "Turn question into 3 hypotheses", "state": "done" }, { "title": "Assign 6 tasks to specialists", "state": "done" } ], "todos": [], "rationale": "Staffing up + enrollment down + grant nearly used up points to allocation, payroll variance, and award-window questions." },
+    { "id": "T-101", "agent": "ap", "title": "Import 12 sources · 1 quarantined", "workflow": "Month-end close", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:01:40", "tool_calls": { "used": 3, "budget": 12 },
+      "steps": [ { "title": "Hash and stage 12 files", "state": "done" }, { "title": "Quarantine 1 malformed row file", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "T-102", "agent": "au", "title": "Opening balances verified", "workflow": "Month-end close", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:01:50", "tool_calls": { "used": 2, "budget": 12 },
+      "steps": [ { "title": "Opening TB debits = credits", "state": "done" }, { "title": "Opening + activity = closing", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "T-103", "agent": "py", "title": "Gross-to-net tie-out", "workflow": "Payroll", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:02:05", "tool_calls": { "used": 2, "budget": 12 },
+      "steps": [ { "title": "Gross − deductions = net for 80 staff", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "T-107", "agent": "ap", "title": "INV-2291 duplicate → cleared", "workflow": "AP & payments", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:02:30", "tool_calls": { "used": 4, "budget": 12 },
+      "steps": [ { "title": "Compare vendor, amount, dates", "state": "done" }, { "title": "Read both delivery receipts", "state": "done" }, { "title": "Clear: 2 real deliveries", "state": "done" } ], "todos": [], "rationale": "Separate receipts = separate purchases." },
+    { "id": "T-108", "agent": "py", "title": "Substitute-pay explained", "workflow": "Payroll", "column": "done", "progress": 100, "eta_s": null, "started_at": "14:02:48", "tool_calls": { "used": 5, "budget": 12 },
+      "steps": [ { "title": "Bridge Aug → Sep payroll", "state": "done" }, { "title": "Label $312 residual", "state": "done" } ], "todos": [], "rationale": "The increase comes from substitute coverage and a rate change, not waste. The residual is labeled, not forced." }
+  ],
+  "findings": [
+    { "id": "F-07", "agent": "py", "title": "Payroll PAY-104 billed to the wrong fund", "summary": "Charged 100% to the student-support award. The service record supports 60%.", "status": "substantiated", "amount_cents": 400000, "amount_note": "reclassification · cash $0", "verified_by": "au",
+      "evidence": [
+        { "label": "PAY-104 · $10,000.00", "kind": "record", "tone": "neutral", "edge": "CHARGED_TO" },
+        { "label": "Student-support award (100%)", "kind": "award", "tone": "neutral", "edge": "SUPPORTED_BY" },
+        { "label": "Budget sheet (says 100%) · outdated", "kind": "doc", "tone": "bad", "edge": "CONTRADICTED_BY" },
+        { "label": "SVC-REC-SEP · 24 of 40 hrs on award", "kind": "doc", "tone": "good", "edge": "DERIVED_FROM" },
+        { "label": "CALC-ALLOC-07 · 60/40 → $4,000.00", "kind": "calc", "tone": "good" }
+      ] },
+    { "id": "F-08", "agent": "ap", "title": "INV-2291 / 2291A look like a duplicate", "summary": "Same vendor and amount, but 2 separate delivery receipts.", "status": "cleared", "amount_cents": null, "verified_by": "au",
+      "evidence": [
+        { "label": "INV-2291 · $2,400.00", "kind": "record", "tone": "neutral", "edge": "MATCHED_TO" },
+        { "label": "RCPT-551 · batch B-11 (Sep 4)", "kind": "doc", "tone": "good", "edge": "COMPARED_WITH" },
+        { "label": "INV-2291A · $2,400.00", "kind": "record", "tone": "neutral", "edge": "MATCHED_TO" },
+        { "label": "RCPT-560 · batch B-14 (Sep 18)", "kind": "doc", "tone": "good" }
+      ] },
+    { "id": "F-09", "agent": "py", "title": "Payroll +$18,450 vs August", "summary": "Substitute coverage + a rate change. $312 residual labeled, not forced.", "status": "explained", "amount_cents": 31200, "amount_note": "unexplained residual", "verified_by": "au",
+      "evidence": [
+        { "label": "Payroll Aug vs Sep", "kind": "record", "tone": "neutral", "edge": "DERIVED_FROM" },
+        { "label": "Substitute hours log", "kind": "doc", "tone": "good", "edge": "DERIVED_FROM" },
+        { "label": "Rate change memo (Sep 1)", "kind": "doc", "tone": "good", "edge": "DERIVED_FROM" },
+        { "label": "CALC-BRIDGE-02 · residual $312.00", "kind": "calc", "tone": "neutral" }
+      ] },
+    { "id": "F-10", "agent": "gr", "title": "Tech-grant charge outside the award window?", "summary": "Invoice is in-window, but the service date may be Aug 28. Waiting on the service record.", "status": "needs_evidence", "amount_cents": 185000, "amount_note": "at risk if out of window",
+      "evidence": [
+        { "label": "INV-2266 · $1,850.00", "kind": "record", "tone": "neutral", "edge": "CHARGED_TO" },
+        { "label": "Technology award (window Sep 1–Jun 30)", "kind": "award", "tone": "neutral", "edge": "NEEDS" },
+        { "label": "Service record (missing)", "kind": "doc", "tone": "bad" }
+      ] }
+  ],
+  "approvals": [
+    { "id": "ADJ-12", "agent": "py", "kind": "journal", "title": "Reclassify $4,000 to general operations", "summary": "PAY-104: service record supports 60% award / 40% general operations.", "verified": true, "status": "pending",
+      "journal": [
+        { "account": "Salary expense", "fund": "General operations", "debit_cents": 400000, "credit_cents": 0 },
+        { "account": "Salary expense", "fund": "Student-support award", "debit_cents": 0, "credit_cents": 400000 }
+      ],
+      "effects": [
+        { "label": "Award spending", "value": "−$4,000", "tone": "good" },
+        { "label": "General operations", "value": "+$4,000" },
+        { "label": "Total payroll", "value": "unchanged" },
+        { "label": "Cash", "value": "unchanged" }
+      ] },
+    { "id": "PAY-B9", "agent": "ap", "kind": "payment", "title": "Release payment batch #9", "summary": "44 invoices · $38,210.00 · INV-2302 held (vendor V-12 changed bank details). Simulated release, no real payment.", "verified": true, "status": "pending" },
+    { "id": "PB-07", "agent": "cfo", "kind": "playbook", "title": "Activate playbook PB-07", "summary": "“Service records beat budget sheets for grant payroll.” Replay on Aug + Sep passed with 0 new false positives.", "verified": true, "status": "pending" },
+    { "id": "EV-31", "agent": "gr", "kind": "evidence", "title": "Upload October service record", "summary": "Needed to test the $1,850 tech-grant charge (F-10).", "verified": false, "status": "pending" }
+  ],
+  "decisions": [
+    { "id": "D-41", "run": "October close · run #1", "time": "09:12", "agent": "ap", "action": "Cleared INV-3102 / 3102B without asking you",
+      "summary": "Same vendor and amount, but 2 delivery receipts. Matches learned playbook PB-05.",
+      "tags": [ { "label": "memory: PB-05 ✓ applied", "kind": "mem" }, { "label": "RCPT-771" }, { "label": "RCPT-774" } ],
+      "when": { "run": "Oct close · run #1", "step": "14 of 41", "started": "09:12:04", "finished": "09:12:19 (15s)", "trigger": "Duplicate scan flagged same vendor (V-08 Campus Supply), same $2,400.00, invoice numbers 1 char apart" },
+      "how": [
+        { "tool": "search_sources", "input": "vendor=V-08, amount=2400.00", "output": "2 invoices" },
+        { "tool": "read_source_span", "input": "RCPT-771, RCPT-774", "output": "2 receipts · batch B-19 (Oct 3) and B-23 (Oct 17)" },
+        { "tool": "retrieve_precedents", "input": "domain=AP duplicates", "output": "PB-05 (active)" },
+        { "tool": "calculate", "input": "match_3way(INV-3102B)", "output": "matched PO-912 line 2" }
+      ],
+      "why": "Two goods receipts with different batch numbers and dates show two real deliveries. Same amount is only a signal to check, not proof of a duplicate.",
+      "alternatives": [
+        { "option": "Clear both invoices", "reason": "receipts prove 2 deliveries and playbook PB-05 applies", "chosen": true },
+        { "option": "Flag as duplicate", "reason": "contradicted by 2 separate receipts", "chosen": false },
+        { "option": "Ask you to confirm", "reason": "PB-05 covers this exact pattern and passed its checks, so asking would waste your time", "chosen": false }
+      ],
+      "memory_checks": [ { "text": "PB-05 in scope: vendor V-08, AP duplicates", "ok": true }, { "text": "Valid: Sep 1 → open-ended", "ok": true }, { "text": "Exclusion “vendor changed bank details” not hit", "ok": true } ],
+      "outcome": "Cleared. Added to the Internal Auditor’s sample of cleared items." },
+    { "id": "D-42", "run": "October close · run #1", "time": "09:14", "agent": "py", "action": "Did NOT reuse the 60/40 transport split",
+      "summary": "Contract B (amended Oct 1) changed routes, so the old precedent no longer applies. Asked for current evidence.",
+      "tags": [ { "label": "memory: PB-03 ✗ rejected: stale", "kind": "memx" }, { "label": "CONTRACT-B §2" } ],
+      "when": { "run": "Oct close · run #1", "step": "17 of 41", "started": "09:14:40", "finished": "09:15:22 (42s)", "trigger": "Northside Transit charge $12,500.00 split across 2 funds. PB-03 matched on vendor name" },
+      "how": [
+        { "tool": "retrieve_precedents", "input": "vendor=V-03 Northside Transit", "output": "PB-03 · 60/40 · contract A" },
+        { "tool": "traverse_context", "input": "PB-03 → GOVERNED_BY", "output": "CONTRACT-A · valid Sep 1–30" },
+        { "tool": "read_source_span", "input": "CONTRACT-B §2", "output": "routes amended, effective Oct 1" },
+        { "tool": "request_evidence", "input": "route_allocation, 2026-10", "output": "request sent to you" }
+      ],
+      "why": "PB-03 was approved for contract A. Contract B changed the routes on Oct 1, so 60/40 no longer describes the actual work. A matching vendor name is not enough to reuse a precedent.",
+      "alternatives": [
+        { "option": "Reject PB-03 and request current evidence", "reason": "the precedent’s governing contract was superseded", "chosen": true },
+        { "option": "Reuse 60/40", "reason": "validity check failed: contract A superseded by B", "chosen": false },
+        { "option": "Estimate a new split from route counts", "reason": "that’s a guess, not evidence. Agents may not invent allocation bases", "chosen": false }
+      ],
+      "memory_checks": [ { "text": "PB-03 in scope: vendor V-03", "ok": true }, { "text": "Governing contract A superseded by contract B (Oct 1)", "ok": false }, { "text": "Valid window Sep 1–30 ended", "ok": false } ],
+      "outcome": "Task paused in “Needs you” until the October route allocation arrives." },
+    { "id": "D-27", "run": "September close · run #3", "time": "14:02", "agent": "ap", "action": "Cleared INV-2291 / 2291A as two real purchases",
+      "summary": "Same amount, same vendor, but two receipts from different delivery batches.",
+      "tags": [ { "label": "RCPT-551" }, { "label": "RCPT-560" } ],
+      "when": { "run": "Sep close · run #3", "step": "19 of 38", "started": "14:02:31", "finished": "14:02:40 (9s)", "trigger": "Duplicate scan: identical $2,400.00 from V-08 within 14 days" },
+      "how": [
+        { "tool": "search_sources", "input": "vendor=V-08, amount=2400.00, 2026-09", "output": "INV-2291, INV-2291A" },
+        { "tool": "read_source_span", "input": "RCPT-551, RCPT-560", "output": "batch B-11 (Sep 4), B-14 (Sep 18)" },
+        { "tool": "query_financial_records", "input": "payments for INV-2291*", "output": "1 paid, 1 open, no double payment" }
+      ],
+      "why": "Duplicate candidates need more than equal amounts. Two receipts with different batches and dates mean two deliveries, and nothing was paid twice.",
+      "alternatives": [
+        { "option": "Clear as two real purchases", "reason": "independent receipts support both", "chosen": true },
+        { "option": "Reverse INV-2291A as a duplicate", "reason": "would remove a real, delivered purchase", "chosen": false }
+      ],
+      "memory_checks": [],
+      "outcome": "Cleared (F-08). Pattern later proposed as playbook PB-05." },
+    { "id": "D-28", "run": "September close · run #3", "time": "14:02", "agent": "au", "action": "Rejected claim CL-7 “allocation is wrong”",
+      "summary": "No current service record yet. A budget % is not proof of actual work.",
+      "tags": [ { "label": "CL-7" }, { "label": "GRANT-SS §4.2" } ],
+      "when": { "run": "Sep close · run #3", "step": "22 of 38", "started": "14:02:43", "finished": "14:02:52 (9s)", "trigger": "Payroll agent submitted CL-7 with only the budget sheet as evidence" },
+      "how": [
+        { "tool": "read_source_span", "input": "BUDGET-SHEET row 44", "output": "says 100% award" },
+        { "tool": "read_source_span", "input": "GRANT-SS §4.2", "output": "shared staff need service/time records" },
+        { "tool": "search_sources", "input": "service_allocation, 2026-09", "output": "0 results" }
+      ],
+      "why": "The claim rested on a budget percentage. The award terms require actual service records for shared staff, and none were in the sources yet, so the claim can’t be confirmed.",
+      "alternatives": [
+        { "option": "Mark “needs evidence”", "reason": "plausible but unsupported, so keep it open", "chosen": true },
+        { "option": "Accept CL-7", "reason": "no evidence of actual work", "chosen": false },
+        { "option": "Reject and close it", "reason": "the condition is plausible. Closing it would hide a real risk", "chosen": false }
+      ],
+      "memory_checks": [],
+      "outcome": "CL-7 set to needs_evidence. The CFO agent asked you for the September service record." },
+    { "id": "D-31", "run": "September close · run #3", "time": "14:04", "agent": "py", "action": "Computed $4,000 reclassification",
+      "summary": "SVC-REC-SEP shows 24 of 40 hrs on award work, so 60%. The math is done by the calculation engine, not the model.",
+      "tags": [ { "label": "CALC-ALLOC-07" }, { "label": "SVC-REC-SEP" } ],
+      "when": { "run": "Sep close · run #3", "step": "27 of 38", "started": "14:04:09", "finished": "14:04:15 (6s)", "trigger": "You attached SVC-REC-SEP at 14:04:02" },
+      "how": [
+        { "tool": "read_source_span", "input": "SVC-REC-SEP rows 3–9", "output": "EMP-044: 24 of 40 hrs on award program" },
+        { "tool": "calculate", "input": "alloc_split(1000000¢, [60,40])", "output": "[600000¢, 400000¢]" },
+        { "tool": "calculate", "input": "reclass_delta", "output": "400000¢ = $4,000.00" },
+        { "tool": "calculate", "input": "invariants L01, L11", "output": "balanced ✓ · sums to original ✓ · cash Δ 0 ✓" }
+      ],
+      "why": "The service record shows 60% award work. The full $10,000 was charged to the award, so 40% ($4,000) belongs to general operations.",
+      "alternatives": [
+        { "option": "60/40 from the service record", "reason": "the only evidence of actual work", "chosen": true },
+        { "option": "Keep the budget sheet’s 100%", "reason": "a budget isn’t evidence of work", "chosen": false },
+        { "option": "Round to 50/50", "reason": "no basis in any source", "chosen": false }
+      ],
+      "memory_checks": [ { "text": "Checked PB-03: not applicable (different employee and contract)", "ok": true } ],
+      "outcome": "Proposal ADJ-12 drafted, re-performed by the Auditor, accepted, and now waiting for your approval." },
+    { "id": "D-35", "run": "September close · run #3", "time": "14:05", "agent": "cfo", "action": "Proposed new playbook PB-07, sent to replay gate",
+      "summary": "The same pattern (budget sheet vs service record) showed up in 2 findings.",
+      "tags": [ { "label": "learning: PB-07 proposed", "kind": "mem" } ],
+      "when": { "run": "Sep close · run #3", "step": "31 of 38", "started": "14:05:31", "finished": "14:05:40 (9s)", "trigger": "F-07 (Sep) and F-03 (Aug) have the same root cause" },
+      "how": [
+        { "tool": "traverse_context", "input": "F-07, F-03 → DERIVED_FROM", "output": "both: budget sheet contradicted by service record" },
+        { "tool": "propose_playbook", "input": "PB-07 · scope: shared staff on awards", "output": "drafted with exclusions" },
+        { "tool": "replay_gate", "input": "months: Aug, Sep", "output": "passed, 0 new false positives" }
+      ],
+      "why": "The pattern has now happened twice. Writing it down as a scoped playbook should save you a question next month.",
+      "alternatives": [
+        { "option": "Propose playbook → replay gate → your approval", "reason": "safe path to reuse", "chosen": true },
+        { "option": "Apply the rule immediately", "reason": "playbooks must pass replay and human approval first", "chosen": false },
+        { "option": "Don’t write it down", "reason": "seen twice. Likely to recur", "chosen": false }
+      ],
+      "memory_checks": [ { "text": "No conflicting active playbook", "ok": true }, { "text": "Replay Aug + Sep: 0 new false positives", "ok": true } ],
+      "outcome": "Waiting for your approval in Approvals." }
+  ],
+  "playbooks": [
+    { "id": "PB-05", "title": "Same vendor + amount, different receipts → clear", "source": "from F-08 · by AP & Payments", "proposed_by": "ap", "replay": { "passed": true, "new_false_positives": 0, "months": ["Aug", "Sep"] }, "uses": "4× in Oct", "status": "active" },
+    { "id": "PB-07", "title": "Service records beat budget sheets for grant payroll", "source": "from F-07 + F-03 · by CFO Agent", "proposed_by": "cfo", "replay": { "passed": true, "new_false_positives": 0, "months": ["Aug", "Sep"] }, "uses": "—", "status": "needs_approval" },
+    { "id": "PB-03", "title": "Transport 60/40 split (contract A)", "source": "valid Sep 1–30 · by Payroll & Budget", "proposed_by": "py", "replay": { "passed": true, "new_false_positives": 0, "months": ["Sep"] }, "uses": "0× in Oct", "status": "retired", "status_note": "contract B superseded A" },
+    { "id": "PB-06", "title": "Auto-clear 100% allocation for dedicated staff", "source": "by Payroll & Budget", "proposed_by": "py", "replay": { "passed": false, "new_false_positives": 1, "months": ["Aug", "Sep"] }, "uses": "—", "status": "blocked", "status_note": "1 false clear on replay" }
+  ],
+  "ablation": {
+    "example": true,
+    "rows": [
+      { "metric": "Questions to you", "without": 9, "with": 4 },
+      { "metric": "Tool calls", "without": 88, "with": 63 },
+      { "metric": "Minutes to close", "without": 6.8, "with": 4.2 },
+      { "metric": "False positives", "without": 1, "with": 1 }
+    ],
+    "note": "Same books, same model, same budget. Only reviewed memory differs."
+  },
+  "report": {
+    "title": "September close pack",
+    "sections": ["Executive summary", "Findings & fixes", "Pending evidence", "Grant schedule", "Payroll bridge", "Action register", "Limitations"],
+    "comparisons": [
+      { "label": "Award spend", "before": "$114,800", "after": "$110,800" },
+      { "label": "Award capacity left", "before": "$5,200", "after": "$9,200" },
+      { "label": "General operations payroll", "before": "$62,300", "after": "$66,300" },
+      { "label": "Cash", "before": "unchanged", "after": "unchanged" }
+    ],
+    "applies_approval": "ADJ-12"
+  }
+}

@@ -45,8 +45,18 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 
 - **web/** — Next.js 16 (App Router), TypeScript, Tailwind v4, bun
 - **api/** — FastAPI, Python 3.12+, uv, SQLite
-- **Fixtures** — one JSON bundle per workspace in `web/src/fixtures/`, shared by both
-- **Model** — Claude Sonnet 5 (`claude-sonnet-5`) behind a provider adapter, plus a labeled replay adapter
+- **contracts/** — one JSON bundle per workspace, shared by both
+- **Model (planned)** — provider adapter and labeled replay; no live agent adapter is connected yet
+
+## What's implemented
+
+Document intake is now backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
+review column mappings and validation issues, commit an immutable snapshot, inspect original source
+lines, and track missing evidence. New workspaces start empty and never inherit demo findings.
+
+The eight-tab dashboard still includes fixed demo workspaces. Live agents, full statements,
+scenario correction/recomputation and learning are not implemented. Input availability is not an
+audit conclusion. PDF extraction/OCR, Excel files and live financial connectors remain deferred.
 
 ## Getting started
 
@@ -54,17 +64,36 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 git clone https://github.com/Nityasav/hackmit.git
 cd hackmit
 
-# UI (works offline against the bundled fixtures)
+# UI (works offline against contracts/fixtures)
 cd web && bun install && bun dev          # http://localhost:3000
 
-# API (optional while the UI runs on fixtures)
-cd ../api && uv sync
-uv run uvicorn app.main:app --reload --port 8000   # docs at /docs
-uv run pytest                                       # accounting invariants
+# API (required for document intake; optional only for fixed demo views)
+cd ../api && uv sync && uv run uvicorn app.main:app --reload --port 8000
+uv run pytest                              # accounting invariants
 
 # Point the UI at the API
 echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > ../web/.env.local
 ```
+
+### Try document intake
+
+Run the API and UI, then open **Command center → New institution**. Use synthetic USD data and
+September 1–30, 2026 to try the included pack. Expand **Try a fictional September input pack**,
+click **Use starter pack**, then **Preview import → Confirm & commit records**. The service record
+is deliberately omitted; download it from the sample list and upload it with the **Service evidence**
+role to fill the gap. You can attach it to a missing-evidence request after committing it.
+
+Intake automatically connects to `http://localhost:8000`, even when demo views use offline fixtures.
+`NEXT_PUBLIC_API_URL` overrides the URL and also enables API polling for demo views. Restart the web
+server after changing environment variables. No model key is needed for intake.
+
+SQLite stores original bytes, staged imports, accepted record revisions, snapshots and local review
+events in ignored `api/data/schooltrace.sqlite3`. Set `SCHOOLTRACE_DATA_DIR` to change the local data
+directory. The app is for synthetic/public data on localhost; the reviewer marker is not production
+authentication. Original files stay on the machine and are not sent to a model.
+
+The backend addition stays flat: `api/app/db.py` and `api/app/ingestion.py`; the UI is one
+`SourcesPanel.tsx`. See `PROJECT_TRACKER.md` for verified scope and the next integration task.
 
 ## Repo map
 
@@ -72,76 +101,10 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > ../web/.env.local
 | --- | --- |
 | `web/` | The dashboard: 8 tabs plus an MIT / Sandbox workspace switcher |
 | `api/` | Accounting engine, agents, workflows, HTTP API |
-| `web/src/fixtures/` | One JSON bundle per workspace, shared by web and api |
-
-### `api/` layout
-
-| Path | Owner | What goes here |
-| --- | --- | --- |
-| `app/main.py` | Functionality | HTTP endpoints (see [Endpoints](#endpoints)) |
-| `app/models.py` | Functionality | Pydantic mirror of the bundle contract |
-| `app/store.py` | Functionality | Bundle state. Fixture-seeded today, SQLite-backed next |
-| `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
-
-## The data contract
-
-The seam between the four workstreams. **Change these three together:**
-
-| File | Owner of the change |
-| --- | --- |
-| `web/src/fixtures/*.json` | whoever adds the data |
-| `web/src/lib/types.ts` | UI |
-| `api/app/models.py` | Functionality |
-
-If you change a field, say so in the team channel before you push. Everything else can move independently.
-
-### The bundle
-
-The dashboard renders **one JSON payload per workspace**: `GET /api/workspaces/{sandbox|mit}/bundle`.
-With no API running, the web app reads `web/src/fixtures/{ws}.json` directly, so the UI works offline.
-
-```
-Bundle
-├─ workspace      id, name, kind (synthetic|public), period, mode (live|recorded|scripted),
-│                 snapshot_id, disabled_tabs[], model, run_budget
-├─ agents[]       cfo | ap | py | gr | au — name, role, status, "doing" (drives the live strip)
-├─ briefing       CFO Agent text (**bold** marks highlights) + action buttons
-├─ kpis[]         label, value, note, tone
-├─ workflows[]    id, name, owner, progress, stages[] (done|running|human|todo)
-├─ tasks[]        Agent board cards: column (queued|working|needs_you|auditor_review|done),
-│                 progress, eta_s, tool_calls, steps[], todos[], rationale, approval_id
-├─ findings[]     status, amount_cents, verified_by, evidence[] (the graph path)
-├─ approvals[]    kind (journal|payment|playbook|evidence), journal[], effects[], status
-├─ decisions[]    Reasoning log: when / how (tool calls) / why / alternatives / memory_checks / outcome
-├─ playbooks[]    RSI: replay gate result, uses, status (active|needs_approval|retired|blocked)
-├─ ablation       memory on vs off. `example: true` until the evaluator produces real numbers
-└─ report         sections, before/after comparisons, applies_approval
-```
-
-### Endpoints
-
-| Endpoint | Behavior |
-| --- | --- |
-| `GET /api/health` | liveness |
-| `GET /api/workspaces/{ws}/bundle` | everything the dashboard renders. The web app polls every 2s |
-| `POST /api/approvals/{id}/decision` | `{workspace, decision}` → updated bundle |
-
-## Rules we build to
-
-1. **Money is integer cents.** `amount_cents: 400000` is $4,000.00. Never float.
-   `api/app/accounting/money.py` is the only place that does arithmetic on amounts, and the UI is the only
-   place that formats them.
-2. **Only a human decides an approval.** Agents propose; `POST /api/approvals/{id}/decision` is the one path
-   that applies a change.
-3. **Every agent action emits a `Decision`** (see `api/app/models.py`) so it appears in the Reasoning log.
-   Concise decision records only, never raw chain-of-thought.
-4. **Every finding carries evidence**, and every amount traces to a calculation ID. No bare numbers.
-5. **Task columns map to spec statuses**: `queued → queued`, `running → working`, `needs_evidence → needs_you`,
-   `submitted → auditor_review`, `review_accepted → done`.
-6. **`example: true` on ablation** means the numbers are placeholders. Remove it only when the evaluator
-   wrote them.
-7. **The answer key stays out of reach.** Evaluator truth files must live outside anything the tool gateway
-   can read.
+| `contracts/` | The shared data contract and fixtures |
+| `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo script |
+| `docs/design/prototype.html` | Clickable design prototype (open it in a browser) |
+| `WORKPLAN.md` | Who builds what, in what order, for the 16 hours left |
 
 ## Honesty rules we hold ourselves to
 
