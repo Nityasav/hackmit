@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import {
   Bot,
   Brain,
-  ChevronsUpDown,
   FileSearch,
   FileText,
   LayoutDashboard,
@@ -19,8 +18,8 @@ import {
 } from "lucide-react";
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "@/components/ui/sidebar";
 import { useData } from "@/lib/data";
-import { TABS, type TabDef } from "@/lib/tabs";
-import type { TabId, WorkspaceId } from "@/lib/types";
+import { TABS } from "@/lib/tabs";
+import type { TabId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ICON: Record<TabId, LucideIcon> = {
@@ -34,42 +33,37 @@ const ICON: Record<TabId, LucideIcon> = {
   learning: Brain,
 };
 
-const WORKSPACES: { id: WorkspaceId; name: string; sub: string; short: string }[] = [
-  { id: "mit", name: "MIT FY2025", sub: "Public report · read-only", short: "MIT" },
-  { id: "sandbox", name: "Sandbox University", sub: "Synthetic · September close", short: "SU" },
-];
-
 export function AppSidebar() {
   const [open, setOpen] = useState(false);
 
-  // The component's own onMouseEnter/onMouseLeave can miss an exit: the rail animates
-  // its width under a still cursor, and a fast move into the dashboard can land between
-  // events, leaving it stuck open. Deriving `open` from where the cursor actually is
-  // makes the rule exact: expanded only while the cursor is over the rail.
+  // Keeps `open` true only while the cursor is actually over the rail. The component's
+  // own onMouseEnter/onMouseLeave still run; this just guarantees the exit, because the
+  // rail animates its own width under the cursor and a fast move can outrun the event.
   useEffect(() => {
     const onPointerMove = (e: PointerEvent) => {
       const rail = document.querySelector<HTMLElement>("[data-sidebar-rail]");
-      if (!rail || rail.offsetParent === null) return;
+      if (!rail) return;
       const box = rail.getBoundingClientRect();
-      const inside =
-        e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
-      setOpen(inside);
+      if (box.width === 0) return;
+      setOpen(
+        e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom,
+      );
     };
-    const onPointerLeaveWindow = () => setOpen(false);
+    const close = () => setOpen(false);
 
     window.addEventListener("pointermove", onPointerMove, { passive: true });
-    document.addEventListener("pointerleave", onPointerLeaveWindow);
-    window.addEventListener("blur", onPointerLeaveWindow);
+    window.addEventListener("blur", close);
+    document.addEventListener("pointerleave", close);
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerleave", onPointerLeaveWindow);
-      window.removeEventListener("blur", onPointerLeaveWindow);
+      window.removeEventListener("blur", close);
+      document.removeEventListener("pointerleave", close);
     };
   }, []);
 
   return (
     <Sidebar open={open} setOpen={setOpen}>
-      <SidebarBody data-sidebar-rail className="justify-between gap-6">
+      <SidebarBody data-sidebar-rail className="justify-between gap-10">
         <SidebarContent />
       </SidebarBody>
     </Sidebar>
@@ -78,178 +72,93 @@ export function AppSidebar() {
 
 function SidebarContent() {
   const { open } = useSidebar();
-  const { bundle } = useData();
+  const { bundle, ws, setWs } = useData();
   const pathname = usePathname();
   const pending = bundle.approvals.filter((a) => a.status === "pending").length;
-  const groups = [...new Set(TABS.map((t) => t.group))];
+
+  const links = TABS.map((tab) => ({
+    id: tab.id,
+    label: tab.label,
+    href: tab.href,
+    icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
+    active: isActive(pathname, tab.href),
+    disabled: bundle.workspace.disabled_tabs.includes(tab.id),
+    badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
+  }));
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-      {open ? <Logo /> : <LogoIcon />}
+    <>
+      <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+        {open ? <Logo /> : <LogoIcon />}
 
-      <WorkspaceSwitch />
+        {/* Same markup as SidebarLink, as a button: it switches workspace instead of navigating. */}
+        <button
+          type="button"
+          onClick={() => setWs(ws === "mit" ? "sandbox" : "mit")}
+          title="Switch workspace"
+          className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-neutral-200/70"
+        >
+          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-teal-700 text-[10px] font-bold text-white">
+            {ws === "mit" ? "MIT" : "SU"}
+          </span>
+          <motion.span
+            animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
+            className="m-0! inline-block whitespace-pre p-0! text-sm text-neutral-700 transition duration-150 group-hover/sidebar:translate-x-1"
+          >
+            {ws === "mit" ? "MIT FY2025" : "Sandbox University"}
+          </motion.span>
+        </button>
 
-      <div className="mt-2 flex flex-col">
-        {groups.map((group) => (
-          <div key={group}>
-            <motion.div
-              animate={{
-                display: open ? "block" : "none",
-                opacity: open ? 1 : 0,
-              }}
-              className="px-2 pb-1 pt-3 text-[10px] uppercase tracking-wider text-neutral-400 whitespace-pre"
-            >
-              {group}
-            </motion.div>
-            {TABS.filter((t) => t.group === group).map((tab) => (
-              <NavItem
-                key={tab.id}
-                tab={tab}
-                active={tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href)}
-                disabled={bundle.workspace.disabled_tabs.includes(tab.id)}
-                badge={tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag}
-                badgeTone={tab.id === "approvals" && pending > 0 ? "count" : "tag"}
+        <div className="mt-8 flex flex-col gap-2">
+          {links.map((link) => (
+            <div key={link.id} className="relative">
+              <SidebarLink
+                link={link}
+                className={cn(
+                  "rounded-md px-2 transition-colors hover:bg-neutral-200/70",
+                  link.active && "bg-emerald-100/80 [&_span]:!font-semibold [&_span]:!text-teal-700",
+                  link.disabled && "opacity-50",
+                )}
               />
-            ))}
-          </div>
-        ))}
+              {link.badge && (
+                <motion.span
+                  animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
+                  className={cn(
+                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[10px] font-bold",
+                    link.id === "approvals" ? "bg-teal-700 text-white" : "bg-teal-200 text-teal-800",
+                  )}
+                >
+                  {link.badge}
+                </motion.span>
+              )}
+              {link.id === "approvals" && pending > 0 && !open && (
+                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-teal-700 ring-2 ring-neutral-100" />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-auto pt-4">
+      <div>
         <SidebarLink
           link={{
             label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
             href: "/board",
-            icon: <Bot className="h-5 w-5 flex-shrink-0 text-neutral-700" />,
+            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-full p-1 text-neutral-700" />,
           }}
-          className="rounded-md px-2 hover:bg-neutral-200/60"
         />
-        <motion.div
-          animate={{ display: open ? "block" : "none", opacity: open ? 1 : 0 }}
-          className="px-2 text-[10.5px] text-neutral-500 whitespace-pre"
-        >
-          Run budget: {bundle.workspace.run_budget.used} / {bundle.workspace.run_budget.total} tool calls
-        </motion.div>
       </div>
-    </div>
+    </>
   );
 }
 
-function NavItem({
-  tab,
-  active,
-  disabled,
-  badge,
-  badgeTone,
-}: {
-  tab: TabDef;
-  active: boolean;
-  disabled: boolean;
-  badge?: string;
-  badgeTone: "count" | "tag";
-}) {
-  const { open } = useSidebar();
-  const Icon = ICON[tab.id];
-  return (
-    <div className="relative">
-      <SidebarLink
-        link={{
-          label: tab.label,
-          href: tab.href,
-          icon: (
-            <Icon
-              className={cn(
-                "h-5 w-5 flex-shrink-0",
-                active ? "text-teal-700" : disabled ? "text-neutral-400" : "text-neutral-700",
-              )}
-            />
-          ),
-        }}
-        className={cn(
-          "rounded-md px-2 transition-colors hover:bg-neutral-200/60",
-          active && "bg-emerald-100/80 [&_span]:!font-semibold [&_span]:!text-teal-700",
-          disabled && "opacity-50 [&_span]:!text-neutral-400",
-        )}
-      />
-      {badge && (
-        <motion.span
-          animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
-          className={cn(
-            "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[10px] font-bold",
-            badgeTone === "count" ? "bg-teal-700 text-white" : "bg-teal-200 text-teal-800",
-          )}
-        >
-          {badge}
-        </motion.span>
-      )}
-      {badgeTone === "count" && badge && !open && (
-        <span className="pointer-events-none absolute left-[18px] top-1.5 h-2 w-2 rounded-full bg-teal-700 ring-2 ring-neutral-100" />
-      )}
-      {disabled && (
-        <motion.span
-          animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
-          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-neutral-400"
-          title="Not available for public reports"
-        >
-          ⊘
-        </motion.span>
-      )}
-    </div>
-  );
+function isActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
-function WorkspaceSwitch() {
-  const { open } = useSidebar();
-  const { ws, setWs } = useData();
-  const [menu, setMenu] = useState(false);
-  const current = WORKSPACES.find((w) => w.id === ws)!;
-
-  return (
-    <div className="relative mt-4">
-      <button
-        type="button"
-        disabled={!open}
-        onClick={() => setMenu((m) => !m)}
-        className="flex w-full items-center justify-start gap-2 rounded-md py-1 text-left disabled:cursor-default"
-      >
-        <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-teal-700 text-[10px] font-bold text-white">
-          {current.short}
-        </span>
-        <motion.span
-          animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
-          className="min-w-0 flex-1 whitespace-pre text-sm"
-        >
-          <span className="block truncate font-medium text-neutral-800">{current.name}</span>
-          <span className="block truncate text-[10.5px] text-neutral-500">{current.sub}</span>
-        </motion.span>
-        <motion.span animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}>
-          <ChevronsUpDown className="h-4 w-4 flex-shrink-0 text-neutral-400" />
-        </motion.span>
-      </button>
-
-      {open && menu && (
-        <div className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg">
-          {WORKSPACES.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              onClick={() => {
-                setWs(w.id);
-                setMenu(false);
-              }}
-              className={cn(
-                "block w-full px-2.5 py-2 text-left text-xs hover:bg-neutral-50",
-                w.id === ws && "bg-teal-50",
-              )}
-            >
-              <b className="font-semibold">{w.name}</b>
-              <small className="block text-neutral-500">{w.sub}</small>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+function NavIcon({ tab, active }: { tab: TabId; active: boolean }) {
+  const Icon = ICON[tab];
+  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-teal-700" : "text-neutral-700")} />;
 }
 
 export const Logo = () => {
