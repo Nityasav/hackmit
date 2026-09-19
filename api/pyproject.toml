@@ -9,6 +9,9 @@ dependencies = [
     "pydantic>=2.9",
 ]
 
+[project.optional-dependencies]
+cfo = ["openai"]
+
 [dependency-groups]
 dev = ["pytest>=8.3"]
 
