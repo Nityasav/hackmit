@@ -116,7 +116,7 @@ export default function CommandCenter() {
           {kpis.map((k) => (
             <div key={k.label} className="p-3">
               <small className="block text-[10.5px] text-ink-dim">{k.label}</small>
-              <b className="text-xl font-bold tracking-tight">{k.value}</b>
+              <b className="font-display text-xl font-bold tracking-tight">{k.value}</b>
               <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-accent-good"}`}>
                 {k.note}
               </em>
@@ -124,7 +124,7 @@ export default function CommandCenter() {
           ))}
           <div className="p-3">
             <small className="block text-[10.5px] text-ink-dim">Tasks done</small>
-            <b className="text-xl font-bold tracking-tight tabular-nums">
+            <b className="font-display text-xl font-bold tracking-tight tabular-nums">
               {done} / {tasks.length}
             </b>
             <em className="block text-[10.5px] not-italic text-ink-dim">

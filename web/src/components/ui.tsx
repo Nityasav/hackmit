@@ -53,7 +53,7 @@ export function CardTitle({ children, right }: { children: React.ReactNode; righ
 export function PageHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
-      <h1 className="text-lg font-bold tracking-tight">{title}</h1>
+      <h1 className="font-display text-xl font-bold tracking-tight">{title}</h1>
       {subtitle && <span className="ml-1 text-[12.5px] text-ink-dim">{subtitle}</span>}
       {right && <span className="ml-auto">{right}</span>}
     </div>

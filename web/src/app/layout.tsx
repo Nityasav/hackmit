@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Playfair_Display, Raleway } from "next/font/google";
 import { DataProvider } from "@/lib/data";
 import { AppSidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const raleway = Raleway({ subsets: ["latin"], variable: "--font-raleway" });
+const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
+// Kept for money, IDs and the decision records, where columns have to line up.
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
+    <html lang="en" className={`${raleway.variable} ${playfair.variable} ${jetbrains.variable}`}>
       <body className="font-sans text-[12.5px] leading-snug antialiased">
         <DataProvider>
           <div className="flex h-screen flex-col overflow-hidden md:flex-row">
