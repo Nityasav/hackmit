@@ -75,7 +75,6 @@ function SidebarContent() {
             >
               {group}
             </motion.div>
-            {!open && <div className="mx-auto my-2 h-px w-5 bg-neutral-300" />}
             {TABS.filter((t) => t.group === group).map((tab) => (
               <NavItem
                 key={tab.id}

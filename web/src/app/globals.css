@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* This product is light-only. Without this, `dark:` classes inside copied components
+   (sidebar.tsx) follow the OS setting and paint dark on a light app. Opt in with a
+   `.dark` class on an ancestor if we ever add a dark theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
@@ -42,6 +47,10 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
