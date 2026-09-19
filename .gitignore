@@ -20,5 +20,5 @@ __pycache__/
 .superpowers/
 .playwright-mcp/
 .DS_Store
-package-lock.json
+schooltrace/package-lock.json
 bun.lockb
