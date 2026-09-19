@@ -1,23 +1,45 @@
 @import "tailwindcss";
 
-/* This product is light-only. Without this, `dark:` classes inside copied components
-   (sidebar.tsx) follow the OS setting and paint dark on a light app. Opt in with a
-   `.dark` class on an ancestor if we ever add a dark theme. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* Dark-only product. `dark:` variants inside copied components (sidebar.tsx) are the
+   dark branch here, so bind the variant to the root rather than the OS setting. */
+@custom-variant dark (&:where(:root, :root *));
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 
-  --color-canvas: #f7f8fa;
-  --color-line: #ebedf1;
+  /* Four elevations, cool-neutral so the agent hues stay the only chroma on screen. */
+  --color-canvas: #080c12;
+  --color-surface: #0f1620;
+  --color-surface-2: #17212e;
+  --color-surface-3: #1e2a39;
+  --color-line: #202c3c;
 
-  /* One color per agent. Used by <AgentAvatar>. */
-  --color-agent-cfo: #0f766e;
-  --color-agent-ap: #4f46e5;
-  --color-agent-py: #0284c7;
-  --color-agent-gr: #d97706;
-  --color-agent-au: #e11d48;
+  --color-ink: #e8eef5;
+  --color-ink-dim: #93a6bb;
+  --color-ink-faint: #61748a;
+
+  /* One color per agent. Raised for AA contrast on --color-surface. */
+  --color-agent-cfo: #2dd4bf;
+  --color-agent-ap: #818cf8;
+  --color-agent-py: #38bdf8;
+  --color-agent-gr: #fbbf24;
+  --color-agent-au: #fb7185;
+
+  /* shadcn/ui token layer, mapped onto the tokens above so copied
+     components (chart.tsx, badge.tsx) render in this theme unmodified. */
+  --color-background: #0f1620;
+  --color-foreground: #e8eef5;
+  --color-muted: #17212e;
+  --color-muted-foreground: #93a6bb;
+  --color-border: #202c3c;
+  --color-ring: #2dd4bf;
+  --color-primary: #2dd4bf;
+  --color-primary-foreground: #04231f;
+  --color-secondary: #17212e;
+  --color-secondary-foreground: #e8eef5;
+  --color-destructive: #fb7185;
+  --color-destructive-foreground: #2a0a12;
 
   --animate-ping-soft: ping-soft 1.6s infinite;
   --animate-shimmer: shimmer 2.2s linear infinite;
@@ -37,11 +59,10 @@
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
-
   @keyframes ping-soft {
-    0% { box-shadow: 0 0 0 0 rgb(20 184 166 / 0.55); }
-    70% { box-shadow: 0 0 0 7px rgb(20 184 166 / 0); }
-    100% { box-shadow: 0 0 0 0 rgb(20 184 166 / 0); }
+    0% { box-shadow: 0 0 0 0 rgb(45 212 191 / 0.5); }
+    70% { box-shadow: 0 0 0 7px rgb(45 212 191 / 0); }
+    100% { box-shadow: 0 0 0 0 rgb(45 212 191 / 0); }
   }
   @keyframes shimmer {
     from { background-position: 200% 0; }
@@ -50,12 +71,12 @@
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
   background: var(--color-canvas);
-  color: #0f172a;
+  color: var(--color-ink);
 }
 
 /* Keyboard focus is always visible; mouse focus never draws a ring. */
@@ -71,7 +92,7 @@ body {
 /* Thin scrollbars so dense panes don't eat 15px of layout. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--color-surface-3) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -86,7 +107,7 @@ body {
 
 /* Animated text for "what the agent is doing right now". */
 .shimmer-text {
-  background: linear-gradient(90deg, #0f766e 0%, #5eead4 50%, #0f766e 100%);
+  background: linear-gradient(90deg, #2dd4bf 0%, #99f6e4 50%, #2dd4bf 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;

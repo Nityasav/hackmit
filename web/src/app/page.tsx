@@ -34,17 +34,17 @@ export default function CommandCenter() {
       />
 
       {/* CFO agent briefing */}
-      <div className="mb-2.5 rounded-xl border border-teal-200 bg-gradient-to-b from-teal-50 to-white p-3.5">
+      <div className="mb-2.5 rounded-xl border border-teal-500/30 bg-gradient-to-b from-teal-500/10 to-transparent p-3.5">
         <div className="flex items-center gap-2">
           <AgentAvatar id="cfo" />
           <b>CFO Agent</b>
           <AiTag>AI briefing</AiTag>
-          <span className="ml-auto text-[11px] text-slate-500">generated {briefing.generated_at}</span>
+          <span className="ml-auto text-[11px] text-ink-dim">generated {briefing.generated_at}</span>
         </div>
         <p className="my-2.5 text-[13.5px]">
           {highlights(briefing.text).map(([part, strong], i) =>
             strong ? (
-              <b key={i} className="rounded-[3px] bg-yellow-100 px-0.5 font-semibold">
+              <b key={i} className="rounded-[3px] bg-yellow-400/20 px-0.5 font-semibold">
                 {part}
               </b>
             ) : (
@@ -70,7 +70,7 @@ export default function CommandCenter() {
               {a.name}
               {a.status === "working" && <Pulse className="ml-auto" />}
             </div>
-            <div className={`mt-1.5 text-[11px] ${a.status === "working" ? "shimmer-text" : "text-slate-500"}`}>
+            <div className={`mt-1.5 text-[11px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
               {a.doing}
             </div>
           </div>
@@ -94,7 +94,7 @@ export default function CommandCenter() {
             <CardTitle right={<Link href="/findings">evidence →</Link>}>Source</CardTitle>
             <div className="text-[12.5px]">
               <b>MIT FY2025 Uniform Guidance report</b> · year ended June 30, 2025 · independent auditor PwC.
-              <div className="mt-1 text-slate-500">
+              <div className="mt-1 text-ink-dim">
                 Agents read this published PDF only. They have no access to MIT&apos;s internal ledger, and nothing
                 here is a claim about MIT beyond what the report states.
               </div>
@@ -103,7 +103,7 @@ export default function CommandCenter() {
                   href={workspace.source_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-block font-semibold text-teal-700 underline"
+                  className="mt-2 inline-block font-semibold text-teal-300 underline"
                 >
                   Open the report ↗
                 </a>
@@ -115,19 +115,19 @@ export default function CommandCenter() {
         <Card className="grid grid-cols-2 divide-x divide-y divide-line p-0">
           {kpis.map((k) => (
             <div key={k.label} className="p-3">
-              <small className="block text-[10.5px] text-slate-500">{k.label}</small>
+              <small className="block text-[10.5px] text-ink-dim">{k.label}</small>
               <b className="text-xl font-bold tracking-tight">{k.value}</b>
-              <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-amber-700" : "text-teal-700"}`}>
+              <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-amber-300" : "text-teal-300"}`}>
                 {k.note}
               </em>
             </div>
           ))}
           <div className="p-3">
-            <small className="block text-[10.5px] text-slate-500">Tasks done</small>
+            <small className="block text-[10.5px] text-ink-dim">Tasks done</small>
             <b className="text-xl font-bold tracking-tight tabular-nums">
               {done} / {tasks.length}
             </b>
-            <em className="block text-[10.5px] not-italic text-slate-500">
+            <em className="block text-[10.5px] not-italic text-ink-dim">
               {findings.length} findings · {pending} waiting on you
             </em>
           </div>
@@ -145,13 +145,13 @@ export default function CommandCenter() {
             </EmptyState>
           ) : (
             pendingApprovals.slice(0, 4).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 border-t border-slate-100 py-1.5 first:border-t-0">
+              <div key={a.id} className="flex items-center gap-2 border-t border-line py-1.5 first:border-t-0">
                 <AgentAvatar id={a.agent} size="sm" />
                 <div className="min-w-0">
-                  <Link href="/approvals" className="block truncate font-semibold hover:text-teal-700">
+                  <Link href="/approvals" className="block truncate font-semibold hover:text-teal-300">
                     {a.title}
                   </Link>
-                  <span className="block truncate text-[11px] text-slate-500">{a.summary}</span>
+                  <span className="block truncate text-[11px] text-ink-dim">{a.summary}</span>
                 </div>
                 <span className="ml-auto flex-none">
                   <Button
@@ -174,13 +174,13 @@ export default function CommandCenter() {
             <Link
               key={d.id}
               href={`/reasoning?q=${encodeURIComponent(d.id)}`}
-              className="flex items-start gap-2 border-t border-slate-100 py-1.5 first:border-t-0 hover:bg-slate-50"
+              className="flex items-start gap-2 border-t border-line py-1.5 first:border-t-0 hover:bg-surface-2"
             >
-              <span className="pt-0.5 font-mono text-[10px] text-slate-400">{d.time}</span>
+              <span className="pt-0.5 font-mono text-[10px] text-ink-faint">{d.time}</span>
               <AgentAvatar id={d.agent} size="sm" />
               <span className="min-w-0">
                 <b className="block truncate">{d.action}</b>
-                <span className="block truncate text-[11px] text-slate-500">{d.summary}</span>
+                <span className="block truncate text-[11px] text-ink-dim">{d.summary}</span>
               </span>
             </Link>
           ))}

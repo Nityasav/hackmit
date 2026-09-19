@@ -6,10 +6,10 @@ import { AGENT_NAME, AgentAvatar, Card, PageHeader, Pulse } from "@/components/u
 import { TabGate } from "@/components/shell/TabGate";
 
 const STAGE_STYLE: Record<StageState, string> = {
-  done: "border-green-200 bg-green-100 text-green-800",
-  running: "border-teal-300 bg-teal-100 text-teal-800",
-  human: "border-amber-200 bg-amber-100 text-amber-800",
-  todo: "border-line bg-slate-50 text-slate-500",
+  done: "border-green-500/30 bg-green-500/15 text-green-300",
+  running: "border-teal-500/40 bg-teal-500/15 text-teal-200",
+  human: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+  todo: "border-line bg-surface-2 text-ink-dim",
 };
 
 export default function WorkflowsPage() {
@@ -25,7 +25,7 @@ export default function WorkflowsPage() {
           <div className="mb-2 flex items-center gap-2">
             <AgentAvatar id={w.owner} size="sm" />
             <b className="text-[13px]">{w.name}</b>
-            <span className="text-[11.5px] text-slate-500">owner: {AGENT_NAME[w.owner]}</span>
+            <span className="text-[11.5px] text-ink-dim">owner: {AGENT_NAME[w.owner]}</span>
             <b className="ml-auto tabular-nums">{w.progress}%</b>
           </div>
           <div className="flex flex-wrap items-center gap-1">
@@ -37,13 +37,13 @@ export default function WorkflowsPage() {
                   {s.state === "human" && "✋"}
                   {s.name}
                 </span>
-                {i < w.stages.length - 1 && <span className="text-slate-300">→</span>}
+                {i < w.stages.length - 1 && <span className="text-ink-faint">→</span>}
               </span>
             ))}
           </div>
         </Card>
       ))}
-      <p className="mt-1 text-[11px] text-slate-500">
+      <p className="mt-1 text-[11px] text-ink-dim">
         Payments and payroll changes are simulated in the sandbox. Agents prepare them; a human releases them.
       </p>
     </TabGate>

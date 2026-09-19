@@ -53,14 +53,14 @@ export default function BoardPage() {
         {COLUMNS.map((col) => {
           const tasks = visible.filter((t) => t.column === col.id);
           return (
-            <section key={col.id} aria-label={col.label} className="min-h-[430px] rounded-[10px] bg-slate-100 p-2">
-              <div className="sticky top-0 z-[1] mx-0.5 mb-2 flex items-center gap-1.5 rounded bg-slate-100 py-0.5 text-[11.5px] font-semibold">
+            <section key={col.id} aria-label={col.label} className="min-h-[430px] rounded-[10px] bg-surface-2 p-2">
+              <div className="sticky top-0 z-[1] mx-0.5 mb-2 flex items-center gap-1.5 rounded bg-surface-2 py-0.5 text-[11.5px] font-semibold">
                 {col.id === "working" && <Pulse />}
                 {col.label}
-                <span className="ml-auto font-normal text-slate-500 tabular-nums">{tasks.length}</span>
+                <span className="ml-auto font-normal text-ink-dim tabular-nums">{tasks.length}</span>
               </div>
               {tasks.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 px-2 py-6 text-center text-[10.5px] text-slate-400">
+                <div className="rounded-lg border border-dashed border-line px-2 py-6 text-center text-[10.5px] text-ink-faint">
                   {EMPTY_COLUMN[col.id]}
                 </div>
               ) : (
@@ -82,7 +82,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       onClick={onClick}
       aria-pressed={active}
       className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
-        active ? "border-slate-900 bg-slate-900 text-white" : "border-line bg-white text-slate-600 hover:border-teal-300"
+        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-teal-500/50"
       }`}
     >
       {children}
@@ -97,17 +97,17 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className={`mb-1.5 block w-full cursor-pointer rounded-lg border border-line bg-white p-2 text-left transition hover:border-teal-400 hover:shadow-[0_2px_8px_rgba(15,118,110,0.12)] ${
+      className={`mb-1.5 block w-full cursor-pointer rounded-lg border border-line bg-surface p-2 text-left transition hover:border-teal-400/70/70 hover:shadow-[0_2px_8px_rgba(15,118,110,0.12)] ${
         isDone ? "opacity-75" : ""
       }`}
     >
       <div className="flex items-center gap-1.5">
         <AgentAvatar id={task.agent} size="sm" />
-        <span className="truncate text-[10.5px] text-slate-500">{task.id}</span>
+        <span className="truncate text-[10.5px] text-ink-dim">{task.id}</span>
         {task.column === "working" && task.eta_s != null && (
-          <span className="ml-auto text-[10px] text-slate-500">~{duration(task.eta_s)}</span>
+          <span className="ml-auto text-[10px] text-ink-dim">~{duration(task.eta_s)}</span>
         )}
-        {isDone && <span className="ml-auto text-[10px] font-bold text-green-700">✓</span>}
+        {isDone && <span className="ml-auto text-[10px] font-bold text-green-300">✓</span>}
       </div>
       <div className={`mb-1 mt-1 text-[11.5px] ${isDone ? "font-medium" : "font-semibold"}`}>{task.title}</div>
       {current && <div className="mb-1.5 shimmer-text text-[10.5px]">{current.title}…</div>}
@@ -119,7 +119,7 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
       {!isDone && task.progress > 0 && (
         <div className="flex items-center gap-1.5">
           <ProgressBar value={task.progress} className="h-1.5 flex-1" />
-          <span className="text-[10.5px] tabular-nums text-slate-500">{task.progress}%</span>
+          <span className="text-[10.5px] tabular-nums text-ink-dim">{task.progress}%</span>
         </div>
       )}
     </button>

@@ -66,12 +66,12 @@ export default function ApprovalsPage() {
                 </span>
               )}
             </CardTitle>
-            <p className="mb-2 text-slate-600">{selected.summary}</p>
+            <p className="mb-2 text-ink-dim">{selected.summary}</p>
 
             {selected.journal && (
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="text-[10px] text-slate-500">
+                  <tr className="text-[10px] text-ink-dim">
                     <th className="border-b border-line p-1.5 text-left font-semibold">Account</th>
                     <th className="border-b border-line p-1.5 text-left font-semibold">Fund</th>
                     <th className="border-b border-line p-1.5 text-right font-semibold">Debit</th>
@@ -81,12 +81,12 @@ export default function ApprovalsPage() {
                 <tbody>
                   {selected.journal.map((l, i) => (
                     <tr key={i}>
-                      <td className="border-b border-slate-100 p-1.5">{l.account}</td>
-                      <td className="border-b border-slate-100 p-1.5">{l.fund}</td>
-                      <td className="border-b border-slate-100 p-1.5 text-right font-mono">
+                      <td className="border-b border-line p-1.5">{l.account}</td>
+                      <td className="border-b border-line p-1.5">{l.fund}</td>
+                      <td className="border-b border-line p-1.5 text-right font-mono">
                         {l.debit_cents ? money(l.debit_cents) : "—"}
                       </td>
-                      <td className="border-b border-slate-100 p-1.5 text-right font-mono">
+                      <td className="border-b border-line p-1.5 text-right font-mono">
                         {l.credit_cents ? money(l.credit_cents) : "—"}
                       </td>
                     </tr>
@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
                 {selected.effects.map((e) => (
                   <div key={e.label} className="flex justify-between py-0.5 text-[11.5px]">
                     <span>{e.label}</span>
-                    <b className={e.tone === "good" ? "text-green-700" : ""}>{e.value}</b>
+                    <b className={e.tone === "good" ? "text-green-300" : ""}>{e.value}</b>
                   </div>
                 ))}
               </div>
@@ -119,13 +119,13 @@ export default function ApprovalsPage() {
                 <Pill tone={selected.status === "approved" ? "green" : "red"}>
                   {selected.status === "approved" ? "Approved by you" : "Rejected by you"}
                 </Pill>
-                <span className="ml-2 text-[11px] text-slate-500">
+                <span className="ml-2 text-[11px] text-ink-dim">
                   Dependent schedules and the close pack recompute from this decision.
                 </span>
               </div>
             )}
 
-            <div className="mt-2.5 text-[11px] text-slate-500">
+            <div className="mt-2.5 text-[11px] text-ink-dim">
               Approving applies the change to the synthetic scenario only. The as-reported baseline stays intact, and no
               real payment, payroll change or ERP posting happens.
             </div>
@@ -144,13 +144,13 @@ function Row({ approval, active, onClick }: { approval: Approval; active: boolea
       type="button"
       onClick={onClick}
       className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border p-2 text-left ${
-        active ? "border-teal-200 bg-teal-50" : "border-transparent hover:bg-slate-50"
+        active ? "border-teal-500/30 bg-teal-500/10" : "border-transparent hover:bg-surface-2"
       }`}
     >
       <AgentAvatar id={approval.agent} size="sm" />
       <div className="min-w-0">
         <b className="block truncate">{approval.title}</b>
-        <span className="truncate text-slate-500">{approval.summary}</span>
+        <span className="truncate text-ink-dim">{approval.summary}</span>
       </div>
       <span className="ml-auto flex-none">
         <Pill tone={approval.status === "approved" ? "green" : approval.status === "rejected" ? "red" : tone}>

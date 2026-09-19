@@ -96,14 +96,14 @@ function SidebarContent() {
           type="button"
           onClick={() => setWs(ws === "mit" ? "sandbox" : "mit")}
           title="Switch workspace"
-          className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-neutral-200/70"
+          className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-surface-3"
         >
-          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-teal-700 text-[10px] font-bold text-white">
+          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-teal-600 text-[10px] font-bold text-white">
             {ws === "mit" ? "MIT" : "SU"}
           </span>
           <motion.span
             animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
-            className="m-0! inline-block whitespace-pre p-0! text-sm text-neutral-700 transition duration-150 group-hover/sidebar:translate-x-1"
+            className="m-0! inline-block whitespace-pre p-0! text-sm text-ink-dim transition duration-150 group-hover/sidebar:translate-x-1"
           >
             {ws === "mit" ? "MIT FY2025" : "Sandbox University"}
           </motion.span>
@@ -115,8 +115,8 @@ function SidebarContent() {
               <SidebarLink
                 link={link}
                 className={cn(
-                  "rounded-md px-2 transition-colors hover:bg-neutral-200/70",
-                  link.active && "bg-emerald-100/80 [&_span]:!font-semibold [&_span]:!text-teal-700",
+                  "rounded-md px-2 transition-colors hover:bg-surface-3",
+                  link.active && "bg-emerald-500/15 [&_span]:!font-semibold [&_span]:!text-teal-300",
                   link.disabled && "opacity-50",
                 )}
               />
@@ -125,14 +125,14 @@ function SidebarContent() {
                   animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
                   className={cn(
                     "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[10px] font-bold",
-                    link.id === "approvals" ? "bg-teal-700 text-white" : "bg-teal-200 text-teal-800",
+                    link.id === "approvals" ? "bg-teal-600 text-white" : "bg-teal-500/25 text-teal-200",
                   )}
                 >
                   {link.badge}
                 </motion.span>
               )}
               {link.id === "approvals" && pending > 0 && !open && (
-                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-teal-700 ring-2 ring-neutral-100" />
+                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-teal-600 ring-2 ring-line" />
               )}
             </div>
           ))}
@@ -144,7 +144,7 @@ function SidebarContent() {
           link={{
             label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
             href: "/board",
-            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-full p-1 text-neutral-700" />,
+            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-full p-1 text-ink-dim" />,
           }}
         />
       </div>
@@ -158,20 +158,20 @@ function isActive(pathname: string, href: string) {
 
 function NavIcon({ tab, active }: { tab: TabId; active: boolean }) {
   const Icon = ICON[tab];
-  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-teal-700" : "text-neutral-700")} />;
+  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-teal-300" : "text-ink-dim")} />;
 }
 
 export const Logo = () => {
   return (
     <Link
       href="/"
-      className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-black"
+      className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-700 to-teal-500" />
+      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-600 to-teal-400" />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="whitespace-pre font-medium text-black"
+        className="whitespace-pre font-medium text-ink"
       >
         SchoolTrace
       </motion.span>
@@ -183,9 +183,9 @@ export const LogoIcon = () => {
   return (
     <Link
       href="/"
-      className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-black"
+      className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-700 to-teal-500" />
+      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-600 to-teal-400" />
     </Link>
   );
 };

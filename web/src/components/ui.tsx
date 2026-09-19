@@ -34,18 +34,18 @@ export function AgentAvatar({ id, size = "md" }: { id: AgentId; size?: "sm" | "m
 }
 
 export function Pulse({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-full bg-teal-500 ${className}`} />;
+  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-full bg-teal-400 ${className}`} />;
 }
 
 export function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`rounded-[10px] border border-line bg-white p-3 ${className}`}>{children}</div>;
+  return <div className={`rounded-[10px] border border-line bg-surface p-3 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold">
       {children}
-      {right && <span className="ml-auto text-[11px] font-normal text-slate-500">{right}</span>}
+      {right && <span className="ml-auto text-[11px] font-normal text-ink-dim">{right}</span>}
     </div>
   );
 }
@@ -54,7 +54,7 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <h1 className="text-lg font-bold tracking-tight">{title}</h1>
-      {subtitle && <span className="ml-1 text-[12.5px] text-slate-500">{subtitle}</span>}
+      {subtitle && <span className="ml-1 text-[12.5px] text-ink-dim">{subtitle}</span>}
       {right && <span className="ml-auto">{right}</span>}
     </div>
   );
@@ -62,8 +62,8 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
 
 export function ProgressBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
   return (
-    <div className={`overflow-hidden rounded bg-slate-100 ${className}`}>
-      <div className="h-full rounded bg-teal-500 transition-[width] duration-700" style={{ width: `${value}%` }} />
+    <div className={`overflow-hidden rounded bg-surface-2 ${className}`}>
+      <div className="h-full rounded bg-teal-400 transition-[width] duration-700" style={{ width: `${value}%` }} />
     </div>
   );
 }
@@ -71,13 +71,13 @@ export function ProgressBar({ value, className = "h-1.5" }: { value: number; cla
 type Tone = "red" | "green" | "amber" | "indigo" | "teal" | "gray" | "blue";
 
 const TONE: Record<Tone, string> = {
-  red: "bg-red-100 text-red-800",
-  green: "bg-green-100 text-green-800",
-  amber: "bg-amber-100 text-amber-800",
-  indigo: "bg-indigo-100 text-indigo-800",
-  teal: "bg-teal-100 text-teal-800",
-  gray: "bg-slate-100 text-slate-600",
-  blue: "bg-blue-100 text-blue-800",
+  red: "bg-red-500/15 text-red-300",
+  green: "bg-green-500/15 text-green-300",
+  amber: "bg-amber-500/15 text-amber-300",
+  indigo: "bg-indigo-500/15 text-indigo-300",
+  teal: "bg-teal-500/15 text-teal-200",
+  gray: "bg-surface-2 text-ink-dim",
+  blue: "bg-blue-500/15 text-blue-300",
 };
 
 export function Pill({ tone = "gray", children, className = "" }: { tone?: Tone; children: React.ReactNode; className?: string }) {
@@ -121,9 +121,9 @@ export function PlaybookStatusPill({ status, note }: { status: PlaybookStatus; n
 export function EmptyState({ icon = "✓", title, children }: { icon?: string; title: string; children?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-      <div className="text-2xl text-slate-300">{icon}</div>
-      <div className="font-semibold text-slate-600">{title}</div>
-      {children && <p className="max-w-xs text-[11.5px] text-slate-400">{children}</p>}
+      <div className="text-2xl text-ink-faint">{icon}</div>
+      <div className="font-semibold text-ink-dim">{title}</div>
+      {children && <p className="max-w-xs text-[11.5px] text-ink-faint">{children}</p>}
     </div>
   );
 }
@@ -139,7 +139,7 @@ export function Toast({ message, onDone }: { message: string | null; onDone: () 
   return (
     <div
       role="status"
-      className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 animate-rise rounded-lg bg-slate-900 px-3.5 py-2 text-[12px] font-medium text-white shadow-lg"
+      className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 animate-rise rounded-lg bg-surface-2 px-3.5 py-2 text-[12px] font-medium text-white shadow-lg"
     >
       {message}
     </div>
@@ -167,8 +167,8 @@ export function Button({
       onClick={onClick}
       className={`inline-flex cursor-pointer items-center gap-1.5 rounded-[7px] border px-2.5 py-1.5 text-[11.5px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
         primary
-          ? "border-teal-700 bg-teal-700 text-white hover:bg-teal-800"
-          : "border-line bg-white text-slate-900 hover:border-teal-300"
+          ? "border-teal-600 bg-teal-600 text-white hover:bg-teal-400"
+          : "border-line bg-surface text-ink hover:border-teal-500/50"
       }`}
     >
       {children}
