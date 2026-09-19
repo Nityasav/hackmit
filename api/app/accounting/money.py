@@ -1,6 +1,6 @@
-"""Exact money math. Integer cents only, never floats (spec.md §6).
+"""Exact money math. Integer cents only, never floats.
 
-Owner: Functionality. Invariant IDs refer to ACCOUNTING_CONTROLS.md §2.
+L-numbered invariant IDs are the ledger rules these functions enforce.
 """
 
 from __future__ import annotations

@@ -44,11 +44,3 @@ def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
 
-
-@app.post("/api/demo/{action}", response_model=Bundle)
-def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month."""
-    if action == "reset":
-        store.reset(ws)
-        return store.get_bundle(ws)
-    raise HTTPException(status_code=501, detail=f"demo action '{action}' not implemented yet")

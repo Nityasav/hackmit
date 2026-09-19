@@ -9,8 +9,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import sandboxFixture from "../../../contracts/fixtures/sandbox.json";
-import mitFixture from "../../../contracts/fixtures/mit.json";
+import sandboxFixture from "../fixtures/sandbox.json";
+import mitFixture from "../fixtures/mit.json";
 import type { ApprovalStatus, Bundle, WorkspaceId } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -25,7 +25,7 @@ interface DataContextValue {
   ws: WorkspaceId;
   setWs: (ws: WorkspaceId) => void;
   bundle: Bundle;
-  /** "fixtures" = offline replay of contracts/fixtures; "api" = polling the FastAPI server. */
+  /** "fixtures" = offline replay of src/fixtures; "api" = polling the FastAPI server. */
   source: "fixtures" | "api";
   apiError: string | null;
   decideApproval: (id: string, decision: Exclude<ApprovalStatus, "pending">) => void;

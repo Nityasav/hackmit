@@ -191,7 +191,7 @@ class Tag(BaseModel):
 class Decision(BaseModel):
     """One structured decision record per agent action. Feeds the Reasoning log.
 
-    Concise rationale only, never raw chain-of-thought (spec.md §8).
+    Concise rationale only, never raw chain-of-thought.
     """
 
     id: str

@@ -1,22 +1,17 @@
-"""In-memory bundle store, seeded from contracts/fixtures.
+"""In-memory bundle store, seeded from the same fixtures the web app renders.
 
-This is the seam the four workstreams meet at. Replace the fixture seed with real
-state as the pieces land:
-  - Functionality: back it with SQLite (accounting engine + snapshots)
-  - Agents: push task/step/decision updates as runs progress
-  - Workflows: build workflow stages and scenario steps
-The web app only ever sees Bundle, so each of those can land independently.
+Swap the fixture seed for SQLite-backed state once the accounting engine lands.
+The web app only ever sees Bundle, so that can happen behind this module.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
 from .models import ApprovalStatus, Bundle, WorkspaceId
 
-FIXTURES = Path(__file__).resolve().parents[2] / "contracts" / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "web" / "src" / "fixtures"
 
 _bundles: dict[str, dict] = {}
 
@@ -39,7 +34,7 @@ def reset(ws: WorkspaceId | None = None) -> None:
 
 
 def decide_approval(ws: WorkspaceId, approval_id: str, decision: ApprovalStatus) -> Bundle:
-    """Human decision. Agents may never call this path (spec.md §8)."""
+    """Human decision. Agents may never call this path."""
     bundle = _bundles.setdefault(ws, _load(ws))
     found = False
     for approval in bundle["approvals"]:
@@ -55,7 +50,3 @@ def decide_approval(ws: WorkspaceId, approval_id: str, decision: ApprovalStatus)
                 task["progress"] = 100
     return Bundle.model_validate(bundle)
 
-
-def snapshot(ws: WorkspaceId) -> dict:
-    """Deep copy, for tests and for the replay recorder."""
-    return copy.deepcopy(_bundles.setdefault(ws, _load(ws)))

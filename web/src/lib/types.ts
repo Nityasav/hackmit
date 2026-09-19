@@ -170,7 +170,7 @@ export interface Playbook {
 }
 
 export interface Ablation {
-  /** true until the numbers come from the real evaluator (DATA_AND_EVALUATION.md). */
+  /** true until the numbers come from the real evaluator. */
   example: boolean;
   rows: { metric: string; without: number; with: number }[];
   note: string;
