@@ -28,6 +28,7 @@ A policy pack stores issuer, authority type, applicable entity/award, source loc
 | L10 | Cash flow totals reconcile to cash account movement | Mark forecast/actual reconciliation invalid |
 | L11 | Allocation components total the original amount exactly | Apply documented cent-residual rule or reject |
 | L12 | Applying the same approved proposal twice has no second effect | Return existing application |
+| L13 | A payment batch release has a human releaser distinct from the preparer and excludes held items | Reject release; keep batch pending |
 
 For L06, the simplified chart omits deferred inflows/outflows; that is a scope constraint, not a general governmental accounting equation. If imported balances need unsupported account classes, flag the report incomplete.
 
@@ -52,6 +53,13 @@ AP rollforward = opening AP + supplier invoices/accruals - credit notes - paymen
 Encumbrance = a budget commitment, not automatically a liability. Do not count an open PO as both an expense and AP. When recognized activity replaces a commitment, release the corresponding encumbrance so budget usage is not counted twice. [CDE distinction](https://www.cde.ca.gov/fg/ac/as/faqs.asp).
 
 Control checks: preparer/approver separation, delegated authority effective date, approval threshold, purchase splitting as a hypothesis, vendor changes, and approval after payment. Thresholds come from supplied policy; none are universal constants.
+
+**Payment batch control (simulated).**
+- The AP & Payments agent may assemble a payment batch only from invoices that are matched, approved, and not unresolved duplicate candidates.
+- A distinct human releases the batch, and the agent that prepared it cannot release it.
+- Items with changed vendor bank details, missing approvals, or open exceptions are held and shown with a reason, not silently dropped.
+- Release is recorded as a simulated scenario event (debit AP, credit cash in the scenario ledger, marked simulated) and touches no real payment rails, bank files, or vendor communications.
+- Payroll reallocations follow the same prepare → human-approve → simulate path (see §8A).
 
 ## 5. Receivables, revenue, and cash
 

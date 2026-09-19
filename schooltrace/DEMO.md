@@ -18,25 +18,25 @@ Comparison: [FY2024 report](https://vpf.mit.edu/sites/default/files/downloads/Au
 
 These are published outcomes, not proof that every internal transaction was error-free. Do not invent an MIT scandal or suggest SchoolTrace found issues PwC missed. Verification date: September 19, 2026.
 
-## 1. Interface: a capability tour
+## 1. Interface: an Office of the CFO run by AI agents
 
-Keep three tabs visible:
+The full layout is in spec §11, and the prototype is `docs/design/prototype.html` (clean fintech style, teal accent). A **workspace switcher** toggles `MIT FY2025 · Public` (read-only) and `Sandbox University · Synthetic`. The sidebar has 8 tabs:
 
-- **MIT public reports:** read-only audit results, financial disclosures, and source comparison.
-- **University sandbox:** fictional transactions, grant terms, corrections, and reviewed memory.
-- **Run evidence:** tool events, execution mode, manifests, and measured evaluation.
+- **Office of the CFO:** Command center (CFO Agent briefing, live agent strip, workflow progress), Agent board (Kanban; click a Working card for steps, progress, ETA, and to-dos), Workflows (close, payroll, AP & payments, grant compliance, audit prep, with ✋ human gates).
+- **Work product:** Findings (with the evidence trail), Approvals, Reports.
+- **Agent brain:** Reasoning log (click an entry to see when/how/why/alternatives), Learning (playbooks, replay gate, memory on vs off).
 
-Use persistent badges: `Public report`, `Synthetic scenario`, `Live run`, `Recorded run`, or `Scripted preview`, as applicable. Expandable run details explain what was cached. The main view has capability buttons, current findings/calculations, and a side pane for sources, graph paths, or review.
+In the MIT workspace, Workflows, Approvals, and Learning are disabled.
 
-Show concrete actions such as “opened award clause” and “recomputed allocation,” not generic thinking animations.
+Use persistent badges: `Public report`, `Synthetic scenario`, `Live run`, `Recorded run`, or `Scripted preview`, as applicable. Expandable run details explain what was cached. The agents must be visibly at work, through agent badges, “N agents working,” and per-agent “doing X…” status. Show concrete actions such as “opened award clause” and “recomputed allocation,” not generic thinking animations.
 
 ## 2. Capability: inspect MIT's actual audit results
 
-Click **Load MIT FY2025**. Documents and page indexes are already prepared.
+Select **MIT FY2025 · Public** in the workspace switcher. Documents and page indexes are already prepared, and the Command center shows the CFO Agent's briefing on the published results.
 
-Prompt chip: “What did the external auditors report?”
+Prompt chip in the command bar: “What did the external auditors report?”
 
-The lead delegates opinion extraction; the restricted-funds specialist locates the major-program result; the auditor agent checks the original pages. Display the source card above, with each result opening its source region. Click **Compare FY2024 / FY2025** to show year-specific results and citations. Keep report date separate from audited period.
+The CFO Agent delegates opinion extraction, the Grants & Compliance agent locates the major-program result, and the Internal Auditor agent checks the original pages. Display the source card above, with each result opening its source region. Click **Compare FY2024 / FY2025** to show year-specific results and citations. Keep report date separate from audited period.
 
 “Show me the findings” must return the published outcome rather than manufacture an anomaly. Accurate restraint is part of the capability showcase.
 
@@ -55,7 +55,7 @@ Click **Trace a financial movement**. Use FY2025 Note D, Table 11, printed page 
 
 Exact calculation: `626904 + 76081 - 204993 + 53257 + 80480 = 631729`; residual zero; change 4,825 in the same units. [Source: FY2025 Note D](https://vpf.mit.edu/sites/default/files/downloads/AuditReport/2025_mit_uniform_guidance_report.pdf#page=25).
 
-The transaction detective retrieves the table; the analyst calls the deterministic calculation; the auditor checks signs, units, and ending balance; the lead explains the bridge. Do not invent donor-level causes that the report does not disclose.
+The AP & Payments agent retrieves the table, the Payroll & Budget agent calls the deterministic calculation, the Internal Auditor checks signs, units, and ending balance, and the CFO Agent explains the bridge. This appears in the MIT Findings tab. Do not invent donor-level causes that the report does not disclose.
 
 Click any bridge component to open its source row and calculation lineage. Click **What evidence is missing?** to list underlying pledge agreements, receipt applications, and valuation workpapers needed for transaction-level investigation. This schedule is not MIT's general ledger.
 
@@ -63,23 +63,23 @@ Optional interaction: **Omit a component in a sandbox copy**. Recompute the resi
 
 ## 4. Capability: inject an issue and investigate
 
-Switch visibly to **University sandbox — all transactions fictional**. Invented records must not use MIT employee, donor, vendor, or award identifiers.
+Switch visibly to **Sandbox University · Synthetic**, where all transactions are fictional. Invented records must not use MIT employee, donor, vendor, or award identifiers.
 
-Click **Inject grant-allocation issue**. Load one fictional $10,000 payroll cost entirely charged to a fictional award, its contract, incomplete service evidence, a legitimate duplicate-looking invoice pair, and a small balanced management ledger.
+Click **Inject grant-allocation issue**. Load one fictional $10,000 payroll cost entirely charged to a fictional award, its contract, incomplete service evidence, a legitimate duplicate-looking invoice pair, and a small balanced management ledger. Open the **Agent board** and watch the cards move:
 
-1. Lead assigns the allocation and invoice questions.
-2. Payroll analyst reconciles payroll and identifies the unsupported allocation assumption.
-3. Restricted-funds specialist reads the fictional award and requests current service evidence.
-4. Transaction detective clears the invoices using separate delivery records.
-5. Auditor refuses to confirm the allocation amount before the missing record arrives.
+1. The CFO Agent assigns the allocation and invoice questions (cards appear in Queued, then Working).
+2. The Payroll & Budget agent reconciles payroll and identifies the unsupported allocation assumption. Open its Working card to show steps, progress, ETA, and to-dos.
+3. The Grants & Compliance agent reads the fictional award and requests current service evidence (card moves to **Needs you**).
+4. The AP & Payments agent clears the invoices using separate delivery records.
+5. The Internal Auditor refuses to confirm the allocation amount before the missing record arrives.
 
-Click **Add service evidence**. The prepared synthetic document supports 60% award / 40% general operations. The engine computes a $4,000 reclassification. Offer an alternative 80/20 evidence fixture: the same calculation path must yield $2,000.
+From the Needs you card, click **Add service evidence**. The prepared synthetic document supports 60% award / 40% general operations. The engine computes a $4,000 reclassification. Offer an alternative 80/20 evidence fixture: the same calculation path must yield $2,000.
 
 A new or contradictory document starts a genuine bounded task or shows an unsupported-input state. It must not trigger a canned successful answer.
 
 ## 5. Capability: approve once, update every affected output
 
-Click **Review correction** to open source evidence, proposed journal, and before/after effects. Human approval applies only to the synthetic scenario.
+Open **Approvals** to see source evidence, the proposed journal, and before/after effects. Human approval applies only to the synthetic scenario. The same queue shows the simulated payment batch the AP & Payments agent prepared, with one invoice held because the vendor changed bank details. Releasing it is simulated.
 
 - General program expense increases by the reclassified amount.
 - Award program expense decreases by the same amount.
@@ -87,18 +87,20 @@ Click **Review correction** to open source evidence, proposed journal, and befor
 - Budget comparison, award schedule, finding amount, and report update together.
 - Graph dependencies mark old claims stale and produce a new consistent snapshot.
 
-Include a remediation action register. Do not automatically invent a receivable reversal or claim cash recovered. Additional entries require separate supporting evidence and approval.
+Include a remediation action register. Do not automatically invent a receivable reversal or claim cash recovered. Additional entries require separate supporting evidence and approval. Show **Reports** before/after: award spend and remaining award capacity change, and cash does not.
+
+Then open the **Reasoning log** and expand the 60/40 decision. It shows WHEN (run, step, trigger: “you attached SVC-REC-SEP”), HOW (`read_source_span` → `calculate(alloc_split)` → invariant checks), WHY, and WHY THIS OVER ALTERNATIVES (budget sheet's 100% rejected; 50/50 rejected as having no basis). Every field comes from the saved decision record.
 
 ## 6. Capability: remember, then recognize when memory is wrong
 
-Click **Save reviewed precedent**. Show source, contract scope, dates, exclusions, and reviewer. Then click **Next synthetic month**.
+The CFO Agent proposes playbook PB-07 from the repeated pattern. The **Learning** tab shows it passing the replay gate (0 new false positives on prior months), and the human activates it in Approvals. Show source, contract scope, dates, exclusions, and reviewer. Then click **Next synthetic month**.
 
 Compare two cases:
 
-- Same contract and validated current conditions: retrieve the precedent and avoid repeated clarification.
-- Amended contract: reject the old precedent and inspect current service evidence.
+- Same contract and validated current conditions: PB-05 is retrieved and applied, and the agent skips a repeated clarification.
+- Amended contract: PB-03 (60/40 under contract A) is rejected as stale and retired, and the agent inspects current service evidence.
 
-Expose `current charge -> contract -> reviewed precedent -> source -> validity check` in the graph, and highlight the action memory changed.
+Expose `current charge -> contract -> reviewed precedent -> source -> validity check` in the evidence trail. Highlight the action the playbook changed in the Reasoning log (memory checks ✓/✗). A blocked playbook (PB-06, which failed replay) shows that the gate works.
 
 These months belong to the synthetic institution. Comparing MIT's public annual reports demonstrates document context, not learning from MIT's private monthly books.
 
@@ -124,7 +126,10 @@ Target immediate navigation and subsecond small calculations locally, with a fou
 - Public-report records isolated from synthetic transactions and private benchmark labels.
 - Pledge-rollforward calculation with exact units and signs.
 - Two allocation-evidence fixtures plus a changed-contract memory fixture.
-- Event player with pause, step, source-open, and mode display.
+- Event player with pause, step, source-open, and mode display, which drives the Agent board columns and Working-card progress.
+- Saved decision records for every Reasoning log entry shown, including the 60/40 and stale-PB-03 decisions.
+- Playbook fixtures: PB-05 active, PB-03 retired (contract B), PB-06 blocked (replay failed), PB-07 needs approval.
+- Simulated payment batch with one vendor-bank-change hold.
 - Working scenario approval/application, dependency invalidation, and report export.
 - Optional “run this task live” control when a provider is configured.
 
@@ -132,7 +137,7 @@ Public-report mode retains published classifications and is read-only. Synthetic
 
 ## 9. Presenter route and evaluation
 
-**Load MIT -> inspect actual results -> reconcile published movement -> switch to sandbox -> inject issue -> add evidence -> approve correction -> demonstrate memory -> export findings.**
+**Command center (MIT) -> Findings (MIT: no findings + pledge rollforward ties) -> switch to Sandbox -> Agent board (watch agents; open a Working card) -> Needs you: add service evidence -> Approvals: approve $4,000 reclass (cash unchanged) -> Reports before/after -> Reasoning log (expand the 60/40 decision) -> next month -> Learning (PB-05 applied, PB-03 retired as stale, PB-07 via replay gate, memory on vs off) -> export.**
 
 Spend most of the time clicking through the product; adapt the route to audience interest. Unsupported live inputs should show their limitation or start a genuine bounded investigation.
 
@@ -147,4 +152,7 @@ Close with the existing synthetic month-two ablation: identical evidence/books/m
 - Legitimate invoices are cleared; missing evidence remains unresolved until supplied.
 - Approved reclassification updates dependencies without changing cash.
 - Amended contracts invalidate memory and affected cached results.
-- No MIT finding, live-run claim, or benchmark score is fabricated.
+- Each Reasoning log entry expands to when/how/why/alternatives drawn from a saved decision record.
+- Agent board state reflects actual task state (or a labeled recorded run), not a looping animation.
+- No playbook appears active without a passed replay gate and a human approval.
+- No MIT finding, live-run claim, or benchmark score is fabricated. Learning-tab numbers are measured or labeled as examples.

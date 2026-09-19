@@ -6,6 +6,10 @@ Version: 1.0 | Date: 2026-09-19 | Status: implementation-ready hackathon design
 
 The revised [DEMO.md](DEMO.md) is authoritative for presentation flow: a read-only MIT public-report explorer followed by a synthetic university investigation, with explicitly labeled hybrid/replay execution. Public documents are permitted inputs to this explorer; synthetic-only restrictions continue to govern transaction fixtures and benchmark data. The explorer does not claim access to MIT's internal ledger or implement statutory university accounting. Existing accounting, review, and evaluation requirements remain in force. Authored scripted previews may illustrate incomplete capabilities but do not satisfy agentic acceptance criteria or count as measured results.
 
+### Redesign update (2026-09-19, evening)
+
+The product is now presented as **an Office of the CFO for schools, run by AI agents**. The five roles keep their responsibilities but get finance-office display names (§8). The UI is rebuilt around making the agents' work visible (§11). Learning is implemented as agent-written playbooks behind a replay gate and human approval (§7.4). Every agent action emits a structured decision record (§8) that feeds the Reasoning log. The build is cut to about 16 hours for 4 people; see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and `/WORKPLAN.md`. The approved visual prototype is `docs/design/prototype.html`.
+
 ## 1. Purpose and problem
 
 Educational institutions can have substantial finance and compliance teams and still lose track of how money was allocated, approved, paid, and reported. Payroll, procurement, grants, enrollment, and facilities operate in separate systems. A transaction can be valid in one system but incorrectly classified, insufficiently supported, or duplicated elsewhere.
@@ -63,14 +67,14 @@ The basis distinction matters: US governmental fund reporting and government-wid
 2. Import the opening trial balance, existing ledger and subledgers, bank activity, payroll, budgets, contracts, invoices, award documents, and approval records.
 3. Show a completeness panel: source coverage, row counts, control totals, unmapped accounts, missing periods, extraction warnings, and unresolved opening balances.
 4. Establish the as-reported baseline. Source documents corroborate imported entries; they must not create duplicate transactions. If no ledger exists, separately stage reconstructed entries for review.
-5. Ask: “Enrollment fell 6%. Why did staffing costs rise, and why is the student-support grant nearly exhausted?”
-6. Lead investigator creates hypotheses and specialist tasks. Each task has a question, permitted data scope, expected evidence, and stopping condition.
+5. Ask the command bar (“Ask your finance team”): “Enrollment fell 6%. Why did staffing costs rise, and why is the student-support grant nearly exhausted?”
+6. The CFO Agent creates hypotheses and specialist tasks, which appear on the Agent board. Each task has a question, permitted data scope, expected evidence, and stopping condition.
 7. Specialists use typed tools and the context graph. They return findings, counterevidence, calculations, and requests for missing records.
 8. Auditor independently re-performs critical calculations and checks original sources. Unsupported conclusions are rejected or downgraded.
 9. Human reviews unresolved evidence requests and proposed adjustments. Any requested clarification stays in the local review queue.
 10. An approved scenario recomputes dependent schedules and reports. The as-reported baseline remains accessible.
-11. Lead investigator produces the final evidence-backed report and action register, including unresolved limitations.
-12. Reviewed decisions eligible for reuse become scoped memory. Month two demonstrates changed investigation behavior.
+11. The CFO Agent produces the final evidence-backed report and action register, including unresolved limitations.
+12. Agents propose playbooks from repeated patterns. Playbooks that pass the replay gate and human approval become scoped memory. Month two demonstrates changed investigation behavior, and the Reasoning log shows each use or rejection.
 
 ## 5. Architecture
 
@@ -86,11 +90,12 @@ CSV + text PDFs + synthetic emails/contracts
            |                         |
            +---- typed tool gateway --+
                            |
-                 lead investigator
+                     CFO Agent
                  /       |        \
-          transactions  payroll   restricted funds
+       AP & Payments  Payroll &   Grants &
+                      Budget      Compliance
                  \       |        /
-                    auditor review
+                 Internal Auditor review
                            |
                   human review queue
                            |
@@ -101,7 +106,9 @@ CSV + text PDFs + synthetic emails/contracts
 
 Recommended implementation shape: TypeScript web UI, Python API and worker, PostgreSQL, SQL graph tables, local file storage, and one provider-neutral model adapter. A dedicated graph database is optional; typed edges, temporal filtering, traversals, and provenance are required regardless of storage. Confirm supported library versions during implementation rather than relying on unverified SDK names in a challenge brief.
 
-Use server-sent events or an equivalent event stream to display agent actions. Background runs persist checkpoints in SQL. Every tool call logs agent identity, permitted scope, input hash, output references, latency, and result status. Store concise decision rationales and evidence, not private chain-of-thought.
+Hackathon build (justified equivalent): `web/` uses Next.js 16 App Router, TypeScript, Tailwind v4, and bun. `api/` uses FastAPI (Python, uv) with `app/accounting`, `app/agents`, and `app/workflows`. The hackathon uses SQLite instead of PostgreSQL for zero-setup local runs; the schema stays portable to Postgres. `contracts/` holds the shared JSON bundle schema and fixtures. The model is Claude Sonnet 5 (`claude-sonnet-5`) behind the provider adapter, plus a clearly labeled replay adapter.
+
+Use server-sent events or an equivalent event stream to display agent actions. For the hackathon, the web app may poll `GET /api/workspaces/{ws}/bundle` instead. Background runs persist checkpoints in SQL. Every tool call logs agent identity, permitted scope, input hash, output references, latency, and result status. Store concise decision rationales and evidence, not private chain-of-thought.
 
 ## 6. Financial data model
 
@@ -167,20 +174,25 @@ Clicking any path opens the relevant row, page, or calculation. A graph visualiz
 
 1. Working memory: run-local hypotheses and open questions, discarded or archived after the run.
 2. Episodic memory: prior findings, investigations, and review outcomes; useful context but not automatically authoritative.
-3. Reviewed procedural memory: approved allocation rules, matching precedents, and recurring exceptions, with explicit applicability tests.
+3. Reviewed procedural memory: approved allocation rules, matching precedents, and recurring exceptions, with explicit applicability tests. In the UI these are called **playbooks** (for example, PB-05, “same vendor and amount with different receipts → clear”).
 4. Institutional context: organizational structure and policies anchored to authoritative source versions.
 
-Precedent schema: `id, institution, domain, entity_scope, rule_summary, applicability_predicates, exclusions, valid_from, valid_to, source_ids, reviewer_id, review_time, supersedes_id, status`.
+Precedent/playbook schema: `id, institution, domain, entity_scope, rule_summary, applicability_predicates, exclusions, valid_from, valid_to, source_ids, source_finding_ids, proposed_by, replay {months, new_false_positives, passed}, reviewer_id, review_time, supersedes_id, uses, status` where status ∈ `proposed | needs_approval | active | retired | blocked`.
 
 Retrieval order: enforce tenant and access scope; filter by period and domain; traverse connected entities and policies; retrieve approved precedents; use semantic similarity only to rank remaining candidates. Similar text cannot override incompatible dates or scope.
 
-### 7.4 Learning loop
+### 7.4 Learning loop (RSI via playbooks)
 
-Agent proposes memory -> reviewer checks evidence and scope -> approved memory is persisted -> later task retrieves it -> current source checks pass or invalidate it -> decision records exactly how memory affected the next action.
+1. **Notice:** an agent, usually the CFO Agent, sees the same pattern across findings or months.
+2. **Propose:** it drafts a scoped playbook with scope, validity dates, exclusions, and source findings (`propose_playbook`). Status: `proposed`.
+3. **Replay gate:** a deterministic runner re-runs the prior month or months with the playbook enabled. It must add **0 new false positives** against that month's reviewed outcomes. If it fails, the status is `blocked`: for example, PB-06 “auto-clear 100% allocation for dedicated staff” is blocked after 1 false clear. If it passes, the status is `needs_approval`.
+4. **Human approval:** the playbook appears in Approvals. Only the human review service can activate it. Status: `active`.
+5. **Use and re-check:** a later task retrieves the playbook and re-runs its applicability checks against current sources on every use. The decision record logs exactly how the playbook changed the next action, or why it was rejected.
+6. **Retire:** a playbook whose governing source is superseded becomes `retired`, and the old version stays for history.
 
-Do not self-edit production prompts or promote agent summaries into policy. “Learning” in the MVP means controlled retrieval and reuse, not fine-tuning.
+Do not self-edit production prompts or promote agent summaries into policy. In the MVP, “learning” means controlled retrieval and reuse of reviewed playbooks, not prompt self-modification or fine-tuning. The replay gate is a guard against learning the wrong lesson, not proof of general improvement.
 
-Negative-transfer example: September permits a 60/40 transportation allocation under contract A. October contract B changes routes and allocation evidence. The prior memory must be flagged as inapplicable, not copied because the vendor name matches.
+Negative-transfer example: September permits a 60/40 transportation allocation under contract A (PB-03). October contract B changes routes and allocation evidence. PB-03 must be flagged as inapplicable and retired, not copied because the vendor name matches.
 
 ### 7.5 Invalidation and concurrency
 
@@ -190,7 +202,17 @@ Workers write using optimistic version checks. The graph projection carries the 
 
 ## 8. Agent contracts and orchestration
 
-Five roles: lead investigator; transaction detective; payroll/budget analyst; restricted-funds specialist; independent auditor. Reuse a model if necessary but separate role context, tools, and permissions. Model diversity is optional and does not guarantee independence.
+Five roles, shown in the UI as an Office of the CFO:
+
+| Display name | Role | Owns |
+| --- | --- | --- |
+| CFO Agent | Lead investigator / orchestrator | Plan, task assignment, briefing, final report, playbook proposals |
+| AP & Payments agent | Transaction detective | AP/AR, 3-way match, duplicates, bank, payment batches |
+| Payroll & Budget agent | Payroll/budget analyst | Payroll tie-out, allocations, variance bridge, budget |
+| Grants & Compliance agent | Restricted-funds specialist | Award terms, windows, allowability, award schedule |
+| Internal Auditor agent | Independent auditor | Re-performs calculations from originals; accept/reject/needs_evidence |
+
+The human user is the real CFO or controller and approves every adjustment, payment release, and playbook activation. Reuse a model if necessary but separate role context, tools, and permissions. Model diversity is optional and does not guarantee independence.
 
 Specialists may investigate concurrently against an immutable snapshot. They cannot approve their own proposals. The auditor receives the submitted claim and evidence references, then retrieves originals and re-performs calculations rather than merely reviewing persuasive prose.
 
@@ -213,13 +235,33 @@ Required response contract:
   "proposed_adjustment_ids": [],
   "evidence_requests": [{"record_type": "service_allocation", "period": "2026-09", "reason": "Test allocation basis"}],
   "memory_used": [],
+  "decision": {
+    "id": "DEC-0412",
+    "run": "RUN-SEP-03",
+    "time": "2026-10-02T14:02:52Z",
+    "agent": "internal_auditor",
+    "action": "Rejected claim CL-7",
+    "summary": "No current service record; a budget % is not proof of work.",
+    "when": {"run": "RUN-SEP-03", "step": "22 of 38", "started": "14:02:43", "finished": "14:02:52", "trigger": "CL-7 submitted with budget sheet only"},
+    "how": [{"tool": "read_source_span", "input": "GRANT-SS §4.2", "output": "shared staff need service records"}],
+    "why": "Award terms require actual service records; none exist yet.",
+    "alternatives": [
+      {"option": "Mark needs_evidence", "reason": "Plausible but unsupported", "chosen": true},
+      {"option": "Accept CL-7", "reason": "No evidence of actual work", "chosen": false}
+    ],
+    "memory_checks": [],
+    "outcome": "CL-7 -> needs_evidence; evidence requested",
+    "evidence": ["CL-7", "GRANT-SS §4.2"]
+  },
   "next_action": "await_document"
 }
 ```
 
-Allowed task statuses: `queued`, `running`, `needs_evidence`, `submitted`, `review_rejected`, `review_accepted`, `failed`, `cancelled`. Findings use a separate lifecycle: `candidate -> investigating -> needs_evidence / substantiated / cleared -> action_proposed -> approved -> resolved`, with reopening on new evidence. Resolution requires verified remediation, not just report publication.
+The `decision` block is a concise, structured rationale that the agent emits with each action. It feeds the Reasoning log. It is not raw chain-of-thought. Tool calls in `how` must match the logged tool events, and amounts must reference calculation IDs.
 
-Lead investigator chooses follow-ups based on evidence gaps and reviewer challenges. Deterministic workflow logic enforces permissions, bounds, and transitions; it must not hard-code the planted issue conclusions.
+Allowed task statuses: `queued`, `running`, `needs_evidence`, `submitted`, `review_rejected`, `review_accepted`, `failed`, `cancelled`. Agent board columns map to them as follows: `queued`→Queued, `running`→Working, `needs_evidence`→Needs you, `submitted`→Auditor review, `review_accepted`→Done. `review_rejected` returns the task to Working with the reviewer's challenge, and `failed`/`cancelled` show as badges. Each task also exposes `progress` (steps done / total), `eta`, the ordered `steps` (done/running/pending), agent `todos`, and tool budget used. Findings use a separate lifecycle: `candidate -> investigating -> needs_evidence / substantiated / cleared -> action_proposed -> approved -> resolved`, with reopening on new evidence. Resolution requires verified remediation, not just report publication.
+
+The CFO Agent chooses follow-ups based on evidence gaps and reviewer challenges. Deterministic workflow logic enforces permissions, bounds, and transitions; it must not hard-code the planted issue conclusions.
 
 Default run limits: five agents, two concurrent specialist calls, 12 tool calls per task, two review cycles per finding, configurable total token/cost ceiling, and a visible stop reason on exhaustion. A bounded run may end partially complete with unresolved questions rather than manufacturing an answer.
 
@@ -233,8 +275,10 @@ Default run limits: five agents, two concurrent specialist calls, 12 tool calls 
 - `submit_finding(payload)` and `propose_adjustment(payload)` validate schemas and append proposals.
 - `request_evidence(payload)` adds an in-app request; it sends nothing externally.
 - `submit_review(finding_id, decision, evidence)` records the auditor's review, not human financial approval.
+- `propose_playbook(payload)` drafts a scoped playbook and queues the replay gate; it cannot activate anything.
+- `prepare_payment_batch(invoice_ids)` assembles a simulated batch and holds flagged items; it cannot release funds.
 
-Only the authenticated human review service can approve an adjustment or activate procedural memory. Runtime agents cannot access evaluator labels, unrestricted filesystem paths, arbitrary SQL, a shell, or payment tools.
+Only the authenticated human review service can approve an adjustment, release a (simulated) payment batch, or activate a playbook or procedural memory. Runtime agents cannot access evaluator labels, unrestricted filesystem paths, arbitrary SQL, a shell, or payment tools.
 
 ## 9. Deterministic accounting and outputs
 
@@ -253,6 +297,8 @@ Required outputs:
 9. Findings report, proposed adjustment register, and action plan.
 10. Evidence index / prepared-by-client workpaper bundle.
 
+Hackathon cut: outputs 3, 4, and 8 (AP/AR aging, bank reconciliation, 13-week cash forecast) are deferred unless there is time left. Build outputs 1, 2, 5, 6, 7, 9, and 10 first. See the cut list in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
 Reports share snapshot IDs and calculation results. A narrative claim must reference a source span or calculation; amounts are injected from validated data, not regenerated by the LLM. Budget remaining, award capacity, fund allocation, net assets, and spendable cash are not interchangeable.
 
 ## 10. Finding and report quality
@@ -267,14 +313,26 @@ Report sections: executive summary; scope and coverage; reviewed findings; pendi
 
 ## 11. Interface
 
-- Overview: period, profile, snapshot, reviewed exposure, open questions, coverage, stale-data banner.
-- Investigation workspace: task timeline, current hypothesis, evidence requests, actual tool events, review outcomes.
-- Evidence pane: document page/CSV row and source highlight beside the claim.
-- Context graph: focused neighborhood with assertion class, date, source, and supersession filters.
-- Findings list: amount category, status, severity, owner, evidence strength; no unreviewed accusation headlines.
-- Review drawer: before/after entries, exact financial effects, approver, reason, and version conflict handling.
-- Reports: baseline/scenario comparison and downloadable Markdown/CSV/JSON; PDF is optional.
-- Evaluation page: hidden-run metrics only after scoring, memory comparison, costs and failures.
+Visual style: clean fintech. White surfaces, Inter, a teal `#0F766E` accent, rounded cards, and status pills. The approved prototype is `docs/design/prototype.html`.
+
+**The AI must be visibly present.** A viewer should see agents working, not a static dashboard. This means the CFO Agent's AI briefing, an animated “doing X…” status per agent, an “N agents working” indicator in the top bar, ✦ tags on AI-generated content, agent badges on every row, and an “Ask your finance team” command bar.
+
+**Workspace switcher** (top of the sidebar): `MIT FY2025 · Public` (read-only public-report explorer) ⇄ `Sandbox University · Synthetic`. Persistent badges show `Public report` / `Synthetic scenario` and `Live run` / `Recorded run` / `Scripted preview`.
+
+**8 tabs in 3 groups:**
+
+| Group | Tab | Contents |
+| --- | --- | --- |
+| Office of the CFO | Command center | CFO Agent AI briefing (what the team did, what needs you), live agent team strip, workflow progress, KPIs (flagged amount with cash impact, tasks done, playbooks used/rejected, questions to you), stale-data banner |
+| | Agent board | Kanban: Queued / Working / Needs you / Auditor review / Done (status mapping in §8). Working cards show the current step, % progress, and ETA. Clicking a card opens a drawer with steps (done/running/pending, with tool call and result), progress, ETA, tool budget, agent to-dos, and the decision rationale |
+| | Workflows | Month-end close, payroll, AP & payments, grant compliance, and audit prep as stage pipelines, each with an owner agent. ✋ marks human gates (approve adjustments, release payments, upload evidence) |
+| Work product | Findings | Findings list (amount category, status, finding agent, verifying agent), plus the evidence trail: the context-graph path from source to calculation to finding, with each node opening the source page/row or calculation. There are no unreviewed accusation headlines |
+| | Approvals | Human queue: journal corrections (before/after entries, exact effects, cash impact), simulated payment batch release (with held items), playbook activation, and evidence requests. It handles version conflicts |
+| | Reports | AI-written close pack generated only from verified findings and calculations, with a baseline vs approved-scenario comparison. Export to Markdown/CSV/JSON; PDF is optional |
+| Agent brain | Reasoning log | Every agent decision across runs and months, filterable by agent, month, and memory use, with an “ask why” search. Each entry expands to WHEN (run, step, started/finished, trigger), HOW (tool calls with inputs → outputs), WHY (rationale), WHY THIS OVER ALTERNATIVES (options considered, chosen vs rejected with a reason), MEMORY CHECKS, and OUTCOME, all from the §8 `decision` record |
+| | Learning | RSI loop (§7.4), playbooks table (source finding, proposing agent, replay result, uses, status), and memory on vs off comparison. Measured numbers come only from saved evaluator output; otherwise they are labeled as example values |
+
+In the MIT workspace, Workflows, Approvals, and Learning are disabled. Command center, Findings, Reports, and Reasoning log show public-report content only: the published opinions, “no findings reported,” the pledge rollforward tie, and the FY2024/FY2025 comparison.
 
 ## 12. Security and failure handling
 
@@ -286,26 +344,33 @@ Recovery behaviors: quarantine malformed imports; show OCR uncertainty; keep con
 
 ## 13. Acceptance criteria
 
+**[demo]** marks the criteria that must be met for the hackathon demo. The others are met if time allows, or honestly marked incomplete in the README.
+
 - AC-01: Reimporting a source does not double-count a financial event.
-- AC-02: All accepted journals balance exactly; invalid or unknown mappings block final statements.
+- AC-02 **[demo]**: All accepted journals balance exactly; invalid or unknown mappings block final statements.
 - AC-03: Ledger, statements, schedules, and report claims tie to the same snapshot.
-- AC-04: At least three specialists perform distinct evidence-driven investigations and an auditor rejects or revises an unsupported claim.
-- AC-05: A finding can be traced through the graph to original evidence and a reproducible calculation.
-- AC-06: Human-approved correction changes the proper downstream outputs; a pure allocation correction leaves total cash unchanged.
-- AC-07: Month-two memory retrieval changes a logged action; expired or conflicting memory is rejected.
-- AC-08: With-memory and without-memory evaluations use identical month-two evidence, accounting state, model settings, and budgets.
-- AC-09: Unresolved cases remain unresolved; reports do not fabricate missing facts or declare a clean audit.
-- AC-10: Runtime tools cannot retrieve private grader labels or perform real financial actions.
+- AC-04 **[demo]**: At least three specialists perform distinct evidence-driven investigations and an auditor rejects or revises an unsupported claim.
+- AC-05 **[demo]**: A finding can be traced through the graph to original evidence and a reproducible calculation.
+- AC-06 **[demo]**: Human-approved correction changes the proper downstream outputs; a pure allocation correction leaves total cash unchanged.
+- AC-07 **[demo]**: Month-two memory retrieval changes a logged action; expired or conflicting memory is rejected.
+- AC-08: With-memory and without-memory evaluations use identical month-two evidence, accounting state, model settings, and budgets. (Required before any memory metric is shown.)
+- AC-09 **[demo]**: Unresolved cases remain unresolved; reports do not fabricate missing facts or declare a clean audit.
+- AC-10 **[demo]**: Runtime tools cannot retrieve private grader labels or perform real financial actions.
 - AC-11: A changed source invalidates dependent reports; stale reports cannot be presented as current.
-- AC-12: All metric claims come from saved evaluator output, with sample size and limitations.
+- AC-12 **[demo]**: All metric claims come from saved evaluator output, with sample size and limitations. Otherwise they are labeled as example values.
+- AC-13 **[demo]**: Every agent action shown in the Reasoning log comes from a saved decision record whose tool calls match logged tool events.
+- AC-14 **[demo]**: No playbook becomes active without passing the replay gate (0 new false positives) and a human approval. A failed replay leaves it `blocked`.
+- AC-15 **[demo]**: Payment batches and payroll reallocations are prepared by agents, released only by a human, and simulated. Items with vendor bank-detail changes are held.
 
 ## 14. Maximor alignment
 
 | Track criterion | Demonstration |
 | --- | --- |
+| Office of the CFO | CFO Agent plus AP & Payments, Payroll & Budget, Grants & Compliance, and Internal Auditor running close, payroll, AP & payments, grant compliance, and audit-prep workflows |
 | Multi-step reasoning over documents | Trace a payroll allocation through service evidence, grant terms, ledger, and report |
-| Multi-agent coordination | Specialist handoffs, reviewer challenge, targeted evidence request |
-| Memory/context changes behavior | Reviewed September precedent affects October retrieval and checks |
+| Multi-agent coordination | Specialist handoffs, reviewer challenge, targeted evidence request, all visible live on the Agent board |
+| Memory/context changes behavior | Reviewed September playbook changes October retrieval and checks; a stale playbook is retired (Learning tab, Reasoning log) |
+| Explainability | Each action's when/how/why/alternatives, taken from the saved decision records |
 | Long horizon | Two closes with carry-forward balances, recurring issues, and amended contracts |
 | Consistency across workflows | One approved correction recomputes several dependent outputs |
 | Human uncertainty handling | Evidence request and explicit approval before scenario application |

@@ -4,7 +4,9 @@ Give the following prompt to a coding agent with all files in this specification
 
 ---
 
-Build **SchoolTrace**, a working hackathon application for the Maximor Office of the CFO track. It is a multi-agent financial detective for educational institutions, starting with a fictional school district and two monthly accounting periods.
+Build **SchoolTrace**, a working hackathon application for the Maximor Office of the CFO track. It is an Office of the CFO for schools, run by AI agents: a multi-agent financial detective and workflow runner for educational institutions, starting with a fictional institution and two monthly accounting periods.
+
+Hackathon reality: about 16 hours and 4 people split into UI, Agent design, Workflows, and Functionality. If you are helping one teammate, work only inside that owner's area in `/WORKPLAN.md` and the directories it owns, and do not change `contracts/` without flagging it. The repo layout is `web/` (Next.js 16, TS, Tailwind v4, bun), `api/` (FastAPI, uv; `app/accounting`, `app/agents`, `app/workflows`), `contracts/` (bundle schema + fixtures), and `docs/design/prototype.html` (the approved UI). Use SQLite for the hackathon, and Claude Sonnet 5 (`claude-sonnet-5`) behind the provider adapter plus a labeled replay adapter.
 
 Read the entire provided specification package before implementing:
 
@@ -26,11 +28,12 @@ Deliver a runnable application that imports synthetic financial records and supp
 
 The distinctive features must actually work:
 
-- Five reasoning roles: lead investigator, transaction detective, payroll/budget analyst, restricted-funds specialist, and independent auditor.
+- Five reasoning roles, shown as an Office of the CFO: the CFO Agent (lead investigator), AP & Payments (transaction detective), Payroll & Budget (payroll/budget analyst), Grants & Compliance (restricted-funds specialist), and the Internal Auditor (independent auditor).
 - A typed temporal context graph used for source tracing, retrieval, reviewed precedent applicability, and downstream invalidation.
-- Month-two behavior changes through reviewed memory, with an honest with/without-memory evaluation.
+- Month-two behavior changes through reviewed memory: agent-written playbooks that pass a replay gate (0 new false positives on prior months) and a human approval, with an honest with/without-memory evaluation.
+- A structured decision record for every agent action (when, how, why, alternatives, memory checks, outcome), which feeds the Reasoning log.
 - Exact arithmetic and deterministic accounting controls outside the LLM.
-- Human review with server-side enforcement before adjustment application or procedural memory activation.
+- Human review with server-side enforcement before adjustment application, simulated payment-batch release, or playbook/procedural memory activation.
 
 ## Execution instructions
 
@@ -46,22 +49,32 @@ Build reviewed-memory retrieval with scope/date/source checks and an explicit st
 
 Implement the synthetic generator and evaluator. Keep private truth outside runtime agent access. Clearly distinguish development fixtures from a genuinely held-out evaluation. The paired memory experiment must use identical month-two documents, opening books, model settings, prompts except memory access, tool limits, and human response policy.
 
-No real payments, payroll changes, ERP postings, bank modifications, grant submissions, or external messages. Use synthetic institution/person data only. The internal auditor agent does not issue an audit opinion. Label simplified statements as management reports under the demo accounting profile.
+No real payments, payroll changes, ERP postings, bank modifications, grant submissions, or external messages. Payment batches and payroll reallocations are prepared by agents, released by a human, and simulated. Use synthetic institution/person data only. The internal auditor agent does not issue an audit opinion. Label simplified statements as management reports under the demo accounting profile.
 
 ## Build order
 
-1. Data contracts, opening balances, minimal fixture, exact calculations, import idempotency.
+1. Data contracts (`contracts/` bundle schema), opening balances, minimal fixture, exact calculations, import idempotency.
 2. Baseline trial balance and management statements; approved correction scenario.
-3. Evidence graph, source viewer, one lead/specialist/auditor investigation.
-4. Full specialist coverage, review queue, downstream schedules and report generation.
-5. Reviewed memory, month-two run, changed-policy invalidation.
-6. Hidden-issue evaluation, paired ablation, exports, demo polish, and documentation.
+3. Evidence path, source viewer, one CFO Agent/specialist/Internal Auditor investigation emitting decision records.
+4. Full specialist coverage, Approvals queue (journals, simulated payment batch, playbooks), workflows, and report generation.
+5. Playbooks with replay gate, month-two run, stale-playbook retirement.
+6. Hidden-issue evaluation, one paired ablation, exports, demo polish, and documentation.
 
-Use the milestone gates in IMPLEMENTATION_PLAN.md. If time is limited, cut optional OCR, complex statutory reporting, advanced facilities accounting, and visual effects before compromising provenance, math, review, or evaluation.
+Use the 16-hour checkpoints and cut list in IMPLEMENTATION_PLAN.md §3. If time is limited, cut optional OCR, complex statutory reporting, advanced facilities accounting, and visual effects before compromising provenance, math, review, or evaluation.
 
 ## Required interface
 
-Show an overview with source coverage and period; an investigation timeline driven by real events; findings with evidence and counterevidence; a focused context graph; original source viewer; human review drawer with exact before/after effects; and report/evaluation views. Show incomplete, failed, waiting, and stale states honestly.
+Match spec §11 and `docs/design/prototype.html` (clean fintech style, teal accent). Include a workspace switcher (MIT FY2025 · Public ⇄ Sandbox University · Synthetic) and 8 tabs:
+- Command center: CFO Agent briefing, live agent strip, workflow progress.
+- Agent board: Kanban with a task drawer showing steps, progress, ETA, and to-dos.
+- Workflows: close, payroll, AP & payments, grants, audit prep, with human gates.
+- Findings, with the evidence trail.
+- Approvals.
+- Reports: before/after.
+- Reasoning log: expandable when/how/why/alternatives.
+- Learning: playbooks, replay gate, memory on/off.
+
+The AI's work must be visibly live, and every visible agent status must come from real task state or a labeled recorded run. Show incomplete, failed, waiting, and stale states honestly.
 
 ## Required final deliverables
 
@@ -69,7 +82,7 @@ Show an overview with source coverage and period; an investigation timeline driv
 - `.env.example` with placeholders and clear model configuration.
 - Reproducible install, seed, run, test, reset, and export commands.
 - Synthetic runtime-safe fixtures plus separately isolated evaluator assets.
-- Tests for the accounting, graph, approval, privacy boundary, and memory invariants.
+- Tests for the accounting, graph, approval, privacy boundary, memory/playbook replay gate, payment-batch hold, and decision-record invariants.
 - One saved successful run and exported management report/evidence bundle.
 - Measured evaluation results with counts, sample sizes, configurations, and limitations.
 - README documenting implemented features, remaining gaps, replay mode, and demo steps.

@@ -4,93 +4,74 @@
 
 | Resource | Minimum | Purpose |
 | --- | --- | --- |
-| Team | 2–4 builders; one person owns integration | Data/accounting, agent backend, UI, evaluation/demo |
+| Team | 4 builders: UI, Agent design, Workflows, Functionality (see `/WORKPLAN.md`); one person owns integration at each checkpoint | Parallel work on directory-owned areas joined by `contracts/` |
 | Domain review | A finance/accounting reviewer if available | Check assumptions and final accounting examples |
-| Model access | One model with tool calling and structured output | Run distinct reasoning roles; provider adapter avoids lock-in |
-| Runtime | Python API/worker and TypeScript frontend | Typed calculations and interactive investigation UI |
-| Storage | PostgreSQL and local source directory | Exact financial records, graph tables, checkpoints |
+| Model access | Claude Sonnet 5 (`claude-sonnet-5`) with tool calling and structured output, plus a labeled replay adapter | Run distinct reasoning roles; provider adapter avoids lock-in |
+| Runtime | FastAPI (Python, uv) API/worker and Next.js 16 + Tailwind v4 frontend (bun) | Typed calculations and interactive investigation UI |
+| Storage | SQLite for the hackathon (Postgres-portable schema) and a local source directory | Exact financial records, graph tables, checkpoints, decision records |
 | Parsing | CSV plus text-based documents initially | Preserve locators without early OCR complexity |
 | Evaluation | Private fixture generator and deterministic scorer | Hidden issues and memory ablation |
 | Deployment | Local demo first | Avoid live financial connectors and sensitive records |
 
-Suggested team planning allowance: 24–36 hours and a configurable $25–$100 model-spend ceiling. This is an internal budget choice, not a provider price estimate or a guarantee of sufficiency. Measure actual usage and stop at the configured cap. Reserve several hours for integration and rehearsal.
+The actual time left is **about 16 hours** (Sat Sep 19 ~6pm → Sun Sep 20 ~10am, 2026). The original suggestion was 24–36 hours; §3 is the compressed plan. Keep a configurable $25–$100 model-spend ceiling. This is an internal budget choice, not a provider price estimate or a guarantee of sufficiency. Measure actual usage and stop at the configured cap. Reserve several hours for integration and rehearsal.
 
 No paid graph service, fine-tuning, live banking, real payroll, or production institution data is needed. Use SQL node/edge tables before adding graph infrastructure. Pin dependencies after checking official documentation and compatibility during implementation.
 
-## 2. Proposed application repository
+## 2. Application repository (hackathon layout)
 
 ```text
-schooltrace-app/
-  README.md
-  .env.example
-  apps/web/                    # overview, investigation, graph, reviews, reports
-  services/api/                # authorization, imports, runs, reviews, exports
-  services/worker/             # orchestrator and resumable agent tasks
-  packages/contracts/         # JSON schemas / generated client types
-  packages/accounting/        # exact calculations and invariant checks
-  packages/context/           # graph projection, temporal queries, memory filters
-  packages/agents/            # role prompts, model adapter, tool gateway
-  migrations/
-  fixtures/public/            # runtime-safe developer inputs
-  tests/                      # unit, integration, agent-behavior cases
-  scripts/                    # seed, reset, run, export
-  docs/                       # this specification package
+hackmit/
+  README.md                   # how to run web + api, demo steps, known gaps
+  WORKPLAN.md                 # 4-person split, checkpoints, interfaces
+  web/                        # Next.js 16 App Router, TS, Tailwind v4, bun
+                              #   8 tabs + workspace switcher; reads one JSON bundle per workspace
+                              #   from contracts/fixtures when NEXT_PUBLIC_API_URL is unset, else polls the API
+  api/                        # FastAPI (Python, uv)
+    app/main.py               #   GET /api/health, GET /api/workspaces/{ws}/bundle,
+                              #   POST /api/approvals/{id}/decision, POST /api/demo/{action}
+    app/accounting/           #   integer-cent calculations, invariants L01–L13, scenario apply
+    app/agents/               #   model adapter (+ replay), tool gateway, role prompts, orchestrator, decision records
+    app/workflows/            #   workflow/stage definitions, demo scenarios, payment batch + payroll flows
+  contracts/                  # README.md (bundle schema) + fixtures/sandbox.json, fixtures/mit.json
+  docs/design/prototype.html  # approved UI prototype (style C)
+  schooltrace/                # this specification package
 ```
 
-Keep evaluator-private fixtures outside the runtime-mounted repository subtree or in a separately permissioned evaluator project. Runtime manifests list exactly which source directories are accessible. `.env.example` contains placeholders only.
+The earlier multi-package layout (`apps/`, `services/`, `packages/`) is a fine target after the hackathon. `contracts/` is the only shared seam, so announce schema changes to the team before merging. Keep evaluator-private fixtures outside the runtime-mounted repository subtree or in a separately permissioned evaluator project. Runtime manifests list exactly which source directories are accessible. `.env.example` contains placeholders only.
 
-## 3. Milestones and gates
+## 3. Compressed 16-hour plan (4 people)
 
-### M0 — Lock scope and executable contracts (hours 0–2)
+The owner-level task lists are in `/WORKPLAN.md`. The checkpoints below are shared gates: everyone merges to `main` and the whole team runs the demo path. H0 ≈ 6pm Saturday.
 
-- Confirm demo accounting profile and institution; choose one supported model/provider.
-- Define canonical record IDs, monetary representation, snapshots, finding schema, and review permissions.
-- Build a minimal seed: one payroll allocation issue, one legitimate lookalike, one grant agreement, balanced opening and current entries.
-- Gate: schema-validated seed and independently calculated expected balances.
+| Checkpoint | By | Gate (everyone verifies) |
+| --- | --- | --- |
+| H0 → H1 | ~7pm | Contracts frozen for v1: bundle schema, task/decision/playbook records, tool signatures, workflow IDs. Web runs on fixtures; API `/api/health` and `/bundle` (fixture pass-through) run |
+| H4 | ~10pm | **Vertical slice.** Seed ledger (payroll allocation issue, invoice lookalike, award terms) balances. `calculate(alloc_split)` returns the exact $4,000. One agent (Payroll & Budget) runs a real task via the tool gateway and emits a decision record. Web renders it from the API |
+| H8 | ~2am | **Integration.** CFO Agent → 3 specialists → Internal Auditor rejects CL-7 → evidence request → human attaches service record → reclass proposal → Approvals applies it (cash unchanged). Workflows and Agent board are driven by real task state. MIT workspace data is live |
+| H12 | ~6am | **Feature freeze.** Month two: PB-05 applied, PB-03 rejected as stale, PB-07 through the replay gate. One paired memory on/off run saved. Reports before/after. Only bug fixes after this point |
+| H14 | ~8am | **Recorded run + rehearsal.** Save one successful live run as the labeled replay. Two full rehearsals of the DEMO.md route (4–6 min). README lists what is live, recorded, or scripted |
+| H16 | ~10am | **Submit.** Devpost, video if required, repo tagged |
 
-### M1 — Deterministic financial spine (hours 2–7)
+If the H8 gate slips, drop to one specialist plus the auditor for live runs. Show the rest from a labeled recorded run. Do not fake live output.
 
-- Import/hash sources, preserve locators, normalize records, enforce idempotency.
-- Implement ledger balance, trial balance, management statements, and allocation calculations.
-- Implement baseline versus approved scenario, immutable proposals, and review/application endpoint.
-- Gate: invalid journals rejected; valid example ties; reimport and reapplication have no duplicate effect.
+### Cut list (decided now, not at 4am)
 
-### M2 — Evidence graph and first investigation (hours 7–12)
-
-- Add typed facts, source spans, graph edges, policy applicability, and source viewer.
-- Add lead and one specialist using real tools and structured findings.
-- Add independent auditor and human evidence queue.
-- Gate: user can follow a real finding from question to source to calculation to reviewed correction.
-
-### M3 — Full agent team and downstream outputs (hours 12–19)
-
-- Add transaction, payroll/budget, and restricted-funds specialist coverage.
-- Add bank/AP/AR/grant schedules, budget comparison, and bounded cash forecast.
-- Implement dependency invalidation and report snapshots.
-- Gate: reviewer challenge triggers a new evidence-driven step; approved reclassification updates correct outputs without moving cash.
-
-### M4 — Reviewed memory and month two (hours 19–24)
-
-- Implement precedent review, temporal scope, exclusions, supersession, and retrieval logging.
-- Add recurring valid use and changed-contract invalidation cases.
-- Gate: month-two actions visibly differ with memory; invalid memory is rejected.
-
-### M5 — Evaluation and demo polish (hours 24–32)
-
-- Expand synthetic fixture families; isolate hidden truth from runtime tools.
-- Run paired memory experiments and score claim support and financial consistency.
-- Add report export, incomplete-state UI, runtime/cost telemetry, and replay labeling.
-- Gate: all acceptance criteria have evidence or are honestly marked incomplete.
-
-### M6 — Rehearsal and contingency (remaining time)
-
-- Rehearse reset -> live run -> evidence injection -> approved correction -> report.
-- Save one successful run for clearly labeled replay if a model/network outage occurs.
-- Record known failures, sample sizes, and scope limits in the final README.
-
-For a 24-hour event, reduce dataset size and UI polish first. Keep ledger correctness, original evidence, auditor challenge, reviewed memory, and the paired comparison. Advanced facilities accounting, graph animations, OCR, and production integrations are first to cut.
+- **Cut:** OCR and PDF extraction (use Markdown/text source documents with line locators), bank reconciliation, AR aging, the 13-week cash forecast, facilities/capital cases, full graph visualization (show the evidence path inside Findings instead), multi-tenant auth (single local reviewer identity), and SSE (poll the bundle endpoint).
+- **Reduce:** one paired memory ablation run instead of three repetitions (reported as demonstration evidence, n=1). A small fixture set: one district-sized sandbox, two months, and the planted cases the demo route needs plus benign lookalikes.
+- **Keep, never cut:** exact integer-cent math and invariants, original evidence locators, the auditor challenge, human approval gates, the stale-playbook rejection, decision records behind every Reasoning log entry, and honest live/recorded/scripted labels.
 
 ## 4. API contract sketch
+
+Hackathon minimum (implement these first; the rest are targets):
+
+| Endpoint | Behavior |
+| --- | --- |
+| GET /api/health | Liveness plus model/replay mode |
+| GET /api/workspaces/{ws}/bundle | One JSON bundle per workspace (`mit`, `sandbox`): briefing, agents, tasks, workflows, findings, approvals, report, decisions, playbooks. The schema is in `contracts/README.md` |
+| POST /api/approvals/{id}/decision | Human approve/reject with proposal version and rationale; applies idempotently |
+| POST /api/demo/{action} | Demo controls: `reset`, `inject_issue`, `add_evidence`, `next_month`, `run` |
+
+Full target:
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -118,7 +99,9 @@ Use request validation, authenticated reviewer identity, idempotency keys for mu
 | Import | Reimport, revised source, partial failure, unknown account, duplicate economic event |
 | Ledger | Baseline preserved, scenario application once, statement tie-out, opening carry-forward |
 | Graph | Temporal scope, supersession, tenant filtering, SQL revision mismatch, transitive invalidation |
-| Agent | Missing evidence, counterevidence, reviewer rejection, changed policy, bounded stop |
+| Agent | Missing evidence, counterevidence, reviewer rejection, changed policy, bounded stop, decision record tool calls match logged events |
+| Learning | Replay gate blocks a playbook that adds a false positive; stale playbook retired on superseded contract; agents cannot activate playbooks |
+| Payments | Batch release requires a distinct human; vendor-bank-change items held; release is simulated only |
 | Authorization | Agent cannot approve, reviewer cannot apply stale version, private labels unreachable |
 | Reports | Narrative amount matches calculation, stale snapshot labeled, overlapping effects not summed |
 | Evaluation | Exact metric denominators, duplicate finding collapse, hidden-label isolation, matched ablation state |
@@ -137,6 +120,8 @@ Expose per-agent status, requests, failures, tool counts, latency, tokens, cost,
 | --- | --- |
 | Five agents repeat the same speculation | Distinct tasks/tools, structured handoffs, source re-performance |
 | Context graph becomes decoration | Require retrieval, applicability checks, and invalidation to use graph edges |
+| UI looks like a static dashboard | Agent board, live status strip, decision records in the Reasoning log, ✦ AI labels (spec §11) |
+| 16h is not enough | Cut list in §3; recorded run saved at H14; checkpoints enforced |
 | Memory copies a prior mistake | Human-reviewed activation, source dates, exclusions, negative-transfer tests |
 | Beautiful reports conceal bad math | Deterministic financial spine before narrative generation |
 | Hidden tests leak into runtime | Separate grader storage/permissions and auditable retrieval boundary |
