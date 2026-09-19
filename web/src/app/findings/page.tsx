@@ -26,7 +26,7 @@ export default function FindingsPage() {
               aria-pressed={f.id === selected?.id}
               onClick={() => setSelectedId(f.id)}
               className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
-                f.id === selected?.id ? "border-teal-500/30 bg-teal-500/10" : "border-transparent hover:bg-surface-2"
+                f.id === selected?.id ? "border-green-300 bg-green-50" : "border-transparent hover:bg-surface-2"
               }`}
             >
               <AgentAvatar id={f.agent} size="sm" />

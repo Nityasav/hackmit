@@ -6,9 +6,9 @@ import { AGENT_NAME, AgentAvatar, Card, PageHeader, Pulse } from "@/components/u
 import { TabGate } from "@/components/shell/TabGate";
 
 const STAGE_STYLE: Record<StageState, string> = {
-  done: "border-green-500/30 bg-green-500/15 text-green-300",
-  running: "border-teal-500/40 bg-teal-500/15 text-teal-200",
-  human: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+  done: "border-green-300 bg-green-100 text-accent-good",
+  running: "border-accent-good bg-green-100 text-green-800",
+  human: "border-line bg-surface-2 text-ink-dim",
   todo: "border-line bg-surface-2 text-ink-dim",
 };
 

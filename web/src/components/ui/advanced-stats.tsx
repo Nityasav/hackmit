@@ -73,7 +73,7 @@ export default function AdvancedStats() {
           <TimelineAnimation
             animationNum={2}
             timelineRef={timelineRef}
-            className="flex h-full flex-col justify-between rounded-[10px] border border-teal-500/30 bg-teal-500/10 p-3"
+            className="flex h-full flex-col justify-between rounded-[10px] border border-green-300 bg-green-50 p-3"
           >
             <div>
               <div className="text-[11px] text-ink-dim">Money accounted for</div>
@@ -99,7 +99,7 @@ export default function AdvancedStats() {
                 className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
               >
                 <div
-                  className="h-full rounded-full bg-teal-400 transition-[width] duration-700"
+                  className="h-full rounded-full bg-accent-good transition-[width] duration-700"
                   style={{ width: `${settledPct}%` }}
                 />
               </div>
@@ -131,7 +131,7 @@ export default function AdvancedStats() {
             timelineRef={timelineRef}
             className={cn(
               "rounded-[10px] border border-line bg-surface p-3 transition-colors",
-              kpi.tone === "warn" ? "hover:border-amber-500/50" : "hover:border-teal-500/50",
+              kpi.tone === "warn" ? "hover:border-ink-faint" : "hover:border-accent-good",
             )}
           >
             <p className="mb-1.5 text-[10.5px] text-ink-dim">{kpi.label}</p>
@@ -141,8 +141,8 @@ export default function AdvancedStats() {
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10.5px] font-semibold",
                   kpi.tone === "warn"
-                    ? "bg-amber-500/15 text-amber-300"
-                    : "bg-teal-500/15 text-teal-300",
+                    ? "bg-surface-2 text-ink-dim"
+                    : "bg-green-100 text-accent-good",
                 )}
               >
                 {kpi.note}
@@ -153,7 +153,7 @@ export default function AdvancedStats() {
         <TimelineAnimation
           animationNum={4 + kpis.length}
           timelineRef={timelineRef}
-          className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-teal-500/50"
+          className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-accent-good"
         >
           <p className="mb-1.5 text-[10.5px] text-ink-dim">Waiting on you</p>
           <div className="flex items-baseline justify-between gap-2">

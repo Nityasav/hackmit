@@ -1,45 +1,50 @@
 @import "tailwindcss";
 
-/* Dark-only product. `dark:` variants inside copied components (sidebar.tsx) are the
-   dark branch here, so bind the variant to the root rather than the OS setting. */
-@custom-variant dark (&:where(:root, :root *));
+/* Light-only product. `dark:` classes inside copied components (sidebar.tsx) must
+   stay opt-in, or they follow the OS and paint dark on a light app. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 
-  /* Four elevations, cool-neutral so the agent hues stay the only chroma on screen. */
-  --color-canvas: #080c12;
-  --color-surface: #0f1620;
-  --color-surface-2: #17212e;
-  --color-surface-3: #1e2a39;
-  --color-line: #202c3c;
+  /* White surfaces on a barely-there page, separated by grey hairlines. */
+  --color-canvas: #fbfbfc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f4f5;
+  --color-surface-3: #e4e4e7;
+  --color-line: #d8d8dd;
 
-  --color-ink: #e8eef5;
-  --color-ink-dim: #93a6bb;
-  --color-ink-faint: #61748a;
+  --color-ink: #09090b;
+  --color-ink-dim: #52525b;
+  --color-ink-faint: #9b9ba3;
 
-  /* One color per agent. Raised for AA contrast on --color-surface. */
-  --color-agent-cfo: #2dd4bf;
-  --color-agent-ap: #818cf8;
-  --color-agent-py: #38bdf8;
-  --color-agent-gr: #fbbf24;
-  --color-agent-au: #fb7185;
+  /* The only two hues in the product: settled and unsettled. */
+  --color-accent-good: #15803d;
+  --color-accent-bad: #dc2626;
+
+  /* One tone per agent, inside the same palette. The two specialists whose job
+     is a verdict carry the verdict colors; the rest sit on the grey ramp. */
+  --color-agent-cfo: #09090b;
+  --color-agent-ap: #3f3f46;
+  --color-agent-py: #71717a;
+  --color-agent-gr: #15803d;
+  --color-agent-au: #dc2626;
 
   /* shadcn/ui token layer, mapped onto the tokens above so copied
      components (chart.tsx, badge.tsx) render in this theme unmodified. */
-  --color-background: #0f1620;
-  --color-foreground: #e8eef5;
-  --color-muted: #17212e;
-  --color-muted-foreground: #93a6bb;
-  --color-border: #202c3c;
-  --color-ring: #2dd4bf;
-  --color-primary: #2dd4bf;
-  --color-primary-foreground: #04231f;
-  --color-secondary: #17212e;
-  --color-secondary-foreground: #e8eef5;
-  --color-destructive: #fb7185;
-  --color-destructive-foreground: #2a0a12;
+  --color-background: #ffffff;
+  --color-foreground: #09090b;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #52525b;
+  --color-border: #d8d8dd;
+  --color-ring: #09090b;
+  --color-primary: #09090b;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f4f4f5;
+  --color-secondary-foreground: #09090b;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
 
   --animate-ping-soft: ping-soft 1.6s infinite;
   --animate-shimmer: shimmer 2.2s linear infinite;
@@ -60,9 +65,9 @@
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes ping-soft {
-    0% { box-shadow: 0 0 0 0 rgb(45 212 191 / 0.5); }
-    70% { box-shadow: 0 0 0 7px rgb(45 212 191 / 0); }
-    100% { box-shadow: 0 0 0 0 rgb(45 212 191 / 0); }
+    0% { box-shadow: 0 0 0 0 rgb(21 128 61 / 0.4); }
+    70% { box-shadow: 0 0 0 7px rgb(21 128 61 / 0); }
+    100% { box-shadow: 0 0 0 0 rgb(21 128 61 / 0); }
   }
   @keyframes shimmer {
     from { background-position: 200% 0; }
@@ -71,7 +76,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -81,7 +86,7 @@ body {
 
 /* Keyboard focus is always visible; mouse focus never draws a ring. */
 :focus-visible {
-  outline: 2px solid var(--color-agent-cfo);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -107,7 +112,7 @@ body {
 
 /* Animated text for "what the agent is doing right now". */
 .shimmer-text {
-  background: linear-gradient(90deg, #2dd4bf 0%, #99f6e4 50%, #2dd4bf 100%);
+  background: linear-gradient(90deg, #15803d 0%, #6ee7a8 50%, #15803d 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;

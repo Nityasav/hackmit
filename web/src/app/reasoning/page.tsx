@@ -44,8 +44,8 @@ function Reasoning() {
         subtitle="Every decision every agent made, and why. Click one to expand it."
       />
 
-      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 focus-within:border-teal-400/70">
-        <span className="text-teal-300">✦</span>
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 focus-within:border-ink">
+        <span className="text-accent-good">✦</span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -122,7 +122,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] ${
-        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-teal-500/50"
+        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-accent-good"
       }`}
     >
       {children}

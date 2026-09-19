@@ -98,7 +98,7 @@ function SidebarContent() {
           title="Switch workspace"
           className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-surface-3"
         >
-          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-teal-600 text-[10px] font-bold text-white">
+          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-ink text-[10px] font-bold text-white">
             {ws === "mit" ? "MIT" : "SU"}
           </span>
           <motion.span
@@ -116,7 +116,7 @@ function SidebarContent() {
                 link={link}
                 className={cn(
                   "rounded-md px-2 transition-colors hover:bg-surface-3",
-                  link.active && "bg-emerald-500/15 [&_span]:!font-semibold [&_span]:!text-teal-300",
+                  link.active && "bg-green-100 [&_span]:!font-semibold [&_span]:!text-accent-good",
                   link.disabled && "opacity-50",
                 )}
               />
@@ -125,14 +125,14 @@ function SidebarContent() {
                   animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
                   className={cn(
                     "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[10px] font-bold",
-                    link.id === "approvals" ? "bg-teal-600 text-white" : "bg-teal-500/25 text-teal-200",
+                    link.id === "approvals" ? "bg-ink text-white" : "bg-green-200 text-green-800",
                   )}
                 >
                   {link.badge}
                 </motion.span>
               )}
               {link.id === "approvals" && pending > 0 && !open && (
-                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-teal-600 ring-2 ring-line" />
+                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-ink ring-2 ring-line" />
               )}
             </div>
           ))}
@@ -158,7 +158,7 @@ function isActive(pathname: string, href: string) {
 
 function NavIcon({ tab, active }: { tab: TabId; active: boolean }) {
   const Icon = ICON[tab];
-  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-teal-300" : "text-ink-dim")} />;
+  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-accent-good" : "text-ink-dim")} />;
 }
 
 export const Logo = () => {
@@ -167,7 +167,7 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-600 to-teal-400" />
+      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-ink to-ink-dim" />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -185,7 +185,7 @@ export const LogoIcon = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-teal-600 to-teal-400" />
+      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-ink to-ink-dim" />
     </Link>
   );
 };

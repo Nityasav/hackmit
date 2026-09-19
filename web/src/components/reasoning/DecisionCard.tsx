@@ -11,7 +11,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
   return (
     <div
       className={`mb-1.5 grid grid-cols-[44px_24px_1fr] gap-2 rounded-lg border bg-surface p-2.5 transition ${
-        open ? "border-teal-400/70 shadow-[0_4px_14px_rgba(15,118,110,0.10)]" : "border-line hover:border-teal-500/40"
+        open ? "border-accent-good shadow-[0_4px_14px_rgba(15,118,110,0.10)]" : "border-line hover:border-accent-good"
       }`}
     >
       <span className="pt-1 font-mono text-[10.5px] text-ink-faint">{d.time}</span>
@@ -21,11 +21,11 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
           <span className="min-w-0">
             <span className="block text-[12px] font-semibold">{d.action}</span>
             <span className="block text-[11.5px] text-ink-dim">
-              <b className="font-semibold text-teal-300">Why:</b> {d.summary}
+              <b className="font-semibold text-accent-good">Why:</b> {d.summary}
             </span>
           </span>
           {!open && <span className="ml-auto flex-none text-[10px] text-ink-faint">details</span>}
-          <span className={`flex-none pt-0.5 text-[11px] transition-transform ${open ? "rotate-90 text-teal-300" : "text-ink-faint"}`}>
+          <span className={`flex-none pt-0.5 text-[11px] transition-transform ${open ? "rotate-90 text-accent-good" : "text-ink-faint"}`}>
             ▶
           </span>
         </button>
@@ -72,7 +72,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
             <Box title="⚖️ Why this over the alternatives">
               {d.alternatives.map((a) => (
                 <div key={a.option} className="grid grid-cols-[16px_1fr] gap-1.5 py-0.5">
-                  <span className={`font-bold ${a.chosen ? "text-green-300" : "text-red-300"}`}>{a.chosen ? "✓" : "✗"}</span>
+                  <span className={`font-bold ${a.chosen ? "text-accent-good" : "text-accent-bad"}`}>{a.chosen ? "✓" : "✗"}</span>
                   <span>
                     <b className="font-semibold">{a.option}</b>: {a.reason}
                   </span>
@@ -84,7 +84,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
               <Box title="🧠 Memory checks">
                 {d.memory_checks.map((m) => (
                   <div key={m.text} className="flex gap-1.5 py-0.5">
-                    <span className={`font-bold ${m.ok ? "text-green-300" : "text-red-300"}`}>{m.ok ? "✓" : "✗"}</span>
+                    <span className={`font-bold ${m.ok ? "text-accent-good" : "text-accent-bad"}`}>{m.ok ? "✓" : "✗"}</span>
                     {m.text}
                   </div>
                 ))}
@@ -109,7 +109,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
 function Box({ title, children, wide }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className={`rounded-lg border border-line bg-surface-2 px-2.5 py-2 text-[11.5px] text-ink-dim ${wide ? "md:col-span-2" : ""}`}>
-      <h6 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-teal-300">{title}</h6>
+      <h6 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-accent-good">{title}</h6>
       {children}
     </div>
   );
@@ -125,6 +125,6 @@ function Kv({ k, v }: { k: string; v: string }) {
 }
 
 function Tag({ children, kind }: { children: React.ReactNode; kind?: "mem" | "memx" }) {
-  const tone = kind === "mem" ? "bg-amber-500/15 text-amber-300" : kind === "memx" ? "bg-red-500/15 text-red-300" : "bg-surface-2 text-ink-dim";
+  const tone = kind === "mem" ? "bg-surface-2 text-ink-dim" : kind === "memx" ? "bg-red-100 text-accent-bad" : "bg-surface-2 text-ink-dim";
   return <span className={`rounded px-1.5 py-px font-mono text-[10px] ${tone}`}>{children}</span>;
 }

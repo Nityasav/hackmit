@@ -82,7 +82,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       onClick={onClick}
       aria-pressed={active}
       className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
-        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-teal-500/50"
+        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-accent-good"
       }`}
     >
       {children}
@@ -97,7 +97,7 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className={`mb-1.5 block w-full cursor-pointer rounded-lg border border-line bg-surface p-2 text-left transition hover:border-teal-400/70/70 hover:shadow-[0_2px_8px_rgba(15,118,110,0.12)] ${
+      className={`mb-1.5 block w-full cursor-pointer rounded-lg border border-line bg-surface p-2 text-left transition hover:border-accent-good/70 hover:shadow-[0_2px_8px_rgba(15,118,110,0.12)] ${
         isDone ? "opacity-75" : ""
       }`}
     >
@@ -107,7 +107,7 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
         {task.column === "working" && task.eta_s != null && (
           <span className="ml-auto text-[10px] text-ink-dim">~{duration(task.eta_s)}</span>
         )}
-        {isDone && <span className="ml-auto text-[10px] font-bold text-green-300">✓</span>}
+        {isDone && <span className="ml-auto text-[10px] font-bold text-accent-good">✓</span>}
       </div>
       <div className={`mb-1 mt-1 text-[11.5px] ${isDone ? "font-medium" : "font-semibold"}`}>{task.title}</div>
       {current && <div className="mb-1.5 shimmer-text text-[10.5px]">{current.title}…</div>}

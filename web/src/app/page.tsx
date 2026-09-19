@@ -34,7 +34,7 @@ export default function CommandCenter() {
       />
 
       {/* CFO agent briefing */}
-      <div className="mb-2.5 rounded-xl border border-teal-500/30 bg-gradient-to-b from-teal-500/10 to-transparent p-3.5">
+      <div className="mb-2.5 rounded-xl border border-green-300 bg-gradient-to-b from-green-50 to-transparent p-3.5">
         <div className="flex items-center gap-2">
           <AgentAvatar id="cfo" />
           <b>CFO Agent</b>
@@ -44,7 +44,7 @@ export default function CommandCenter() {
         <p className="my-2.5 text-[13.5px]">
           {highlights(briefing.text).map(([part, strong], i) =>
             strong ? (
-              <b key={i} className="rounded-[3px] bg-yellow-400/20 px-0.5 font-semibold">
+              <b key={i} className="rounded-[3px] bg-surface-3 px-0.5 font-semibold">
                 {part}
               </b>
             ) : (
@@ -103,7 +103,7 @@ export default function CommandCenter() {
                   href={workspace.source_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-block font-semibold text-teal-300 underline"
+                  className="mt-2 inline-block font-semibold text-accent-good underline"
                 >
                   Open the report ↗
                 </a>
@@ -117,7 +117,7 @@ export default function CommandCenter() {
             <div key={k.label} className="p-3">
               <small className="block text-[10.5px] text-ink-dim">{k.label}</small>
               <b className="text-xl font-bold tracking-tight">{k.value}</b>
-              <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-amber-300" : "text-teal-300"}`}>
+              <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-accent-good"}`}>
                 {k.note}
               </em>
             </div>
@@ -148,7 +148,7 @@ export default function CommandCenter() {
               <div key={a.id} className="flex items-center gap-2 border-t border-line py-1.5 first:border-t-0">
                 <AgentAvatar id={a.agent} size="sm" />
                 <div className="min-w-0">
-                  <Link href="/approvals" className="block truncate font-semibold hover:text-teal-300">
+                  <Link href="/approvals" className="block truncate font-semibold hover:text-accent-good">
                     {a.title}
                   </Link>
                   <span className="block truncate text-[11px] text-ink-dim">{a.summary}</span>

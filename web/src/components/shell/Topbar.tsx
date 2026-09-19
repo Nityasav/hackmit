@@ -10,13 +10,13 @@ export function Topbar() {
   return (
     <header className="flex items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5">
       <form
-        className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 focus-within:border-teal-400/70"
+        className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 focus-within:border-ink"
         onSubmit={(e) => {
           e.preventDefault();
           router.push(`/reasoning?q=${encodeURIComponent(q)}`);
         }}
       >
-        <span className="text-teal-300">✦</span>
+        <span className="text-accent-good">✦</span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}

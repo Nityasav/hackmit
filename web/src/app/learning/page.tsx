@@ -32,8 +32,8 @@ export default function LearningPage() {
 
       <div className="mb-2.5 grid gap-1.5 md:grid-cols-5">
         {LOOP.map((s) => (
-          <div key={s.n} className={`rounded-[9px] border p-2 text-[11px] ${s.gate ? "border-teal-400/70 bg-teal-500/10" : "border-line bg-surface"}`}>
-            <span className="text-[10px] font-bold text-teal-300">{s.n}</span>
+          <div key={s.n} className={`rounded-[9px] border p-2 text-[11px] ${s.gate ? "border-accent-good bg-green-50" : "border-line bg-surface"}`}>
+            <span className="text-[10px] font-bold text-accent-good">{s.n}</span>
             <b className="mb-0.5 block text-[11.5px]">{s.title}</b>
             {s.body}
           </div>
@@ -66,7 +66,7 @@ export default function LearningPage() {
                     </div>
                     <div className="pl-7 text-ink-dim">{p.source}</div>
                   </td>
-                  <td className={`border-b border-line p-1.5 ${p.replay.passed ? "" : "text-red-300"}`}>
+                  <td className={`border-b border-line p-1.5 ${p.replay.passed ? "" : "text-accent-bad"}`}>
                     {p.replay.passed ? `✓ 0 new FP` : `✗ ${p.replay.new_false_positives} false clear`}
                     <div className="text-ink-faint">{p.replay.months.join(" + ")}</div>
                   </td>
@@ -93,7 +93,7 @@ export default function LearningPage() {
                   <span>{r.metric}</span>
                   <span>
                     <div className="h-2 rounded bg-surface-3" style={{ width: `${(r.without / max) * 100}%` }} />
-                    <div className="mt-0.5 h-2 rounded bg-teal-400" style={{ width: `${(r.with / max) * 100}%` }} />
+                    <div className="mt-0.5 h-2 rounded bg-accent-good" style={{ width: `${(r.with / max) * 100}%` }} />
                   </span>
                   <b className="text-right tabular-nums">
                     {r.without}→{r.with}
@@ -103,7 +103,7 @@ export default function LearningPage() {
             })}
             <div className="mt-1.5 text-[10.5px] text-ink-dim">
               <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-surface-3" /> no memory
-              <span className="ml-2 mr-1 inline-block h-2 w-2 rounded-sm bg-teal-400" /> with reviewed memory · {ablation.note}
+              <span className="ml-2 mr-1 inline-block h-2 w-2 rounded-sm bg-accent-good" /> with reviewed memory · {ablation.note}
             </div>
           </Card>
         )}

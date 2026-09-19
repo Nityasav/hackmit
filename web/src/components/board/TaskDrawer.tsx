@@ -72,9 +72,9 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
               <span
                 className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-bold ${
                   s.state === "done"
-                    ? "bg-green-500/15 text-green-300"
+                    ? "bg-green-100 text-accent-good"
                     : s.state === "running"
-                      ? "animate-ping-soft bg-teal-400 text-white"
+                      ? "animate-ping-soft bg-accent-good text-white"
                       : "bg-surface-2 text-ink-faint"
                 }`}
               >
@@ -83,7 +83,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
               <div>
                 <div className={`text-[11.5px] font-medium ${s.state === "todo" ? "text-ink-dim" : ""}`}>{s.title}</div>
                 {s.detail && (
-                  <div className={`font-mono text-[10.5px] ${s.memory ? "text-amber-300" : "text-ink-dim"}`}>{s.detail}</div>
+                  <div className={`font-mono text-[10.5px] ${s.memory ? "text-ink-dim" : "text-ink-dim"}`}>{s.detail}</div>
                 )}
               </div>
             </div>
@@ -104,7 +104,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           {task.rationale && (
             <>
               <Section className="mt-3">Why (decision rationale)</Section>
-              <div className="rounded-lg border border-teal-500/20 bg-teal-500/10 px-2.5 py-2 text-[11.5px]">{task.rationale}</div>
+              <div className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 text-[11.5px]">{task.rationale}</div>
             </>
           )}
 

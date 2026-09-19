@@ -19,8 +19,8 @@ export interface ClippedAreaPoint {
 }
 
 const config = {
-  open_cents: { label: "Open exposure", color: "var(--color-agent-au)" },
-  cleared_cents: { label: "Cleared", color: "var(--color-agent-cfo)" },
+  open_cents: { label: "Open exposure", color: "var(--color-accent-bad)" },
+  cleared_cents: { label: "Cleared", color: "var(--color-accent-good)" },
 } satisfies ChartConfig;
 
 /**
@@ -33,12 +33,12 @@ export function ClippedAreaChart({ data }: { data: ClippedAreaPoint[] }) {
       <AreaChart data={data} margin={{ left: 4, right: 4, top: 4, bottom: 0 }}>
         <defs>
           <linearGradient id="fill-open" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-agent-au)" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="var(--color-agent-au)" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="var(--color-accent-bad)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--color-accent-bad)" stopOpacity={0.02} />
           </linearGradient>
           <linearGradient id="fill-cleared" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-agent-cfo)" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="var(--color-agent-cfo)" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="var(--color-accent-good)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--color-accent-good)" stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} stroke="var(--color-line)" />
@@ -75,7 +75,7 @@ export function ClippedAreaChart({ data }: { data: ClippedAreaPoint[] }) {
           dataKey="cleared_cents"
           type="monotone"
           stackId="a"
-          stroke="var(--color-agent-cfo)"
+          stroke="var(--color-accent-good)"
           strokeWidth={1.5}
           fill="url(#fill-cleared)"
         />
@@ -83,7 +83,7 @@ export function ClippedAreaChart({ data }: { data: ClippedAreaPoint[] }) {
           dataKey="open_cents"
           type="monotone"
           stackId="a"
-          stroke="var(--color-agent-au)"
+          stroke="var(--color-accent-bad)"
           strokeWidth={1.5}
           fill="url(#fill-open)"
         />

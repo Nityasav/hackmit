@@ -14,14 +14,14 @@ const KIND_ICON: Record<EvidenceNode["kind"], string> = {
 
 const TONE_STYLE: Record<EvidenceNode["tone"], string> = {
   neutral: "border-line bg-surface hover:border-surface-3",
-  bad: "border-red-500/30 bg-red-500/10 hover:border-red-500/50",
-  good: "border-teal-500/30 bg-teal-500/10 hover:border-teal-400/70/70",
+  bad: "border-red-300 bg-red-50 hover:border-accent-bad",
+  good: "border-green-300 bg-green-50 hover:border-accent-good/70",
 };
 
 const TONE_DOT: Record<EvidenceNode["tone"], string> = {
   neutral: "bg-surface-3",
   bad: "bg-red-400",
-  good: "bg-teal-400",
+  good: "bg-accent-good",
 };
 
 export function EvidenceTrail({ finding }: { finding: Finding }) {
@@ -57,7 +57,7 @@ export function EvidenceTrail({ finding }: { finding: Finding }) {
                 aria-expanded={isOpen}
                 onClick={() => setOpenIndex(isOpen ? null : i)}
                 className={`mb-0.5 flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-[11px] transition disabled:cursor-default ${TONE_STYLE[n.tone]} ${
-                  isOpen ? "ring-2 ring-teal-500/40" : ""
+                  isOpen ? "ring-2 ring-green-300" : ""
                 }`}
               >
                 <span aria-hidden>{KIND_ICON[n.kind]}</span>
@@ -67,7 +67,7 @@ export function EvidenceTrail({ finding }: { finding: Finding }) {
 
               {isOpen && open && (
                 <div className="mb-1.5 animate-fade-in rounded-md border border-line bg-surface-2 px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink">
-                  <div className="mb-1 text-[9.5px] uppercase tracking-wider text-teal-300">{open.locator ?? "source"}</div>
+                  <div className="mb-1 text-[9.5px] uppercase tracking-wider text-accent-good">{open.locator ?? "source"}</div>
                   {open.source_preview ?? "No excerpt stored for this node yet."}
                 </div>
               )}

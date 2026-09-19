@@ -34,7 +34,7 @@ export function AgentAvatar({ id, size = "md" }: { id: AgentId; size?: "sm" | "m
 }
 
 export function Pulse({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-full bg-teal-400 ${className}`} />;
+  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-full bg-accent-good ${className}`} />;
 }
 
 export function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
@@ -63,7 +63,7 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
 export function ProgressBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
   return (
     <div className={`overflow-hidden rounded bg-surface-2 ${className}`}>
-      <div className="h-full rounded bg-teal-400 transition-[width] duration-700" style={{ width: `${value}%` }} />
+      <div className="h-full rounded bg-accent-good transition-[width] duration-700" style={{ width: `${value}%` }} />
     </div>
   );
 }
@@ -71,13 +71,13 @@ export function ProgressBar({ value, className = "h-1.5" }: { value: number; cla
 type Tone = "red" | "green" | "amber" | "indigo" | "teal" | "gray" | "blue";
 
 const TONE: Record<Tone, string> = {
-  red: "bg-red-500/15 text-red-300",
-  green: "bg-green-500/15 text-green-300",
-  amber: "bg-amber-500/15 text-amber-300",
-  indigo: "bg-indigo-500/15 text-indigo-300",
-  teal: "bg-teal-500/15 text-teal-200",
+  red: "bg-red-100 text-accent-bad",
+  green: "bg-green-100 text-accent-good",
+  amber: "bg-surface-2 text-ink-dim",
+  indigo: "bg-surface-2 text-ink-dim",
+  teal: "bg-green-100 text-green-800",
   gray: "bg-surface-2 text-ink-dim",
-  blue: "bg-blue-500/15 text-blue-300",
+  blue: "bg-surface-2 text-ink-dim",
 };
 
 export function Pill({ tone = "gray", children, className = "" }: { tone?: Tone; children: React.ReactNode; className?: string }) {
@@ -167,8 +167,8 @@ export function Button({
       onClick={onClick}
       className={`inline-flex cursor-pointer items-center gap-1.5 rounded-[7px] border px-2.5 py-1.5 text-[11.5px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
         primary
-          ? "border-teal-600 bg-teal-600 text-white hover:bg-teal-400"
-          : "border-line bg-surface text-ink hover:border-teal-500/50"
+          ? "border-ink bg-ink text-white hover:bg-accent-good"
+          : "border-line bg-surface text-ink hover:border-accent-good"
       }`}
     >
       {children}

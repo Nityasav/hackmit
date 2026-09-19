@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
                 {selected.effects.map((e) => (
                   <div key={e.label} className="flex justify-between py-0.5 text-[11.5px]">
                     <span>{e.label}</span>
-                    <b className={e.tone === "good" ? "text-green-300" : ""}>{e.value}</b>
+                    <b className={e.tone === "good" ? "text-accent-good" : ""}>{e.value}</b>
                   </div>
                 ))}
               </div>
@@ -144,7 +144,7 @@ function Row({ approval, active, onClick }: { approval: Approval; active: boolea
       type="button"
       onClick={onClick}
       className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border p-2 text-left ${
-        active ? "border-teal-500/30 bg-teal-500/10" : "border-transparent hover:bg-surface-2"
+        active ? "border-green-300 bg-green-50" : "border-transparent hover:bg-surface-2"
       }`}
     >
       <AgentAvatar id={approval.agent} size="sm" />

@@ -18,7 +18,7 @@ export function TabGate({ tab, children }: { tab: TabId; children: React.ReactNo
       <button
         type="button"
         onClick={() => setWs("sandbox")}
-        className="mt-1 cursor-pointer rounded-[7px] bg-teal-600 px-3 py-1.5 text-[11.5px] font-semibold text-white"
+        className="mt-1 cursor-pointer rounded-[7px] bg-ink px-3 py-1.5 text-[11.5px] font-semibold text-white"
       >
         Switch to Sandbox University
       </button>
