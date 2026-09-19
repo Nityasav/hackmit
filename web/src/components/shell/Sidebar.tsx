@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bot,
@@ -41,9 +41,35 @@ const WORKSPACES: { id: WorkspaceId; name: string; sub: string; short: string }[
 
 export function AppSidebar() {
   const [open, setOpen] = useState(false);
+
+  // The component's own onMouseEnter/onMouseLeave can miss an exit: the rail animates
+  // its width under a still cursor, and a fast move into the dashboard can land between
+  // events, leaving it stuck open. Deriving `open` from where the cursor actually is
+  // makes the rule exact: expanded only while the cursor is over the rail.
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      const rail = document.querySelector<HTMLElement>("[data-sidebar-rail]");
+      if (!rail || rail.offsetParent === null) return;
+      const box = rail.getBoundingClientRect();
+      const inside =
+        e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
+      setOpen(inside);
+    };
+    const onPointerLeaveWindow = () => setOpen(false);
+
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    document.addEventListener("pointerleave", onPointerLeaveWindow);
+    window.addEventListener("blur", onPointerLeaveWindow);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerleave", onPointerLeaveWindow);
+      window.removeEventListener("blur", onPointerLeaveWindow);
+    };
+  }, []);
+
   return (
     <Sidebar open={open} setOpen={setOpen}>
-      <SidebarBody className="justify-between gap-6">
+      <SidebarBody data-sidebar-rail className="justify-between gap-6">
         <SidebarContent />
       </SidebarBody>
     </Sidebar>
