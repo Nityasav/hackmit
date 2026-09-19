@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import type { Task } from "@/lib/types";
 import { duration } from "@/lib/format";
 import { AGENT_NAME, AgentAvatar, Button, Pill, ProgressBar } from "@/components/ui";
@@ -14,16 +15,36 @@ const COLUMN_LABEL = {
 } as const;
 
 export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!task) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [task, onClose]);
+
   if (!task) return null;
   const doneSteps = task.steps.filter((s) => s.state === "done").length;
   const running = task.column === "working" || task.column === "auditor_review";
 
   return (
     <>
-      <div className="fixed inset-0 z-10 bg-slate-900/10" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-20 flex w-[440px] max-w-[92vw] flex-col border-l border-line bg-white shadow-[-12px_0_30px_rgba(15,23,42,0.12)]">
+      <div className="fixed inset-0 z-10 animate-fade-in bg-slate-900/10" onClick={onClose} />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${task.id}: ${task.title}`}
+        className="fixed inset-y-0 right-0 z-20 flex w-[440px] max-w-[92vw] animate-slide-in flex-col border-l border-line bg-white shadow-[-12px_0_30px_rgba(15,23,42,0.12)]"
+      >
         <div className="border-b border-slate-100 px-4 py-3.5">
-          <button type="button" onClick={onClose} className="float-right cursor-pointer text-base text-slate-400 hover:text-slate-700">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close (Esc)"
+            title="Close (Esc)"
+            className="float-right cursor-pointer rounded px-1 text-base text-slate-400 hover:text-slate-700"
+          >
             ✕
           </button>
           <div className="flex items-center gap-1.5">

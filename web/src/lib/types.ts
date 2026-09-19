@@ -93,6 +93,10 @@ export interface EvidenceNode {
   tone: "neutral" | "bad" | "good";
   /** Graph edge from this node to the next one. */
   edge?: string;
+  /** Where this came from: file + row, or document + page. */
+  locator?: string;
+  /** Short excerpt of the source, shown when the node is opened. */
+  source_preview?: string;
 }
 
 export type FindingStatus =

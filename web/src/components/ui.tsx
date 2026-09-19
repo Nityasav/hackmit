@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect } from "react";
 import type { AgentId, FindingStatus, PlaybookStatus } from "@/lib/types";
 
 const AGENT_BG: Record<AgentId, string> = {
@@ -113,6 +116,34 @@ const PLAYBOOK_STATUS: Record<PlaybookStatus, [string, Tone]> = {
 export function PlaybookStatusPill({ status, note }: { status: PlaybookStatus; note?: string }) {
   const [label, tone] = PLAYBOOK_STATUS[status];
   return <Pill tone={tone}>{note ? `${label}: ${note}` : label}</Pill>;
+}
+
+export function EmptyState({ icon = "✓", title, children }: { icon?: string; title: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <div className="text-2xl text-slate-300">{icon}</div>
+      <div className="font-semibold text-slate-600">{title}</div>
+      {children && <p className="max-w-xs text-[11.5px] text-slate-400">{children}</p>}
+    </div>
+  );
+}
+
+/** Confirms a decision landed. Disappears on its own. */
+export function Toast({ message, onDone }: { message: string | null; onDone: () => void }) {
+  useEffect(() => {
+    if (!message) return;
+    const id = setTimeout(onDone, 2600);
+    return () => clearTimeout(id);
+  }, [message, onDone]);
+  if (!message) return null;
+  return (
+    <div
+      role="status"
+      className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 animate-rise rounded-lg bg-slate-900 px-3.5 py-2 text-[12px] font-medium text-white shadow-lg"
+    >
+      {message}
+    </div>
+  );
 }
 
 export function Button({

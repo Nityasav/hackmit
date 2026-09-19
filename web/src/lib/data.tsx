@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import sandboxFixture from "../../../contracts/fixtures/sandbox.json";
 import mitFixture from "../../../contracts/fixtures/mit.json";
 import type { ApprovalStatus, Bundle, WorkspaceId } from "./types";
@@ -25,21 +33,31 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | null>(null);
 
+/** Remembered workspace. Read through useSyncExternalStore so SSR renders the default, then hydrates. */
+function subscribeStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readStoredWs(): string | null {
+  try {
+    return localStorage.getItem("st.ws");
+  } catch {
+    return null;
+  }
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [ws, setWsState] = useState<WorkspaceId>("sandbox");
+  const [chosen, setChosen] = useState<WorkspaceId | null>(null);
   const [bundles, setBundles] = useState<Record<WorkspaceId, Bundle>>(FIXTURES);
   const [apiError, setApiError] = useState<string | null>(null);
   const source = API_URL ? "api" : "fixtures";
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("st.ws");
-      if (saved === "sandbox" || saved === "mit") setWsState(saved);
-    } catch {}
-  }, []);
+  const stored = useSyncExternalStore(subscribeStorage, readStoredWs, () => null);
+  const ws: WorkspaceId = chosen ?? (stored === "mit" || stored === "sandbox" ? stored : "sandbox");
 
   const setWs = useCallback((next: WorkspaceId) => {
-    setWsState(next);
+    setChosen(next);
     try {
       localStorage.setItem("st.ws", next);
     } catch {}

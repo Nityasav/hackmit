@@ -1,16 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useData } from "@/lib/data";
 import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
-import { AgentAvatar, AiTag, Button, Card, CardTitle, PageHeader, ProgressBar, Pulse } from "@/components/ui";
+import {
+  AgentAvatar,
+  AiTag,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  PageHeader,
+  ProgressBar,
+  Pulse,
+  Toast,
+} from "@/components/ui";
 
 export default function CommandCenter() {
-  const { bundle } = useData();
-  const { workspace, agents, briefing, kpis, workflows, tasks, approvals, findings } = bundle;
+  const { bundle, decideApproval } = useData();
+  const [toast, setToast] = useState<string | null>(null);
+  const { workspace, agents, briefing, kpis, workflows, tasks, approvals, findings, decisions } = bundle;
   const done = tasks.filter((t) => t.column === "done").length;
-  const pending = approvals.filter((a) => a.status === "pending").length;
+  const pendingApprovals = approvals.filter((a) => a.status === "pending");
+  const pending = pendingApprovals.length;
 
   return (
     <>
@@ -119,6 +133,61 @@ export default function CommandCenter() {
           </Card>
         </div>
       </div>
+
+      <div className="mt-2.5 grid gap-2.5 lg:grid-cols-2">
+        <Card>
+          <CardTitle right={<Link href="/approvals">all →</Link>}>Waiting on you</CardTitle>
+          {pendingApprovals.length === 0 ? (
+            <EmptyState title={workspace.kind === "public" ? "Nothing to approve" : "You're all caught up"}>
+              {workspace.kind === "public"
+                ? "Public reports are read-only, so there is nothing to decide here."
+                : "Every proposal has a decision. The agents will queue the next one."}
+            </EmptyState>
+          ) : (
+            pendingApprovals.slice(0, 4).map((a) => (
+              <div key={a.id} className="flex items-center gap-2 border-t border-slate-100 py-1.5 first:border-t-0">
+                <AgentAvatar id={a.agent} size="sm" />
+                <div className="min-w-0">
+                  <Link href="/approvals" className="block truncate font-semibold hover:text-teal-700">
+                    {a.title}
+                  </Link>
+                  <span className="block truncate text-[11px] text-slate-500">{a.summary}</span>
+                </div>
+                <span className="ml-auto flex-none">
+                  <Button
+                    onClick={() => {
+                      decideApproval(a.id, "approved");
+                      setToast(`${a.id} approved · dependent reports recomputed`);
+                    }}
+                  >
+                    {a.kind === "payment" ? "Release" : a.kind === "evidence" ? "Provide" : "Approve"}
+                  </Button>
+                </span>
+              </div>
+            ))
+          )}
+        </Card>
+
+        <Card>
+          <CardTitle right={<Link href="/reasoning">all →</Link>}>Latest reasoning</CardTitle>
+          {decisions.slice(0, 4).map((d) => (
+            <Link
+              key={d.id}
+              href={`/reasoning?q=${encodeURIComponent(d.id)}`}
+              className="flex items-start gap-2 border-t border-slate-100 py-1.5 first:border-t-0 hover:bg-slate-50"
+            >
+              <span className="pt-0.5 font-mono text-[10px] text-slate-400">{d.time}</span>
+              <AgentAvatar id={d.agent} size="sm" />
+              <span className="min-w-0">
+                <b className="block truncate">{d.action}</b>
+                <span className="block truncate text-[11px] text-slate-500">{d.summary}</span>
+              </span>
+            </Link>
+          ))}
+        </Card>
+      </div>
+
+      <Toast message={toast} onDone={() => setToast(null)} />
     </>
   );
 }
