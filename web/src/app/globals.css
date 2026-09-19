@@ -10,7 +10,7 @@
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 
   --color-canvas: #f7f8fa;
-  --color-line: #e6e8ec;
+  --color-line: #ebedf1;
 
   /* One color per agent. Used by <AgentAvatar>. */
   --color-agent-cfo: #0f766e;

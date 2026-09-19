@@ -16,7 +16,7 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader title="Reports" subtitle="Written by the CFO Agent from verified findings only" />
-      <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr]">
+      <div className="grid gap-2.5 min-[900px]:grid-cols-2">
         <Card>
           <CardTitle>
             <AgentAvatar id="cfo" size="sm" />
@@ -77,7 +77,7 @@ export default function ReportsPage() {
           )}
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="min-[900px]:col-span-2">
           <CardTitle>Findings in this pack</CardTitle>
           {findings.map((f) => (
             <div key={f.id} className="flex items-center gap-2 border-t border-slate-100 py-1.5 first:border-t-0">

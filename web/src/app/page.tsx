@@ -61,21 +61,21 @@ export default function CommandCenter() {
         </div>
       </div>
 
-      {/* The team */}
-      <div className="mb-2.5 grid gap-2 md:grid-cols-5">
+      {/* The team: one card, divided, so it stays one object at any width */}
+      <Card className="mb-2.5 grid grid-cols-1 divide-y divide-line p-0 sm:grid-cols-2 sm:divide-x lg:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
         {agents.map((a) => (
-          <Card key={a.id} className="p-2.5">
+          <div key={a.id} className="p-2.5">
             <div className="flex items-center gap-1.5 text-[11.5px] font-semibold">
               <AgentAvatar id={a.id} size="sm" />
               {a.name}
               {a.status === "working" && <Pulse className="ml-auto" />}
             </div>
-            <div className={`mt-1.5 min-h-[30px] text-[11px] ${a.status === "working" ? "shimmer-text" : "text-slate-500"}`}>
+            <div className={`mt-1.5 text-[11px] ${a.status === "working" ? "shimmer-text" : "text-slate-500"}`}>
               {a.doing}
             </div>
-          </Card>
+          </div>
         ))}
-      </div>
+      </Card>
 
       <div className="grid gap-2.5 lg:grid-cols-[1.4fr_1fr]">
         {workflows.length > 0 ? (
@@ -112,17 +112,17 @@ export default function CommandCenter() {
           </Card>
         )}
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <Card className="grid grid-cols-2 divide-x divide-y divide-line p-0">
           {kpis.map((k) => (
-            <Card key={k.label}>
+            <div key={k.label} className="p-3">
               <small className="block text-[10.5px] text-slate-500">{k.label}</small>
               <b className="text-xl font-bold tracking-tight">{k.value}</b>
               <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-amber-700" : "text-teal-700"}`}>
                 {k.note}
               </em>
-            </Card>
+            </div>
           ))}
-          <Card>
+          <div className="p-3">
             <small className="block text-[10.5px] text-slate-500">Tasks done</small>
             <b className="text-xl font-bold tracking-tight tabular-nums">
               {done} / {tasks.length}
@@ -130,11 +130,11 @@ export default function CommandCenter() {
             <em className="block text-[10.5px] not-italic text-slate-500">
               {findings.length} findings · {pending} waiting on you
             </em>
-          </Card>
-        </div>
+          </div>
+        </Card>
       </div>
 
-      <div className="mt-2.5 grid gap-2.5 lg:grid-cols-2">
+      <div className="mt-2.5 grid gap-2.5 min-[900px]:grid-cols-2">
         <Card>
           <CardTitle right={<Link href="/approvals">all →</Link>}>Waiting on you</CardTitle>
           {pendingApprovals.length === 0 ? (

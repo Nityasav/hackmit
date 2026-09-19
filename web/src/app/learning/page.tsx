@@ -39,7 +39,7 @@ export default function LearningPage() {
         ))}
       </div>
 
-      <div className="grid gap-2.5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-2.5 min-[900px]:grid-cols-[1.4fr_1fr]">
         <Card>
           <CardTitle right={`${active} active · ${playbooks.length} total`}>Playbooks the agents wrote</CardTitle>
           <table className="w-full border-collapse">

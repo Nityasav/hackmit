@@ -34,7 +34,7 @@ export default function ApprovalsPage() {
   return (
     <TabGate tab="approvals">
       <PageHeader title="Approvals" subtitle="Agents propose. You decide. Nothing moves without you." />
-      <div className="grid gap-2.5 lg:grid-cols-[1fr_1.1fr]">
+      <div className="grid gap-2.5 min-[900px]:grid-cols-[1fr_1.1fr]">
         <Card>
           <CardTitle right={`${pending.length} pending`}>Waiting on you</CardTitle>
           {pending.length === 0 && (

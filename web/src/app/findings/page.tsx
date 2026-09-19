@@ -14,7 +14,7 @@ export default function FindingsPage() {
   return (
     <>
       <PageHeader title="Findings" subtitle="What the agents found, and the evidence behind it" />
-      <div className="grid gap-2.5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-2.5 min-[900px]:grid-cols-[1.4fr_1fr]">
         <Card>
           {bundle.findings.length === 0 && (
             <EmptyState title="No findings yet">The agents are still working. Findings appear here once the Auditor has reviewed them.</EmptyState>
