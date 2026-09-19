@@ -47,10 +47,7 @@ def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
 
 @app.post("/api/demo/{action}", response_model=Bundle)
 def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month.
-
-    TODO(workflows): drive these from app/workflows/scenarios.py.
-    """
+    """Demo controls: reset, inject_issue, add_evidence, next_month."""
     if action == "reset":
         store.reset(ws)
         return store.get_bundle(ws)

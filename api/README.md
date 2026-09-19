@@ -14,8 +14,6 @@ uv run pytest                                       # accounting invariants
 | `app/models.py` | Functionality | Pydantic mirror of the bundle contract |
 | `app/store.py` | Functionality | Bundle state. Fixture-seeded today, SQLite-backed next |
 | `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
-| `app/agents/` | Agent design | Model adapter, tool gateway, role prompts, orchestrator |
-| `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
 
 ## Rules
 

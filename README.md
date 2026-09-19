@@ -73,8 +73,6 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > ../web/.env.local
 | `api/` | Accounting engine, agents, workflows, HTTP API |
 | `contracts/` | The shared data contract and fixtures |
 | `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo script |
-| `docs/design/prototype.html` | Clickable design prototype (open it in a browser) |
-| `WORKPLAN.md` | Who builds what, in what order, for the 16 hours left |
 
 ## Honesty rules we hold ourselves to
 
