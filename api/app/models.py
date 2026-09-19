@@ -1,4 +1,4 @@
-"""Pydantic mirror of contracts/README.md and web/src/lib/types.ts.
+"""Pydantic mirror of the bundle contract in /README.md and web/src/lib/types.ts.
 
 Change all three together. Money is always integer cents.
 """

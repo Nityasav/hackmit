@@ -1,4 +1,4 @@
-// Mirror of contracts/README.md. api/app/models.py mirrors the same shapes.
+// Mirror of the bundle contract in /README.md. api/app/models.py mirrors the same shapes.
 // Change all three together.
 
 export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
