@@ -2,6 +2,10 @@
 
 Version: 1.0 | Date: 2026-09-19 | Status: implementation-ready hackathon design
 
+### Showcase update
+
+The revised [DEMO.md](DEMO.md) is authoritative for presentation flow: a read-only MIT public-report explorer followed by a synthetic university investigation, with explicitly labeled hybrid/replay execution. Public documents are permitted inputs to this explorer; synthetic-only restrictions continue to govern transaction fixtures and benchmark data. The explorer does not claim access to MIT's internal ledger or implement statutory university accounting. Existing accounting, review, and evaluation requirements remain in force. Authored scripted previews may illustrate incomplete capabilities but do not satisfy agentic acceptance criteria or count as measured results.
+
 ## 1. Purpose and problem
 
 Educational institutions can have substantial finance and compliance teams and still lose track of how money was allocated, approved, paid, and reported. Payroll, procurement, grants, enrollment, and facilities operate in separate systems. A transaction can be valid in one system but incorrectly classified, insufficiently supported, or duplicated elsewhere.

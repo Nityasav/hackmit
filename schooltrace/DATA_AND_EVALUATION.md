@@ -1,5 +1,9 @@
 # Synthetic data and evaluation protocol
 
+## Public-report showcase boundary
+
+DEMO.md adds a separate MIT public-report explorer. Test its citation fidelity, page mapping, units, and reconciliation against the published source. Do not include known published results in hidden-issue recall or treat a scripted/cached presentation as a fresh model evaluation. The paired memory experiment below remains on isolated synthetic transactions. Recorded-run manifests may support a presentation, but reported evaluation metrics must come from actual evaluated runs.
+
 ## 1. Dataset design
 
 Implement a reproducible fixture generator with a seed and version. Produce a minimal developer pack first, then a held-out pack with varied IDs, dates, amounts, vendor names, document order, and benign lookalikes. All people and institutions are fictional.

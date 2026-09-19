@@ -8,6 +8,10 @@ The user supplied the Maximor HackMIT 2026 track brief. It emphasizes coordinate
 
 ## Primary reference material
 
+### MIT showcase sources
+
+The revised DEMO.md provides the verified result card, financial schedule, and exact page mapping for [MIT's FY2025 Uniform Guidance report](https://vpf.mit.edu/sites/default/files/downloads/AuditReport/2025_mit_uniform_guidance_report.pdf) and comparison with the [FY2024 report](https://vpf.mit.edu/sites/default/files/downloads/AuditReport/2024-MIT-Uniform-Guidance-Report.pdf), linked from [MIT VPF publications](https://vpf.mit.edu/about-vpf/publications). FY2025 printed pages 23 and 234 were visually checked against rendered PDF pages. These public reports are a narrow exception to the package's fictional-data assumption. Synthetic transactions are separate and are not assertions about MIT.
+
 | Reference | How it informs this design | Boundary |
 | --- | --- | --- |
 | [California Department of Education — GASB 34 FAQ](https://www.cde.ca.gov/fg/ac/as/faqs.asp) | Basis separation, encumbrance/AP distinction, and potential financing/grant consequences of adverse reporting | Historical implementation FAQ; some sections are outdated. Do not use its historical pension/OPEB discussion as current guidance. |

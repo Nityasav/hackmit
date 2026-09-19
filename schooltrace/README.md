@@ -4,6 +4,8 @@ An evidence-backed, multi-agent financial detective for educational institutions
 
 This package specifies a hackathon prototype, not a completed application. All demonstration institutions, financial data, grant conditions, and monetary examples are fictional. Sources inform the design; they do not certify compliance.
 
+Showcase exception: [DEMO.md](DEMO.md) now begins with MIT's actual public audit reports and a published financial schedule. Those sourced records are real; injected transactions and monthly investigations remain explicitly synthetic. The demo supports labeled recorded runs and working interactive calculations for speed.
+
 ## Start here
 
 1. Read [spec.md](spec.md) for product scope, architecture, agent behavior, context graph, controls, and acceptance criteria.

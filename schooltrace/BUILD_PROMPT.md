@@ -18,6 +18,8 @@ Read the entire provided specification package before implementing:
 
 Treat `spec.md` as the product/architecture authority, `ACCOUNTING_CONTROLS.md` as the accounting contract, and `DATA_AND_EVALUATION.md` as the evaluation contract. If there is a conflict, document it and choose the narrower behavior that preserves evidence, accounting correctness, and honest reporting. Do not silently broaden the jurisdiction or accounting basis.
 
+Follow the revised DEMO.md for presentation: MIT public-report exploration followed by a synthetic university sandbox. Public reports are allowed for the read-only explorer; do not fabricate MIT transactions or mix them into the synthetic benchmark. Preparsed evidence and cached completed agent runs are encouraged for speed. Clearly labeled authored scripted previews are allowed for unfinished UI flows, but cannot be represented as actual agent runs or used for benchmark scores. Keep arithmetic, scenario review, and dependency invalidation functional. This narrow presentation exception supersedes earlier synthetic-only wording for public-report inputs.
+
 ## Outcome
 
 Deliver a runnable application that imports synthetic financial records and supporting documents, establishes an as-reported accounting baseline, coordinates specialist investigations, independently reviews findings, requests missing evidence, applies approved corrections to a separate simulation, and exports a source-linked report and action plan.
