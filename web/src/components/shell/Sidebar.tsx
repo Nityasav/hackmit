@@ -14,10 +14,11 @@ const WORKSPACES: { id: WorkspaceId; name: string; sub: string }[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { ws, setWs, bundle } = useData();
+  const { ws, setWs, bundle, intakeWorkspaces } = useData();
+  const workspaces = [...WORKSPACES, ...intakeWorkspaces.map((w) => ({ id: w.id, name: w.name, sub: `${w.kind} · ${w.start}` }))];
   const [open, setOpen] = useState(false);
   const pending = bundle.approvals.filter((a) => a.status === "pending").length;
-  const current = WORKSPACES.find((w) => w.id === ws)!;
+  const current = workspaces.find((w) => w.id === ws) ?? { name: bundle.workspace.name, sub: "Imported records" };
   const groups = [...new Set(TABS.map((t) => t.group))];
 
   return (
@@ -38,7 +39,7 @@ export function Sidebar() {
         </button>
         {open && (
           <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-line bg-white shadow-lg">
-            {WORKSPACES.map((w) => (
+            {workspaces.map((w) => (
               <button
                 key={w.id}
                 type="button"
@@ -89,7 +90,7 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto border-t border-slate-100 p-2 text-[10.5px] text-slate-500">
-        5 agents · {bundle.workspace.model}
+        {bundle.agents.length} agents · {bundle.workspace.model}
         <br />
         Run budget: {bundle.workspace.run_budget.used} / {bundle.workspace.run_budget.total} tool calls
       </div>

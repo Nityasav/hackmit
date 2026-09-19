@@ -13,6 +13,8 @@ export default function ReportsPage() {
   const beforeLabel = report.before_label ?? "As reported";
   const afterLabel = report.after_label ?? (applied ? "After approved fixes" : `After ${gate?.id} (pending)`);
 
+  if (workspace.intake) return <><PageHeader title="Reports" subtitle="No investigation report yet" /><Card>Your uploaded sources are available in the Command center. An agent investigation and independent review must run before findings or financial reports can be generated.</Card></>;
+
   return (
     <>
       <PageHeader title="Reports" subtitle="Written by the CFO Agent from verified findings only" />
