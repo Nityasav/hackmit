@@ -1,0 +1,22 @@
+# dependencies / build
+node_modules/
+.next/
+out/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# env
+.env
+.env*.local
+
+# local data
+*.db
+*.sqlite3
+
+# local tooling output
+.superpowers/
+.playwright-mcp/
+.DS_Store

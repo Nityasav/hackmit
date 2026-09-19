@@ -1,0 +1,111 @@
+{
+  "workspace": {
+    "id": "mit",
+    "name": "MIT FY2025",
+    "kind": "public",
+    "period": "FY2025 · year ended Jun 30, 2025",
+    "mode": "recorded",
+    "snapshot_id": "SRC-MIT-FY25",
+    "disabled_tabs": ["workflows", "approvals", "learning"],
+    "model": "claude-sonnet-5",
+    "run_budget": { "used": 21, "total": 150 },
+    "source_url": "https://vpf.mit.edu/sites/default/files/downloads/AuditReport/2025_mit_uniform_guidance_report.pdf"
+  },
+  "agents": [
+    { "id": "cfo", "name": "CFO Agent", "short": "CF", "role": "Runs the team, writes briefings and reports", "status": "idle", "doing": "Briefing ready" },
+    { "id": "ap", "name": "AP & Payments", "short": "AP", "role": "Retrieves financial schedules", "status": "idle", "doing": "Retrieved Note D, Table 11" },
+    { "id": "py", "name": "Payroll & Budget", "short": "PY", "role": "Runs deterministic calculations", "status": "idle", "doing": "Pledge rollforward ties (residual 0)" },
+    { "id": "gr", "name": "Grants & Compliance", "short": "GR", "role": "Reads major-program results", "status": "idle", "doing": "Major program: R&D Cluster" },
+    { "id": "au", "name": "Internal Auditor", "short": "AU", "role": "Checks every citation against the page", "status": "idle", "doing": "All citations verified against pages" }
+  ],
+  "briefing": {
+    "generated_at": "Sep 19",
+    "text": "I read MIT's **FY2025 Uniform Guidance audit report** (auditor: PwC). Both opinions are **unmodified**, with **no material weaknesses, no significant deficiencies, and no reportable findings** (printed p.234). The pledge-receivable rollforward in Note D **ties exactly**: 626,904 → 631,729 (USD thousands). Nothing here needs your action. Testing individual transactions would need MIT's internal records, which this public report does not include.",
+    "actions": [
+      { "label": "See the evidence", "href": "findings", "primary": true },
+      { "label": "Compare FY2024 / FY2025", "href": "reports" },
+      { "label": "Why no findings?", "href": "reasoning" }
+    ]
+  },
+  "kpis": [
+    { "label": "Audit opinions", "value": "Unmodified", "note": "printed p.234", "tone": "good" },
+    { "label": "Reportable findings", "value": "0", "note": "printed pp.234–235", "tone": "good" },
+    { "label": "Rollforward residual", "value": "0", "note": "USD thousands · Note D", "tone": "good" }
+  ],
+  "workflows": [],
+  "tasks": [
+    { "id": "M-1", "agent": "cfo", "title": "Plan: what did the auditors report?", "workflow": "Public report", "column": "done", "progress": 100, "eta_s": null, "started_at": "10:00:02", "tool_calls": { "used": 1, "budget": 12 },
+      "steps": [ { "title": "Split into opinion, findings, major program, one reconciliation", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "M-2", "agent": "gr", "title": "Locate major-program result", "workflow": "Public report", "column": "done", "progress": 100, "eta_s": null, "started_at": "10:00:09", "tool_calls": { "used": 2, "budget": 12 },
+      "steps": [ { "title": "read_source_span(p.234)", "detail": "Major program: Research & Development Cluster", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "M-3", "agent": "ap", "title": "Retrieve Note D, Table 11", "workflow": "Public report", "column": "done", "progress": 100, "eta_s": null, "started_at": "10:00:14", "tool_calls": { "used": 2, "budget": 12 },
+      "steps": [ { "title": "read_source_span(p.23 · PDF p.25)", "detail": "pledge receivable rollforward, USD thousands", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "M-4", "agent": "py", "title": "Tie pledge rollforward", "workflow": "Public report", "column": "done", "progress": 100, "eta_s": null, "started_at": "10:00:20", "tool_calls": { "used": 1, "budget": 12 },
+      "steps": [ { "title": "calculate(sum_signed)", "detail": "626904 + 76081 − 204993 + 53257 + 80480 = 631729", "state": "done" } ], "todos": [], "rationale": null },
+    { "id": "M-5", "agent": "au", "title": "Verify every citation against the page", "workflow": "Public report", "column": "done", "progress": 100, "eta_s": null, "started_at": "10:00:27", "tool_calls": { "used": 4, "budget": 12 },
+      "steps": [ { "title": "Check opinion wording p.234", "state": "done" }, { "title": "Check prior findings p.235", "state": "done" }, { "title": "Check signs and units in Table 11", "state": "done" } ], "todos": [], "rationale": null }
+  ],
+  "findings": [
+    { "id": "M-F1", "agent": "au", "title": "No reportable findings", "summary": "Unmodified financial-statement and major-program opinions. No material weaknesses, no significant deficiencies, no findings. No prior findings needing an update.", "status": "none_reported", "amount_cents": null, "verified_by": "au",
+      "evidence": [
+        { "label": "FY2025 Uniform Guidance report", "kind": "doc", "tone": "neutral", "edge": "PAGE" },
+        { "label": "Printed p.234 (PDF p.236): summary of auditor's results", "kind": "page", "tone": "good", "edge": "PAGE" },
+        { "label": "Printed p.235: no prior findings requiring update", "kind": "page", "tone": "good" }
+      ] },
+    { "id": "M-F2", "agent": "py", "title": "Pledge receivable rollforward ties", "summary": "626,904 + 76,081 − 204,993 + 53,257 + 80,480 = 631,729 (USD thousands). Residual 0. Change 4,825.", "status": "ties", "amount_cents": null, "amount_note": "residual 0", "verified_by": "au",
+      "evidence": [
+        { "label": "Note D, Table 11 · printed p.23 (PDF p.25)", "kind": "page", "tone": "neutral", "edge": "DERIVED_FROM" },
+        { "label": "CALC-PLEDGE-01 · sum of signed components", "kind": "calc", "tone": "good", "edge": "EQUALS" },
+        { "label": "Ending balance 631,729 ✓", "kind": "record", "tone": "good" }
+      ] },
+    { "id": "M-F3", "agent": "gr", "title": "Major program: Research & Development Cluster", "summary": "The major program tested under Uniform Guidance. Opinion unmodified.", "status": "none_reported", "amount_cents": null, "verified_by": "au",
+      "evidence": [ { "label": "Printed p.234 (PDF p.236)", "kind": "page", "tone": "good" } ] }
+  ],
+  "approvals": [],
+  "decisions": [
+    { "id": "M-D1", "run": "MIT FY2025 · public report", "time": "10:00", "agent": "au", "action": "Reported “no findings” instead of hunting for anomalies",
+      "summary": "The published report has no reportable findings. Inventing one would be false.",
+      "tags": [ { "label": "p.234" }, { "label": "p.235" } ],
+      "when": { "run": "MIT FY2025", "step": "5 of 6", "started": "10:00:27", "finished": "10:00:41 (14s)", "trigger": "User asked “Show me the findings”" },
+      "how": [
+        { "tool": "read_source_span", "input": "FY2025 p.234", "output": "unmodified opinions, no MW, no SD, no findings" },
+        { "tool": "read_source_span", "input": "FY2025 p.235", "output": "no prior findings requiring update" }
+      ],
+      "why": "The auditor's published results say there are no reportable findings. The honest answer is to show that, with the citation, and not manufacture a problem.",
+      "alternatives": [
+        { "option": "Report no findings, with the page citation", "reason": "matches the source exactly", "chosen": true },
+        { "option": "Search transactions for anomalies", "reason": "we don't have MIT's ledger, only the public report", "chosen": false },
+        { "option": "Speculate about risks", "reason": "not supported by the report", "chosen": false }
+      ],
+      "memory_checks": [],
+      "outcome": "Findings shows “No reportable findings” with a link to the page." },
+    { "id": "M-D2", "run": "MIT FY2025 · public report", "time": "10:00", "agent": "py", "action": "Tied the pledge rollforward to a 0 residual",
+      "summary": "All five signed components sum exactly to the ending balance.",
+      "tags": [ { "label": "Note D · Table 11" }, { "label": "CALC-PLEDGE-01" } ],
+      "when": { "run": "MIT FY2025", "step": "4 of 6", "started": "10:00:20", "finished": "10:00:22 (2s)", "trigger": "AP & Payments retrieved Table 11" },
+      "how": [
+        { "tool": "read_source_span", "input": "printed p.23 (PDF p.25)", "output": "6 rows, USD thousands" },
+        { "tool": "calculate", "input": "sum_signed(626904, 76081, −204993, 53257, 80480)", "output": "631729 · residual 0" }
+      ],
+      "why": "A rollforward should reconcile beginning to ending. It does, exactly, in the report's own units.",
+      "alternatives": [
+        { "option": "Show the bridge with units and signs", "reason": "fully supported by the table", "chosen": true },
+        { "option": "Explain which donors drove the change", "reason": "the report doesn't disclose donor-level detail", "chosen": false }
+      ],
+      "memory_checks": [],
+      "outcome": "Finding M-F2: ties. Listed the records needed to test at transaction level." }
+  ],
+  "playbooks": [],
+  "ablation": null,
+  "report": {
+    "title": "MIT audit results · FY2024 vs FY2025",
+    "sections": ["Auditor's results", "Major program", "Pledge rollforward (FY2025)", "What we can't test from public reports"],
+    "comparisons": [
+      { "label": "Financial-statement findings", "before": "None (pp.244–245)", "after": "None (p.234)" },
+      { "label": "Federal-award findings", "before": "None (pp.244–245)", "after": "None (p.234)" },
+      { "label": "Prior findings needing update", "before": "None (p.245)", "after": "None (p.235)" }
+    ],
+    "before_label": "FY2024",
+    "after_label": "FY2025"
+  }
+}
