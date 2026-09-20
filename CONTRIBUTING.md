@@ -127,9 +127,17 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
    result pointing at a record the agent never read.
 5. **Only a human decision writes memory.** `approvals.decide()` is the sole writer of
    precedent, so an agent cannot promote its own conclusion into guidance for its next run.
-6. **No demo data, ever.** No seeding, no "load sample data", no fixture in the runtime
-   database. The generator writes files to disk; a person uploads them through Books like
-   any other records. This is what keeps "the agents found this" honest.
+6. **Nothing is seeded.** No fixture in the runtime database, no workspace that exists
+   before someone made it, no finding that exists before a check ran. This is what keeps
+   "the agents found this" honest: every record on screen got there through intake.
+
+   Sample records offered *for upload* are the one thing this permits, and only on those
+   terms — `starterPacks.ts` generates ordinary CSV and Markdown bytes that are staged,
+   mapped, validated and committed through exactly the path a real file takes. A pack
+   that would not pass validation is a broken pack, not a special case, and it must say
+   it is fictional where someone will read it rather than in a footnote. What stays
+   banned is the shortcut: anything that puts records, findings or conclusions into the
+   database without going through intake.
 7. **A finding's id names what it is, not which rows are in it.** Ids derived from group
    membership move when the group gains a row, orphaning a reviewer's note and
    re-presenting the finding as new.

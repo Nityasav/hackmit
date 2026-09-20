@@ -161,14 +161,37 @@ async def decide_escalation(ws: str, body: Decision):
                                              approval_id=body.approval_id or None)
     except BudgetExceeded as exc:
         raise HTTPException(402, {"code": "budget_exceeded", "message": str(exc)})
-    except KeyError:
-        raise HTTPException(404, "No paused run with that thread id.")
+    except KeyError as exc:
+        # "No paused run" is true and useless. The usual cause is a question that has
+        # already been answered — from the other screen, or from a card left on an
+        # older message — and a person reading the literal message has no idea whether
+        # their decision landed.
+        settled = _already_decided(ws, body.approval_id)
+        if settled:
+            raise HTTPException(409, {
+                "code": "already_decided",
+                "message": f"That question was already {settled}, and the run has moved "
+                           "past it. Nothing was lost and nothing needs doing again.",
+                "decision": settled})
+        raise HTTPException(404, {"code": "no_paused_run", "message": str(exc)})
     except ValueError as exc:
         # Several questions are waiting and the answer did not say which. Refused rather
         # than guessed: applying it to the wrong one records a decision the person never
         # made, against evidence they never saw.
         raise HTTPException(409, {"code": "ambiguous_decision", "message": str(exc)})
     return outcome
+
+
+def _already_decided(ws: str, approval_id: str) -> str | None:
+    """What a person decided about this question, if they already have."""
+    if not approval_id:
+        return None
+    with db.connect() as connection:
+        row = connection.execute(
+            "SELECT status FROM approvals WHERE ws=? AND id=?", (ws, approval_id)).fetchone()
+    if row is None or row["status"] == "pending":
+        return None
+    return row["status"]
 
 
 @router.get("/timeline")

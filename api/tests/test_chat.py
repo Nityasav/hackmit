@@ -370,3 +370,49 @@ def test_every_field_the_escalation_card_renders_is_sent(client, ws, monkeypatch
     for field in ("approval_id", "agent", "title", "summary", "reasons"):
         assert field in waiting, field
     assert isinstance(waiting["reasons"], list)
+
+
+def test_a_question_already_answered_says_so_instead_of_no_paused_run(client, ws, monkeypatch):
+    """"No paused run with that thread id" is true and useless. The usual cause is a
+    question already answered — from the other screen, or from a card left on an older
+    message — and a person reading that has no idea whether their decision landed."""
+    from app import approvals
+
+    _scripted(monkeypatch, "insufficient")
+    started = talk(client, ws, "Review payables and cash.").json()
+    waiting = started["reply"]["escalations"]
+    assert waiting
+
+    for question in waiting:
+        approvals.decide(ws, question["approval_id"], "approved")
+    # And the run itself is carried past them, the way answering in the chat does.
+    client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
+        "thread_id": started["thread_id"], "decision": "approved",
+        "approval_id": waiting[0]["approval_id"]})
+
+    response = client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
+        "thread_id": started["thread_id"], "decision": "approved",
+        "approval_id": waiting[0]["approval_id"]})
+
+    assert response.status_code in (200, 409), response.text
+    if response.status_code == 409:
+        assert "already approved" in response.text
+        assert "nothing needs doing again" in response.text.lower()
+
+
+def test_the_queue_is_what_says_a_question_is_still_open(client, ws, monkeypatch):
+    """The escalations inside a turn are frozen when the reply is written. The screen
+    reads the live queue to decide which still have buttons, so this has to stay the
+    authoritative answer to "is this outstanding"."""
+    from app import approvals
+
+    _scripted(monkeypatch, "insufficient")
+    started = talk(client, ws, "Review payables and cash.").json()
+    first = started["reply"]["escalations"][0]["approval_id"]
+
+    before = client.get(f"/api/workspaces/{ws}/agents/escalations").json()["escalations"]
+    approvals.decide(ws, first, "approved")
+    after = client.get(f"/api/workspaces/{ws}/agents/escalations").json()["escalations"]
+
+    assert first in {item["approval_id"] for item in before}
+    assert first not in {item["approval_id"] for item in after}
