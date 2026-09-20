@@ -28,3 +28,9 @@ bun.lockb
 # macOS/iCloud duplicates ("file 2.ts"). They shadow real files and break
 # typecheck, because lint and tsconfig exceptions target the real names.
 * [0-9].*
+
+# bun is the package manager (see web/package.json "packageManager")
+package-lock.json
+
+# build artifact from `pip install -e api`
+*.egg-info/

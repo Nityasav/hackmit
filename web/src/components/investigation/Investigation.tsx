@@ -8,6 +8,7 @@ import { BeforeAnyRun, RunProgress, StartInvestigation } from "./CfoRun";
 import { describeRun } from "./agents";
 import { RunFindings } from "./Findings";
 import { RecordChecks } from "./RecordChecks";
+import { Precedent } from "./Precedent";
 import { useInvestigation } from "./run";
 
 /**
@@ -65,6 +66,10 @@ export function Investigation({ ws }: { ws: string }) {
           <RunFindings ws={ws} run={run} running={running} />
         </Section>
       )}
+
+      <Section title="What they learned from you">
+        <Precedent />
+      </Section>
     </div>
   );
 }

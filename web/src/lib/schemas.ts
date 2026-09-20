@@ -24,7 +24,12 @@ function optional<T extends z.ZodTypeAny>(schema: T) {
 
 const agentIdSchema = z.enum(["cfo", "ap", "py", "gr", "au"]);
 
-const tabIdSchema = z.enum(["command", "board", "findings", "reports", "reasoning"]);
+// As wide as TabId in api/app/models.py. See the note on TabId in types.ts:
+// narrowing this below what the API emits makes whole bundles fail to parse.
+const tabIdSchema = z.enum([
+  "command", "board", "workflows", "findings",
+  "approvals", "reports", "reasoning", "learning",
+]);
 
 const workspaceSchema = z.object({
   id: z.string(),
@@ -56,7 +61,7 @@ const briefingSchema = z.object({
   actions: z.array(z.object({
     label: z.string(),
     href: tabIdSchema,
-    primary: z.boolean().optional(),
+    primary: optional(z.boolean()),
   })),
 });
 
@@ -77,23 +82,25 @@ const taskSchema = z.object({
   tool_calls: z.object({ used: z.number(), budget: z.number() }),
   steps: z.array(z.object({
     title: z.string(),
-    detail: z.string().optional(),
+    detail: optional(z.string()),
     state: z.enum(["done", "running", "todo"]),
-    memory: z.boolean().optional(),
+    memory: optional(z.boolean()),
   })),
   todos: z.array(z.string()),
   note: optional(z.string()),
-  note_tone: z.enum(["warn", "info"]).optional(),
-  approval_id: z.string().optional(),
+  note_tone: optional(z.enum(["warn", "info"])),
+  approval_id: optional(z.string()),
 });
 
 const evidenceNodeSchema = z.object({
   label: z.string(),
   kind: z.enum(["record", "award", "doc", "calc", "page"]),
   tone: z.enum(["neutral", "bad", "good"]),
-  edge: z.string().optional(),
-  locator: z.string().optional(),
-  source_preview: z.string().optional(),
+  // `optional()`, not `.optional()`: the API sends these as explicit null, and
+  // a bare .optional() accepts an absent key but rejects a null one.
+  edge: optional(z.string()),
+  locator: optional(z.string()),
+  source_preview: optional(z.string()),
 });
 
 const findingSchema = z.object({
@@ -107,7 +114,7 @@ const findingSchema = z.object({
   ]),
   amount_cents: z.number().nullable(),
   amount_note: optional(z.string()),
-  verified_by: agentIdSchema.optional(),
+  verified_by: optional(agentIdSchema),
   evidence: z.array(evidenceNodeSchema),
 });
 
@@ -117,6 +124,9 @@ const decisionSchema = z.object({
   run: z.string(),
   time: z.string(),
   agent: agentIdSchema,
+  // Absent here, zod silently dropped it: a human decision arrived at the UI
+  // indistinguishable from an agent's.
+  actor: optional(z.string()),
   action: z.string(),
   summary: z.string(),
   when: z.object({
@@ -126,8 +136,20 @@ const decisionSchema = z.object({
   how: z.array(z.object({ tool: z.string(), input: z.string(), output: z.string() })),
   why: z.string(),
   outcome: z.string(),
+  memory_checks: z.array(z.object({ text: z.string(), ok: z.boolean() })),
 });
 
+const playbookSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  source: z.string(),
+  proposed_by: agentIdSchema,
+  // Sent as a string by the projection; kept a string rather than coerced, so
+  // a shape change surfaces here instead of rendering as NaN.
+  uses: z.string(),
+  status: z.enum(["active", "retired"]),
+  status_note: z.string(),
+});
 
 export const bundleSchema = z.object({
   contract_version: z.number().optional(),
@@ -137,6 +159,7 @@ export const bundleSchema = z.object({
   tasks: z.array(taskSchema),
   findings: z.array(findingSchema),
   decisions: z.array(decisionSchema),
+  playbooks: z.array(playbookSchema),
 });
 
 export const starterPackSchema = z.object({

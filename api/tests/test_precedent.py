@@ -153,3 +153,62 @@ def test_uses_counts_a_declined_precedent_too(client):
         precedent_id = approvals.active_precedents(connection, ws)[0]["id"]
         approvals.note_precedent_uses(connection, ws, [precedent_id])
         assert approvals.active_precedents(connection, ws)[0]["uses"] == 1
+
+
+def test_a_real_run_increments_uses(client, monkeypatch):
+    """The test above calls note_precedent_uses directly, which is what let it
+    pass for a week while *nothing in production called it at all*: the counter
+    sat at 0 on screen next to the memory check that had just used it.
+
+    This one goes through the HTTP run path instead, so the assertion fails if
+    the function is ever unwired again.
+    """
+    from types import SimpleNamespace
+
+    from app.agents import cfo
+    from tests.test_cfo_agent import FakeResponses, function_call
+
+    ws = _prepared(client)
+    _decide(client, ws, "approved")
+    with db.connect() as connection:
+        precedent_id = approvals.active_precedents(connection, ws)[0]["id"]
+        assert approvals.active_precedents(connection, ws)[0]["uses"] == 0
+
+    class CitesPrecedent(FakeResponses):
+        """Answers like the real agent does once precedent exists: it reports
+        checking the precedent, and declines it."""
+
+        def create(self, **kwargs):
+            if self.step < 2:
+                return super().create(**kwargs)
+            self.step += 1
+            return SimpleNamespace(
+                output=[function_call("submit_cfo_analysis", {
+                    "memory_checks": [{
+                        "precedent_id": precedent_id, "applied": False,
+                        "reason": "The evidence behind that decision is not present in this snapshot.",
+                    }],
+                    "executive_briefing": "Nothing further to report within the committed snapshot.",
+                    "scope_assessed": "September close within the committed synthetic snapshot.",
+                    "limitations": ["Population completeness is not verified."],
+                    "findings": [], "evidence_requests": [], "next_tasks": [],
+                }, "call-3")],
+                usage=SimpleNamespace(input_tokens=10, output_tokens=5, total_tokens=15),
+            )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setattr(cfo, "OpenAI", lambda **_: SimpleNamespace(
+        responses=CitesPrecedent(), close=lambda: None))
+
+    snapshot_id = client.get(f"/api/workspaces/{ws}/bundle").json()["workspace"]["snapshot_id"]
+    response = client.post(f"/api/workspaces/{ws}/agent-runs", json={
+        "snapshot_id": snapshot_id, "request_id": "counts-a-use", "focus": "Re-check September",
+    })
+    assert response.status_code == 201, response.text
+
+    with db.connect() as connection:
+        assert approvals.active_precedents(connection, ws)[0]["uses"] == 1
+
+    # And the screen shows the same thing the database does.
+    playbook = client.get(f"/api/workspaces/{ws}/bundle").json()["playbooks"][0]
+    assert playbook["uses"] == "1"

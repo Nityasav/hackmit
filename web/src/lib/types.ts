@@ -3,7 +3,20 @@
 
 export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
 export type WorkspaceId = string;
-export type TabId = "command" | "board" | "findings" | "reports" | "reasoning";
+
+/**
+ * The tab ids the API emits, mirroring `TabId` in api/app/models.py.
+ *
+ * This is not the navigation — that is `NavId` in lib/tabs.ts, which is three
+ * destinations. This list has to stay as wide as the producer's, because the
+ * bundle is parsed against it: when the screens were cut back, this enum was
+ * narrowed but `_disabled_tabs` still returned "learning" and briefings still
+ * linked to "approvals", so every bundle carrying either failed to parse and
+ * the dashboard rendered an error instead of a workspace.
+ */
+export type TabId =
+  | "command" | "board" | "workflows" | "findings"
+  | "approvals" | "reports" | "reasoning" | "learning";
 
 export interface Workspace {
   id: WorkspaceId;
@@ -111,6 +124,28 @@ export interface Decision {
   how: { tool: string; input: string; output: string }[];
   why: string;
   outcome: string;
+  /** Precedent this run weighed before deciding. `ok: false` is a precedent
+   *  the agent looked at and declined — the evidence that memory is re-checked
+   *  rather than replayed, so it is shown, not filtered out. */
+  memory_checks: { text: string; ok: boolean }[];
+}
+
+/**
+ * One piece of reviewed precedent: a decision a person made, written down so
+ * the next run has to reckon with it.
+ *
+ * Only `approvals.decide()` creates these. An agent can read precedent and
+ * cannot write it, which is what stops a run promoting its own conclusion
+ * into guidance for the next one.
+ */
+export interface Playbook {
+  id: string;
+  title: string;
+  source: string;
+  proposed_by: AgentId;
+  uses: string;
+  status: "active" | "retired";
+  status_note: string;
 }
 
 export interface Bundle {
@@ -121,6 +156,7 @@ export interface Bundle {
   tasks: Task[];
   findings: Finding[];
   decisions: Decision[];
+  playbooks: Playbook[];
 }
 
 export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice"
