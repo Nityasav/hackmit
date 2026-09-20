@@ -31,7 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules",
-    "src/components/ui/line-graph-statistics.tsx"
-  ]
+  "exclude": ["node_modules"]
 }
