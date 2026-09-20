@@ -120,6 +120,15 @@ function Lab({ ws }: { ws: string }) {
   const [message, setMessage] = useState("");
   const refresh = useCallback(async () => { const next = await intakeApi<State>(base); setState(next); return next; }, [base]);
   useEffect(() => { let active = true; intakeApi<State>(base).then(s => { if (active) setState(s); }).catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); }); return () => { active = false; }; }, [base]);
+  // Preselect when there is exactly one model to choose. The picker opened on
+  // "Active model — none configured", which is not a model, so the read button
+  // stayed disabled until someone noticed they had to choose — and a disabled
+  // button reads as a broken feature. With two or more, the choice is real and
+  // is left to the person.
+  const onlyModel = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
+  useEffect(() => {
+    if (!model && !state?.active && onlyModel.length === 1) setModel(onlyModel[0].id);
+  }, [model, state?.active, onlyModel]);
   const doc = state?.documents.find(d => d.id === selected);
   const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
   const prediction = state?.prediction.filter(p => p.document_id === selected).at(-1);
@@ -256,6 +265,12 @@ function Lab({ ws }: { ws: string }) {
         <Done at="combine" />
       </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
+        {!state.model.length && <p className="my-2 max-w-prose text-[12.5px] text-amber-800">
+          No extraction model is registered for this company, so the values cannot be read
+          automatically — a model is registered per company, and a new one starts without. You can
+          still check every value against the pages yourself below, which is the same review a
+          model&rsquo;s output would need anyway.
+        </p>}
         <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
           {/* The local model takes roughly half a minute per document, so this
               one request opts out of the client's short default deadline. At 20s

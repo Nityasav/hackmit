@@ -27,7 +27,21 @@ type View = { workspace: { name: string; start: string; end: string }; snapshot_
     agent?: string | null;
     payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
-const roles: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", rc: "Revenue & Collections" };
+/**
+ * Agent ids were `cfo`, `ap`, `py`, `gr` and `rc` before the agents were
+ * reworked. None of them exist now — the roster is `orchestrator`, `A`..`D`
+ * and `A1`..`D4` — so this map returned undefined for every finding and every
+ * history row, and the label simply rendered empty.
+ *
+ * The bundle already carries each agent's real name, so the names are read
+ * from there and this keeps only the retired ids, for rows written before the
+ * rework that still name them.
+ */
+const RETIRED_AGENTS: Record<string, string> = {
+  cfo: "CFO Agent (retired)", ap: "AP & Payments (retired)",
+  py: "Payroll & Budget (retired)", gr: "Grants & Compliance (retired)",
+  rc: "Revenue & Collections (retired)",
+};
 const currency = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const control = "border border-line bg-white px-3 py-2 text-sm disabled:opacity-40";
 const primary = "bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-40";
@@ -38,6 +52,9 @@ export function ReviewWorkspace({ section = "overview" }: { section?: "overview"
 }
 
 function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
+  const { bundle } = useData();
+  const agentName = (id: string | null | undefined): string =>
+    (id && bundle.agents.find(a => a.id === id)?.name) || (id && RETIRED_AGENTS[id]) || id || "";
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -125,7 +142,7 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
           {f.role === "rc" && filtered[i - 1]?.role !== "rc" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Money coming in · fees, collections, deposits, pledges</h3>}
           <button onClick={() => { setSelected(f.id); setSource(null); }} aria-pressed={current?.id === f.id} className={`w-full border p-4 text-left ${current?.id === f.id ? "border-ink bg-surface-2" : "border-line"}`}>
-          <span className="text-xs uppercase tracking-wide text-ink-dim">{roles[f.role]} · {f.origin === "live_agent" ? "Auditor-accepted claim" : f.origin === "standalone_candidate" ? "Standalone candidate" : "Rules-based check"}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
+          <span className="text-xs uppercase tracking-wide text-ink-dim">{agentName(f.role)} · {f.origin === "live_agent" ? "Auditor-accepted claim" : f.origin === "standalone_candidate" ? "Standalone candidate" : "Rules-based check"}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
           <span className={f.status === "attention" ? "text-red-700" : f.status === "gap" ? "text-amber-800" : "text-green-800"}>{f.status === "pass" ? "Passed within stated scope" : f.status === "gap" ? "Evidence needed" : "Investigate"}</span>{f.amount_cents !== null && <span className="ml-3 font-num">{currency(f.amount_cents)}</span>}
           {f.follow_up && <small className="mt-2 block">Follow-up: {displayLabel(f.follow_up.status)} · {f.follow_up.owner || "Unassigned"}</small>}</button></Fragment>)}</div>
           {current && <article className="self-start border border-line p-5"><h2 className="text-xl font-semibold">{current.title}</h2><p className="my-3 leading-relaxed">{current.explanation}</p><p className="text-sm text-ink-dim">{current.review}</p><h3 className="mt-5 font-semibold">Suggested next step</h3><p className="mt-1 text-sm">{current.action}</p>
@@ -145,7 +162,7 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           <label>Raised by
             <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
               <option value="">Any agent</option>
-              {historyAgents.map(a => <option key={a} value={a}>{roles[a] || a}</option>)}
+              {historyAgents.map(a => <option key={a} value={a}>{agentName(a)}</option>)}
               {/* A record check is arithmetic over rows, not an agent's conclusion. */}
               <option value="__none">Record checks (no agent)</option>
             </select>
@@ -156,7 +173,7 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
         {!!view.history.length && !shownHistory.length && <p className="mt-3 text-sm text-ink-dim">Nothing in this range. The history holds the most recent hundred entries, so something older may exist and not be shown.</p>}
         {shownHistory.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
           <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
-          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${roles[e.agent] || e.agent}` : "record check, no agent"}</p>
+          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${agentName(e.agent)}` : "record check, no agent"}</p>
         </div>)}</details>
       <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
     </>}

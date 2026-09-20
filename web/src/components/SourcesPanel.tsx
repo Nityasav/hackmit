@@ -260,6 +260,17 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             setMessage("Records committed. Originals and the snapshot are saved locally. No financial correction or agent investigation was performed.");
           })}>Confirm & commit records</button>
           <span className="self-center text-[11px] text-ink-dim">Local reviewer · commits validated records, not accounting adjustments</span>
+          {/* A commit button that greys out and says nothing is the commonest
+              way a working feature reads as a broken one. Both conditions that
+              hold it closed are ordinary and recoverable, so both say so. */}
+          {(batch.status !== "ready_to_commit" || draftChanged) &&
+            <p className="w-full text-[12.5px] text-amber-800">
+              {draftChanged
+                ? "Save mappings & revalidate first — the column mapping has unsaved changes, and committing would import the rows as they were last validated rather than as they now read."
+                : batch.counts.issues
+                  ? `This import cannot be committed while ${batch.counts.issues} issue(s) remain. Each one is listed above with the source line it came from; fix them at source and upload again, or remove the file from this import.`
+                  : `This import is ${displayLabel(batch.status).toLowerCase()} and not yet ready to commit. Save mappings & revalidate to re-check it.`}
+            </p>}
         </div> : <p className="mt-3 font-mono text-xs text-ink">Saved snapshot: {batch.snapshot_id}</p>}
       </div>}
 

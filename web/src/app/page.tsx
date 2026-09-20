@@ -35,6 +35,16 @@ export default function BooksPage() {
         </p>
       </header>
 
+      {/* This page is long, and the instructions that send someone between its
+          parts said things like "scroll up to the import", which is not a
+          place. These are. */}
+      <nav aria-label="Sections of this page" className="flex flex-wrap gap-4 border-y border-line py-3 text-[13px]">
+        <a className="underline" href="#source-records">Add records</a>
+        <a className="underline" href="#source-import">Review &amp; commit an import</a>
+        <a className="underline" href="#source-documents">Documents</a>
+        <a className="underline" href="#source-registers">Search the records</a>
+      </nav>
+
       <GuidedWorkflow bundle={bundle} intake={intake} />
 
       {/* Keyed so switching workspaces resets the upload draft rather than carrying
