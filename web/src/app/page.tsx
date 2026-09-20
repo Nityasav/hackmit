@@ -31,8 +31,6 @@ export default function CommandCenter() {
 
   return (
     <>
-      <PageHeader title={`${workspace.name} · ${workspace.period}`} />
-
       {/* CFO agent briefing */}
       <div className="mb-4 rounded-xl border border-line bg-surface p-5">
         <div className="flex items-center gap-2">
