@@ -7,6 +7,7 @@ import { AgentTeam } from "./AgentTeam";
 import { BeforeAnyRun, RunProgress, StartInvestigation } from "./CfoRun";
 import { describeRun } from "./agents";
 import { RunFindings } from "./Findings";
+import { RecordChecks } from "./RecordChecks";
 import { useInvestigation } from "./run";
 
 /**
@@ -39,7 +40,11 @@ export function Investigation({ ws }: { ws: string }) {
         )}
       </header>
 
-      <Section title="Ask them something">
+      <Section title="First, the automatic checks">
+        <RecordChecks ws={ws} />
+      </Section>
+
+      <Section title="Then ask the agents something">
         <StartInvestigation state={state} />
       </Section>
 
