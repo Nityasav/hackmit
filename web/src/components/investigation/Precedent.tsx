@@ -26,9 +26,7 @@ export function Precedent() {
   if (active.length === 0) {
     return (
       <p className="max-w-xl text-[14px] leading-relaxed text-ink-dim">
-        Nothing yet. Precedent is written when you approve or reject a finding — never by an
-        agent. Decide one and it appears here, and the next run has to re-check it against
-        that run&rsquo;s own evidence before it may rely on it.
+        No decisions yet. Approve or reject a finding to save guidance for future reviews.
       </p>
     );
   }
@@ -53,12 +51,12 @@ export function Precedent() {
 
       {checks.length > 0 && (
         <div>
-          <h3 className="text-[13.5px] font-semibold">What this run did with it</h3>
+          <h3 className="text-[13.5px] font-semibold">Decisions considered</h3>
           <ul className="mt-2 space-y-2">
             {checks.map((check, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
                 <Pill tone={check.ok ? "green" : "gray"} className="mt-px flex-none">
-                  {check.ok ? "applied" : "declined"}
+                  {check.ok ? "Applied" : "Declined"}
                 </Pill>
                 <span className="text-ink-dim">{check.text}</span>
               </li>
@@ -68,8 +66,7 @@ export function Precedent() {
       )}
 
       <p className="max-w-xl text-[13px] leading-relaxed text-ink-faint">
-        Agents never edit their own prompts and nothing is fine-tuned. A precedent exists only
-        where you decided something, and a matching vendor or amount is not enough to reuse one.
+        Previous decisions are checked against the current evidence before reuse.
       </p>
     </div>
   );

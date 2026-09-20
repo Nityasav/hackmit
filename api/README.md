@@ -38,7 +38,6 @@ consistency remain separate gates, not implied passes from this suite.
 | --- | --- | --- |
 | `app/main.py` | Functionality | HTTP endpoints (see `contracts/README.md`) |
 | `app/models.py` | Functionality | Pydantic mirror of the bundle contract |
-| `app/store.py` | Functionality | Fixed legacy demo bundles; new intake workspaces use the SQLite bundle builder |
 | `app/db.py` | Functionality | SQLite schema, transactions, original bytes and local events |
 | `app/ingestion.py` | Functionality | CSV/text parsing, mappings, validation, immutable commits, coverage and evidence requests |
 | `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
@@ -47,7 +46,7 @@ consistency remain separate gates, not implied passes from this suite.
 | `app/agents/auditor.py` | Agent design | Independent direct-run review with pinned targets, original-source reperformance and provenance gates |
 | `app/cfo/` | CFO coordination | Separate bounded coordinator, persisted runs and specialist/reviewer ports |
 | `app/integrations/` | Integration | Read-only intake bridge and adapter factory; live specialist and auditor registration pending |
-| `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
+| `app/workflows/` | Workflows | Workflow definitions and evidence-resumption states |
 
 ## Rules
 
@@ -63,7 +62,7 @@ an intentional local reviewer operation; it is not authentication. Keep the serv
 synthetic/public records. Unknown workspaces and cross-workspace source IDs return 404.
 
 Original uploads are immutable SQLite BLOBs, so a failed transaction cannot leave a DB/file-storage
-mismatch. Parsing is synchronous and bounded for the small local demo. Staging, validation and commit
+mismatch. Parsing is synchronous and bounded for local operation. Staging, validation and commit
 are atomic, persisted operations; a crash rolls back the active operation and previously saved previews
 can be resumed. There is no extra worker service or queue yet.
 

@@ -3,7 +3,7 @@
 `cfo_runs` lives in the shared schema (`app/db.py`) so one transaction can read a
 coordinator run and the snapshot, records and triage runs it was derived from.
 Passing an explicit `path` keeps a run store isolated in a temporary file, which
-is how the tests and the scripted CLI demo use it.
+is how tests and command-line runs use it.
 """
 
 from contextlib import contextmanager

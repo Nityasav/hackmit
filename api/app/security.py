@@ -50,7 +50,7 @@ def password_hash(password):
 def identity(request):
     configured = users()
     if not configured:
-        return {"name": "local-reviewer", "role": "admin", "workspaces": ["*"], "mode": "local_demo"}
+        return {"name": "local-reviewer", "role": "admin", "workspaces": ["*"], "mode": "local_admin"}
     session = SESSIONS.get(hashlib.sha256(request.cookies.get("schooltrace_session", "").encode()).hexdigest())
     if not session or session[1] < time.time() or session[0] not in configured:
         raise HTTPException(401, "Sign in to access this workspace.")
@@ -68,7 +68,7 @@ async def guard(request):
     peer = request.client.host if request.client else ""
     testing = host == "testserver" and peer == "testclient"
     if not testing and (host not in {"localhost", "127.0.0.1", "::1"} or peer not in {"127.0.0.1", "::1"}):
-        raise HTTPException(403, "Laptop demo accepts loopback connections only; public hosting is not configured.")
+        raise HTTPException(403, "This server accepts loopback connections only; public hosting is not configured.")
     origin = request.headers.get("origin")
     if origin and origin not in ORIGINS:
         raise HTTPException(403, "Untrusted browser origin.")
@@ -109,7 +109,10 @@ async def guard(request):
                 raise ValueError()
         except (ValueError, UnicodeError):
             raise HTTPException(400, "Expected a JSON request object.") from None
-        authorize_workspace(user, body.get("workspace", "sandbox"))
+        workspace = body.get("workspace")
+        if not isinstance(workspace, str) or not workspace:
+            raise HTTPException(422, "A workspace is required.")
+        authorize_workspace(user, workspace)
         if path.startswith("/api/approvals/") and user["role"] not in {"admin", "reviewer"}:
             raise HTTPException(403, "Reviewer role required.")
 

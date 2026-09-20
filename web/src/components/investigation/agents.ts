@@ -23,69 +23,69 @@ export const TEAM: readonly AgentProfile[] = [
   {
     id: "cfo",
     name: "CFO Agent",
-    beat: "Chief financial officer: the one in charge.",
+    beat: "Planning & reporting",
     does:
-      "Reads everything you uploaded, decides which parts are worth a closer look, gives each of the other four agents a job, and writes up what the team found.",
+      "Sets the review plan, assigns specialist tasks and prepares the briefing.",
     how:
-      "It works from one frozen copy of your records, so nothing can change underneath it while it works. It can read them; it cannot edit them. Before its write-up is allowed through, every claim has to point at a line in your files, and every dollar figure has to match one it actually read. If it does not, the write-up is thrown back and it starts that part again.",
+      "Uses a committed snapshot and reports accepted findings alongside unresolved questions.",
   },
   {
     id: "ap",
     name: "AP & Payments",
-    beat: "Accounts payable: the bills the school pays.",
+    beat: "Invoices & purchase support",
     does:
-      "Checks the bills. It looks for the same bill being paid twice, and for bills with no proof that anyone ordered the thing or that it ever arrived.",
+      "Checks for duplicate invoices and missing purchase or receipt evidence.",
     how:
-      "First it names the files it wants, then it is allowed to open only those. A gate refuses anything outside the job it was given. Anything it writes that it did not actually read is dropped before you see it, and turned into a request for the missing paperwork. It may say a payment looks like a duplicate. It is not allowed to say a duplicate is confirmed.",
+      "Reviews assigned records and flags missing support for follow-up.",
   },
   {
     id: "py",
     name: "Payroll & Budget",
-    beat: "Pay, and the budget it is spent against.",
+    beat: "Payroll & spending",
     does:
-      "Checks the pay records: that the pay adds up, that spending matches what the budget allowed, and that pay charged to a restricted pot of money belongs there.",
+      "Checks payroll totals, budget variances and charges allocated to restricted funds.",
     how:
-      "The agent decides what to look at and what it means. The sums are done by plain arithmetic in whole cents, straight from your records, with no model involved. Every amount you see here came from that calculator. A claim with no calculation behind it is knocked down before it reaches you.",
+      "Uses accounting calculations from the uploaded records to support amounts.",
   },
   {
     id: "gr",
     name: "Grants & Compliance",
-    beat: "Grant money, and the rules attached to it.",
+    beat: "Award terms & expenditure",
     does:
-      "Some money may only be spent on one thing, during one stretch of time. This agent reads those rules and checks the spending against them, and says so plainly when the paperwork that would prove it is simply missing.",
+      "Compares supplied charges with award terms, dates and funding limits.",
     how:
-      "It may only use the award letter you uploaded, never a rule it half-remembers from somewhere else. A fixed check adds up the pay charged to an award, compares it with that award's limit, and tests every date against the award's window. When the terms are missing it has to answer needs evidence. It is not allowed to call anything a violation.",
+      "Cites uploaded terms and requests evidence where eligibility is unclear.",
   },
   {
     id: "au",
     name: "Internal Auditor",
-    beat: "The checker: reviews the other four.",
+    beat: "Independent review",
     does:
-      "Double-checks the others' work. It goes back to the original paperwork, redoes the sums itself, and then says accept, reject, or show me more proof.",
+      "Checks specialist claims against the originals and repeats supporting calculations.",
     how:
-      "It starts with a blank sheet: none of the other agents' reading counts as its own. To accept a claim it has to open the same lines itself and get the same number from the same calculation. If it has not done that, the acceptance fails instead of letting something through unchecked. It cannot approve anything either. Approval stays with you.",
+      "Accepts supported claims, rejects unsupported claims or requests more evidence.",
   },
 ];
 
 /** The most trust-building fact in the product, in one sentence. */
 export const CROSS_CHECK =
-  "The Internal Auditor is never one of the agents it reviews. The run refuses to start if it is, so no agent can mark its own work correct.";
+  "Human approval remains separate from the Auditor’s review.";
 
 /** The four beats of a run, for the line above the team. */
 export const FLOW = [
   "The CFO plans",
-  "three specialists dig",
-  "the Internal Auditor re-checks",
-  "the CFO writes it up",
+  "Specialists investigate",
+  "Auditor reviews",
+  "CFO reports",
 ];
 
 /** What a run actually does, shown before anyone has started one. */
 export const WHAT_HAPPENS = [
-  "Your committed records are frozen into one copy the agents cannot change.",
-  "The CFO agent writes a short plan and gives AP & Payments, Payroll & Budget and Grants & Compliance one job each.",
-  "Each specialist opens only the files named in its job, and writes down what it found with the lines it read.",
-  "The Internal Auditor re-opens those lines, redoes the sums, and accepts, rejects, or asks for more proof.",
-  "The CFO agent writes up only what the Auditor accepted. Everything else is listed here as unresolved.",
+  "The review uses your latest committed records.",
+  "The CFO assigns tasks to AP, Payroll and Grants.",
+  "Specialists review their assigned sources and cite findings.",
+  "The Auditor checks the evidence and calculations.",
+  "The CFO reports accepted findings and unresolved questions.",
 ];
 
 const ROLE: Record<string, AgentId> = { cfo: "cfo", ap: "ap", py: "py", gr: "gr", au: "au" };

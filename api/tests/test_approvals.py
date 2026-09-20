@@ -187,7 +187,8 @@ def test_a_public_documents_workspace_has_nothing_to_approve(client):
                                               "start": "2026-09-01", "end": "2026-09-30",
                                               "scope": "Published documents"}).json()["id"]
     bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
-    assert "approvals" in bundle["workspace"]["disabled_tabs"]
+    assert bundle["workspace"]["disabled_tabs"] == []
+    assert bundle["approvals"] == []
 
 
 def test_a_finding_says_when_its_proposal_was_decided(client):

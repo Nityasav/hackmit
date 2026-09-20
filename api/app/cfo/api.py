@@ -99,7 +99,7 @@ def _runtime(request: Request) -> CFORuntime:
                     raise TypeError("Factory must return Adapters.")
             except Exception:
                 raise HTTPException(503, "CFO_ADAPTER_FACTORY could not be loaded; check the server's integration configuration.")
-        # Use the shared intake database by default. Tests and isolated CLI/demo
+        # Use the shared intake database by default. Tests and isolated CLI
         # environments may still opt into a dedicated run database.
         repository = RunRepository(os.getenv("CFO_DB_PATH"))
         request.app.state.cfo_runtime = CFORuntime(repository, adapters)

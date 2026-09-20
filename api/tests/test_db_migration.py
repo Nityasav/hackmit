@@ -72,7 +72,7 @@ def test_coordinator_runs_and_intake_share_one_transaction(tmp_path, monkeypatch
 def test_an_explicit_path_keeps_a_run_store_isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("SCHOOLTRACE_DATA_DIR", str(tmp_path / "shared"))
     repository = RunRepository(tmp_path / "isolated.sqlite3")
-    repository.save(Run(id="CFO-2", request=RunRequest(workspace="sandbox")))
+    repository.save(Run(id="CFO-2", request=RunRequest(workspace="test-workspace")))
 
     assert repository.get("CFO-2").id == "CFO-2"
     with db.connect() as connection:

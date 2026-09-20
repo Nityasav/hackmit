@@ -1,4 +1,4 @@
-"""Labelled management-check cases and the full local judge journey.
+"""Labelled management-check cases and the full local reviewer journey.
 
 These are deterministic regression cases, not held-out LLM accuracy measurements.
 """
@@ -186,7 +186,7 @@ def test_malformed_run_body_is_bounded(client):
 
 def test_expired_sessions_and_bad_passwords_are_denied(client, monkeypatch):
     ws = start(client); configure(monkeypatch, ws)
-    assert client.post("/api/access/login", json={"username": "judge", "password": "wrong"}).status_code == 401
+    assert client.post("/api/access/login", json={"username": "reviewer", "password": "wrong"}).status_code == 401
     login(client)
     for token, (name, _) in list(security.SESSIONS.items()):
         security.SESSIONS[token] = (name, 0)
@@ -198,7 +198,7 @@ def test_reviewer_can_decide_assigned_workspace_proposal(client, monkeypatch):
     route = f"/api/workspaces/{ws}/review/actions"
     assert client.post(route, json=action_body(v)).status_code == 200
     response = client.post(route, json=action_body(v) | {"expected_version": 1, "status": "approved_proposal"})
-    assert response.status_code == 200 and response.json()["actor"] == "judge"
+    assert response.status_code == 200 and response.json()["actor"] == "reviewer"
 
 
 def test_active_run_blocks_workspace_deletion(client):
@@ -249,11 +249,11 @@ def test_dns_rebinding_host_denied(client):
 
 
 def configure(monkeypatch, ws, role="viewer"):
-    monkeypatch.setenv("SCHOOLTRACE_USERS", json.dumps({"judge": {"password_hash": security.password_hash("correct horse demo"), "role": role, "workspaces": [ws]}}))
+    monkeypatch.setenv("SCHOOLTRACE_USERS", json.dumps({"reviewer": {"password_hash": security.password_hash("correct horse test"), "role": role, "workspaces": [ws]}}))
 
 
 def login(client):
-    response = client.post("/api/access/login", json={"username": "judge", "password": "correct horse demo"})
+    response = client.post("/api/access/login", json={"username": "reviewer", "password": "correct horse test"})
     assert response.status_code == 200, response.text
     assert "HttpOnly" in response.headers["set-cookie"] and "SameSite=strict" in response.headers["set-cookie"]
 

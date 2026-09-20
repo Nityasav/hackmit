@@ -41,12 +41,12 @@ export interface GuidedWorkflow {
 }
 
 const STEPS = [
-  ["Add the school", "Name it and set the months you are looking at."],
-  ["Add the records", "Choose files, or stage the fictional sample pack."],
-  ["Check the import", "See how each file was read, and fix anything flagged."],
-  ["Commit the records", "Save one fixed set of records for the agents to work from."],
-  ["Run the investigation", "Five agents read the records and cite every line."],
-  ["Hand over the briefing", "Take the write-up to whoever asked for it."],
+  ["Add the school", "Enter the institution and review period."],
+  ["Add the records", "Upload the files for this review."],
+  ["Check the import", "Confirm columns and resolve flagged rows."],
+  ["Commit the records", "Save the validated records for review."],
+  ["Run the investigation", "Set the scope and start the agents."],
+  ["Review the briefing", "Read the findings and export the report."],
 ] as const;
 
 function withCurrent(current: number): WorkflowStep[] {
@@ -63,8 +63,8 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
   if (!workspace.id) {
     return {
       eyebrow: "Step 1 of 6",
-      title: "Add the school you are reviewing",
-      detail: "Nothing exists until you create one. Give it a name and the period its records cover.",
+      title: "Add an institution",
+      detail: "Enter its name, currency and review period.",
       action: "create",
       actionLabel: "Add a school",
       steps: withCurrent(0),
@@ -84,7 +84,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
       return {
         eyebrow: "Step 4 of 6",
         title: "Commit the records",
-        detail: "The import checked out. Committing saves one fixed set of records; the agents only ever read a committed set.",
+        detail: "Validation passed. Commit the import to make it available for review.",
         action: "import",
         actionLabel: "Go to the import",
         steps: withCurrent(3),
@@ -95,7 +95,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
       title: issues ? `Fix ${issues} flagged ${issues === 1 ? "row" : "rows"}` : "Check how the files were read",
       detail: issues
         ? "Open each flagged row against its original line and correct the mapping, then check it again."
-        : "Look at how every column was understood before any of it is committed.",
+        : "Confirm the column mappings before committing.",
       action: "import",
       actionLabel: "Open the import",
       steps: withCurrent(2),
@@ -106,7 +106,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
     return {
       eyebrow: "Step 3 of 6",
       title: "Check how the files were read",
-      detail: "The files are staged and nothing has been saved yet. Preview them to see how each column was understood.",
+      detail: "Preview the selected files and check their column mappings.",
       action: "records",
       actionLabel: "Preview the staged files",
       steps: withCurrent(2),
@@ -117,7 +117,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
     return {
       eyebrow: "Step 2 of 6",
       title: "Add this school's records",
-      detail: "Upload CSV, text or Markdown files — or stage the fictional sample pack. Nothing is saved until you preview it.",
+      detail: "Upload CSV, text or Markdown files to begin.",
       action: "records",
       actionLabel: "Add records",
       steps: withCurrent(1),
@@ -128,7 +128,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
     return {
       eyebrow: "Step 5 of 6",
       title: "The agents are working",
-      detail: "Follow them on Investigation. Each one says what it is doing and points at the line it is reading.",
+      detail: "Open Investigation for progress and results.",
       action: "investigation",
       actionLabel: "Watch the investigation",
       steps: withCurrent(4),
@@ -139,7 +139,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
     return {
       eyebrow: "Step 5 of 6",
       title: "Run the investigation",
-      detail: "Ask the agents a question in your own words. They read the committed records and make paid model calls only when you press start.",
+      detail: "Set a review question and start the agents. API charges apply.",
       action: "investigation",
       actionLabel: "Start the investigation",
       steps: withCurrent(4),
@@ -148,8 +148,8 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
 
   return {
     eyebrow: "Step 6 of 6",
-    title: "Hand over the briefing",
-    detail: `${findings} ${findings === 1 ? "finding is" : "findings are"} ready to read. The briefing is written from the records committed here and the decisions recorded against them.`,
+    title: "Review the briefing",
+    detail: `${findings} ${findings === 1 ? "finding is" : "findings are"} ready to read. Open the briefing to review and export the results.`,
     action: "briefing",
     actionLabel: "Open the briefing",
     steps: withCurrent(5),

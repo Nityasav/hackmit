@@ -90,13 +90,13 @@ function AuthForm() {
           <SherlockMark size={42} />
           <div>
             <h1 className="text-3xl font-semibold leading-none tracking-[-0.035em]">Sherlock</h1>
-            <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-ink-dim">Follow the evidence.</p>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-ink-dim">Financial review</p>
           </div>
         </div>
         <p className="mt-2 font-accent text-[14px] text-ink-dim">
           {returning
-            ? "Welcome back. Sign in to pick up where you left off."
-            : "An Office of the CFO for schools, run by AI agents."}
+            ? "Sign in to your workspace."
+            : "Review your institution’s financial records."}
         </p>
 
         <div className="mt-8 flex border-b border-line">

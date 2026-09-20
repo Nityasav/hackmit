@@ -56,22 +56,12 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 
 ## What's implemented
 
-### Laptop-first guided demo
+### Institution-owned workspaces
 
-Open **http://localhost:3000/** and choose **Try the guided financial scan**. This
-creates and commits a fresh fictional September workspace, runs actual deterministic
-record checks and opens a guided review. Inspect the repeated invoice, open source
-lines, assign follow-up, add the withheld service memo, rescan and export the director
-briefing. No API call is made by this button. Optional live five-agent review is a
-separate, clearly labelled action on `/cfo`; its accepted claims flow into the same
-Findings/Reports view. Standalone candidates remain explicitly unverified.
-
-New uploaded-workspace pages use the shared snapshot review feed. Fixed example
-workspaces remain labelled demonstrations. Proposal approval records a human decision
-only: it does not post a journal, release a payment or certify compliance.
-
-See [DEMO_IMPLEMENTATION.md](DEMO_IMPLEMENTATION.md) for test results, the demo script,
-optional role/workspace access configuration and remaining production gates.
+Every workspace starts empty. Create an institution, upload its authorized records,
+review the import, and commit a snapshot before running an investigation. No institution,
+finding, approval, or report is preloaded. Proposal approval records a human decision
+only: it does not post a journal, release a payment, or certify compliance.
 
 Document intake is backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
 review column mappings and validation issues, commit an immutable snapshot, inspect original source
@@ -90,9 +80,8 @@ Approvals. A finding carries an amount only when `app/accounting/` produced one 
 reperformed it; a proposal contains a journal only when the committed records name both funds.
 Approving one recomputes the report's before and after in exact cents.
 
-The dashboard also includes clearly labelled fixed demo workspaces. Connected five-agent
-investigation, invoice duplicate candidates, expense budget variance, payroll/grant checks and
-human follow-up work within the fictional profile. The document lab preserves PDF/image originals,
+Connected five-agent investigation, invoice duplicate candidates, expense budget variance,
+payroll/grant checks and human follow-up work operate only on the selected workspace. The document lab preserves PDF/image originals,
 supports bounded local preprocessing and human-reviewed extraction, and stages approved results
 back through normal intake validation.
 
@@ -107,10 +96,10 @@ Excel files and live financial connectors remain deferred.
 git clone https://github.com/Nityasav/hackmit.git
 cd hackmit
 
-# UI (works offline against the bundled fixtures)
+# UI
 cd web && bun install && bun dev          # http://localhost:3000
 
-# API (required for document intake; optional only for fixed demo views)
+# API (required)
 cd ../api && uv sync
 # Put OPENAI_API_KEY=... in api/.env (automatically loaded, ignored by Git).
 # Optional in the same file: OPENAI_MODEL=gpt-5.4-mini
@@ -123,14 +112,12 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > ../web/.env.local
 
 ### Try document intake
 
-Run the API and UI, then open **Command center → New institution**. Use synthetic USD data and
-September 1–30, 2026 to try the included pack. Expand **Try a fictional September input pack**,
-click **Use starter pack**, then **Preview import → Confirm & commit records**. The service record
-is deliberately omitted; download it from the sample list and upload it with the **Service evidence**
-role to fill the gap. You can attach it to a missing-evidence request after committing it.
+Run the API and UI, then open **Books → New institution**. Enter the institution and review period,
+select its files, assign each file a record type, and use **Preview import → Confirm & commit records**.
+You can add later records through the same workflow and attach committed sources to evidence requests.
 
-Intake automatically connects to `http://localhost:8000`, even when demo views use offline fixtures.
-`NEXT_PUBLIC_API_URL` overrides the URL and also enables API polling for demo views. Restart the web
+The UI automatically connects to `http://localhost:8000`.
+`NEXT_PUBLIC_API_URL` overrides the URL. Restart the web
 server after changing environment variables. No model key is needed for intake.
 
 SQLite stores original bytes, staged imports, accepted record revisions, snapshots, local review events
@@ -157,20 +144,6 @@ the Internal Auditor over the committed snapshot in one go, and links to `/cfo?r
 plan, the events and the report. What it accepts appears in Findings, on the board, in the Reasoning
 log and — where a claim is substantiated — as a proposal in Approvals.
 
-### Regenerating the recorded workspaces
-
-`contracts/fixtures/sandbox.json` is a recording of a real run, not an authored file:
-
-```bash
-cd api && uv run python scripts/seed_fixtures.py        # offline, no key, no cost
-uv run python scripts/seed_fixtures.py --live           # real model calls
-```
-
-Offline stubs only the prose; the records, the amounts, the auditor's reperformance and the bundle
-are all produced by the real code. `workspace.recorded_from` says which mode produced a recording,
-and the app shows it on every page. `mit.json` is not regenerated — its source is a published PDF
-hosted elsewhere and PDF extraction is not implemented.
-
 Single-agent triage uses `db.py`, `ingestion.py` and `agents/cfo.py`; the five-agent workflow uses
 `app/cfo/` with the adapters in `app/integrations/cfo_factory.py`, which register as soon as a model
 provider is configured. Both write to the same database and both reach the dashboard through
@@ -183,11 +156,10 @@ left alone.
 
 | Path | What's in it |
 | --- | --- |
-| `web/` | The dashboard: 8 tabs plus an MIT / Sandbox workspace switcher |
+| `web/` | The Books, Investigation and Briefing interface |
 | `api/` | Accounting engine, document intake, the agents, HTTP API |
-| `contracts/` | The shared bundle contract and the fixtures both sides read |
-| `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo |
-| `docs/design/prototype.html` | Clickable design prototype (open it in a browser) |
+| `contracts/` | The shared bundle contract |
+| `schooltrace/` | The spec: product, accounting rules, agent prompts and evaluation |
 | `PROJECT_TRACKER.md` | Verified scope and the next integration task |
 
 ### `api/` layout
@@ -196,7 +168,6 @@ left alone.
 | --- | --- |
 | `app/main.py` | HTTP endpoints |
 | `app/models.py` | Pydantic mirror of the bundle contract |
-| `app/store.py` | The two recorded workspaces, loaded from `contracts/fixtures/` |
 | `app/projection.py` | The only module that builds a dashboard bundle |
 | `app/approvals.py` | Proposals agents make and the decisions only a human may take |
 | `app/db.py` | SQLite schema, transactions, original bytes and local events |
@@ -210,7 +181,7 @@ an intentional local reviewer operation; it is not authentication. Keep the serv
 synthetic/public records. Unknown workspaces and cross-workspace source IDs return 404.
 
 Original uploads are immutable SQLite BLOBs, so a failed transaction cannot leave a DB/file-storage
-mismatch. Parsing is synchronous and bounded for the small local demo. Staging, validation and commit
+mismatch. Parsing is synchronous and bounded for local operation. Staging, validation and commit
 are atomic, persisted operations; a crash rolls back the active operation and previously saved previews
 can be resumed. There is no extra worker service or queue yet.
 

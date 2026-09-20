@@ -226,7 +226,7 @@ def test_openai_adapter_uses_structured_output_and_records_usage():
     plan = Plan(rationale="Bounded check.", tasks=[TaskSpec(id="one", role="gr", objective="Read terms.", source_ids=["award"], success_criteria="Cite clause.")])
     parse = AsyncMock(return_value=SimpleNamespace(output_parsed=plan, usage=SimpleNamespace(input_tokens=100, output_tokens=50)))
     model = StructuredCFOModel("openai", "test-model", SimpleNamespace(responses=SimpleNamespace(parse=parse)))
-    result = asyncio.run(model.plan("Check grant", asyncio.run(FixtureData().snapshot("sandbox"))))
+    result = asyncio.run(model.plan("Check grant", asyncio.run(FixtureData().snapshot("test-workspace"))))
     assert result == plan
     assert parse.call_args.kwargs["store"] is False
     assert parse.call_args.kwargs["max_output_tokens"] == 4096

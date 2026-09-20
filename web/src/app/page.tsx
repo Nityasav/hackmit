@@ -25,13 +25,12 @@ export default function BooksPage() {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">Sherlock</p>
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
-          An Office of the CFO for schools,
+          Upload your records.
           <br />
-          <span className="text-ink-dim">run by AI agents.</span>
+          <span className="text-ink-dim">Start a review.</span>
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-dim">
-          Add this school&rsquo;s records below. Five agents investigate them, show the line every number came
-          from, check each other&rsquo;s work, and hand you a decision to make.
+          Upload your records, check the import, then start an investigation.
         </p>
       </header>
 
@@ -43,22 +42,19 @@ export default function BooksPage() {
       <SourcesPanel key={ws} onProgressChange={setIntake} />
 
       <section id="source-documents" className="scroll-mt-4">
-        <h2 className="text-base font-semibold">3. A PDF, a photo or a scan</h2>
+        <h2 className="text-base font-semibold">Documents &amp; scans</h2>
         <p className="mb-3 mt-1 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-          Not everything arrives as a spreadsheet. Upload the document, check every value it produced against the
-          page it came from, then stage it for the import above. The original file is kept exactly as you gave it,
-          and every record made from it can be traced back to the page and character it was read from.
+          Upload a PDF or image and review the extracted values before importing them.
         </p>
         <DocumentIntake key={ws} />
       </section>
 
       <footer className="border-t border-line pt-5 text-sm text-ink-dim">
         <p>
-          A bounded management-review tool&mdash;not an audit opinion, fraud detector or accounting system. Use
-          fictional or approved public information only. Do not upload confidential school-board data.
+          Reviews cover the records you supply and do not constitute an audit opinion.
         </p>
         <Link href="/access" className="mt-3 inline-block underline">
-          Access, privacy &amp; deleting a workspace
+          Access &amp; data settings
         </Link>
       </footer>
     </div>

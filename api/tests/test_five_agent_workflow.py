@@ -87,7 +87,7 @@ def test_coverage_cannot_exceed_task_budget(tmp_path, models):
 def test_auditor_reperforms_engine_calculation(models):
     async def exercise():
         data = FixtureData()
-        scope = await data.snapshot("sandbox")
+        scope = await data.snapshot("test-workspace")
         run = Run(id="review", request=RunRequest())
         task = TaskState(spec=TaskSpec(id="allocation", role="py", objective="Check", success_criteria="Evidence",
                                       source_ids=[s.id for s in scope.sources]))
@@ -109,7 +109,7 @@ def test_model_client_closed_after_provider_failure(monkeypatch):
     monkeypatch.setattr(StructuredSpecialistModel, "from_env", lambda **kwargs: model)
     async def exercise():
         data = FixtureData()
-        scope = await data.snapshot("sandbox")
+        scope = await data.snapshot("test-workspace")
         task = TaskSpec(id="task", role="ap", objective="Check", success_criteria="Evidence", source_ids=["award"])
         run = Run(id="failure", request=RunRequest())
         tools = EvidenceTools(data, scope, run, TaskState(spec=task), "ap", lambda *args: None, task.source_ids)
@@ -127,7 +127,7 @@ def test_truncated_original_is_not_accepted(models):
             return span
     async def exercise():
         data = TruncatedData()
-        scope = await data.snapshot("sandbox")
+        scope = await data.snapshot("test-workspace")
         task = TaskState(spec=TaskSpec(id="task", role="gr", objective="Check", success_criteria="Evidence", source_ids=["award"]))
         tools = EvidenceTools(data, scope, Run(id="truncated", request=RunRequest()), task, "au", lambda *args: None, ["award"])
         claim = Claim(id="claim", event_key="event", title="Terms", conclusion="Terms supported", disposition="explained", evidence_ids=["award"])

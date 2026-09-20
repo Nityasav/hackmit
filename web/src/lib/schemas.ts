@@ -153,20 +153,6 @@ export const bundleSchema = z.object({
   playbooks: z.array(playbookSchema),
 });
 
-export const starterPackSchema = z.object({
-  name: z.string(),
-  start: z.string(),
-  end: z.string(),
-  files: z.array(z.object({
-    name: z.string(),
-    role: z.string(),
-    content: z.string(),
-    later: optional(z.boolean()),
-  })),
-});
-
-export type StarterPack = z.infer<typeof starterPackSchema>;
-
 /**
  * Parses a payload and, on failure, raises an error naming the first field
  * that did not match rather than dumping the whole Zod tree.

@@ -98,16 +98,7 @@ def get_bundle(ws: WorkspaceId) -> Bundle:
 
 @app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
 def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. The only path that may apply a change to a scenario.
-
-    Agents propose; nothing they can call reaches this endpoint. It decides
-    approvals recorded in the database only: the two workspaces served from a
-    recording are read-only here, because a decision written into a fixture
-    would show a status no reviewer of this installation ever took.
-    """
-    if body.workspace in projection.RECORDED:
-        raise HTTPException(status_code=409,
-                            detail=f"{body.workspace} is a recorded workspace and cannot be decided on")
+    """Human approval. Agents propose; nothing they can call reaches this endpoint."""
     approvals.decide(body.workspace, approval_id, body.decision)
     return projection.bundle(body.workspace)
 

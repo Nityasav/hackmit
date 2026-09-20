@@ -22,7 +22,7 @@ import json
 
 from fastapi import HTTPException
 
-from . import approvals as approvals_module, db, store
+from . import approvals as approvals_module, db
 from .ingestion import coverage, financial_records, source_view
 from .models import Bundle
 
@@ -49,11 +49,6 @@ DISPOSITION = {"substantiated": "substantiated", "cleared": "cleared", "explaine
 MAX_RUNS = 20
 PREVIEW_LINES = 8
 PREVIEW_CHARS = 700
-
-#: Workspaces served from a recorded fixture rather than derived from runs.
-#: Phase 8 regenerates these by running the real pipeline, which closes this seam.
-RECORDED = {"sandbox", "mit"}
-
 
 # --------------------------------------------------------------------------- #
 # Snapshot triage runs
@@ -475,16 +470,8 @@ def _note_decisions_on_findings(findings, approvals):
 
 
 def _disabled_tabs(workspace):
-    """Which tabs this workspace has no business showing.
-
-    Learning belongs to another workstream. Approvals and Workflows depend on the
-    workspace: a public-documents workspace holds published reports and no
-    transactions, so there is nothing to decide and no close to run.
-    """
-    disabled = ["learning"]
-    if workspace["kind"] == "public":
-        disabled = ["workflows", "approvals", "learning"]
-    return disabled
+    """All current workspaces use the same streamlined three-screen navigation."""
+    return []
 
 
 def _load_runs(connection, ws, snapshot_id):
@@ -514,8 +501,6 @@ def _load_runs(connection, ws, snapshot_id):
 
 def bundle(ws) -> Bundle:
     """The single entry point. Every Bundle the API serves is built here."""
-    if ws in RECORDED:
-        return store.get_bundle(ws)
     return Bundle.model_validate(_derived(ws))
 
 

@@ -50,7 +50,7 @@ def test_snapshot_maps_committed_sources_domains_and_gaps(client):
     assert scope.workspace == ws and scope.snapshot_id
     assert scope.institution == "Fictional school"
     assert scope.period == "2026-09-01 to 2026-09-30"
-    assert scope.accounting_profile == "DEMO_US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
+    assert scope.accounting_profile == "US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
     domains = {s.title: s.domain for s in scope.sources}
     assert domains["payroll.csv"] == "py" and domains["grants.csv"] == "gr"
     assert domains["ledger.csv"] == "shared"

@@ -9,19 +9,19 @@ const SEEN_KEY = "sherlock.help.seen.v1";
 
 /** What each of the three screens is for, in the order the work happens. */
 const SCREENS: Record<string, string> = {
-  books: "Everything starts here. Add this school's files, see how each column was read, and commit one fixed set of records. Nothing is saved until you have looked at it.",
-  investigation: "Ask the agents a question in your own words. Five of them read the committed records, each quotes the line behind every claim, and the Internal Auditor re-checks the others before anything reaches you.",
-  briefing: "The write-up you hand over. It is built from the records committed here and the follow-up recorded against them, and it says plainly what the review does not establish.",
+  books: "Create an institution, upload files, check the import and commit the records.",
+  investigation: "Set a review question, start the agents and inspect their findings and evidence.",
+  briefing: "Review the results, unresolved questions and follow-up. Export a report.",
 };
 
 const HOW = [
   "Add a school and the period its records cover.",
-  "Add CSV, text or Markdown files — or stage the fictional sample pack.",
+  "Add the institution's CSV, text or Markdown files.",
   "Check how each file was read, and fix anything flagged.",
   "Commit the records, so the agents work from one fixed set.",
-  "Ask the agents your question and press start.",
+  "Set a review question and start the investigation.",
   "Read what they found, and open the original line behind each claim.",
-  "Hand over the briefing.",
+  "Review and export the briefing.",
 ];
 
 export function HelpGuide() {
@@ -64,14 +64,14 @@ export function HelpGuide() {
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-4">
           <div>
             <p className="font-num text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">Sherlock guide</p>
-            <h2 id="sherlock-help-title" className="mt-1 text-xl font-bold">From a school&rsquo;s records to a briefing you can hand over</h2>
+            <h2 id="sherlock-help-title" className="mt-1 text-xl font-bold">Using Sherlock</h2>
           </div>
           <button type="button" onClick={close} className="grid h-10 w-10 place-items-center border border-line hover:bg-surface-2" aria-label="Close help">
             <X aria-hidden="true" className="h-4 w-4" />
           </button>
         </div>
         <div className="space-y-6 p-5 text-[14px] leading-6">
-          <p>There are three screens, in the order the work happens. Everything you see on them comes from the files you uploaded or from what the agents did with them.</p>
+          <p>Start with Books, then open Investigation and Briefing.</p>
           <ol className="grid gap-px border border-line bg-line">
             {NAV.map((item, index) => (
               <li key={item.id} className="bg-surface p-4">
@@ -91,14 +91,8 @@ export function HelpGuide() {
               ))}
             </ol>
           </div>
-          <div className="border-l-2 border-ink bg-surface-2 p-4">
-            <h3 className="font-semibold">The quickest way to try it</h3>
-            <p className="mt-1 text-ink-dim">
-              On <b>Books</b>, add a school, open <b>Try a fictional sample record pack</b> and stage it, then preview the import and commit it. Now go to <b>Investigation</b> and press start. That last press is the only thing that makes a paid model call; nothing during setup does.
-            </p>
-          </div>
           <p className="text-[12px] text-ink-dim">
-            {ws ? <>Current school: <b className="text-ink">{bundle.workspace.name}</b> · {bundle.workspace.period}.</> : "No school has been added yet."} Books always shows the next step from where you actually are.
+            {ws ? <>Current school: <b className="text-ink">{bundle.workspace.name}</b> · {bundle.workspace.period}.</> : "No school has been added yet."} Books shows the next step.
           </p>
           <button type="button" onClick={close} className="min-h-10 bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink-dim">Start</button>
         </div>

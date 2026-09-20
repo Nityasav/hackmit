@@ -327,7 +327,7 @@ def test_only_the_projection_module_builds_a_bundle():
     root = Path(__file__).resolve().parents[1] / "app"
     offenders = []
     for path in root.rglob("*.py"):
-        if path.name in {"projection.py", "models.py", "store.py"}:
+        if path.name in {"projection.py", "models.py"}:
             continue
         text = path.read_text(encoding="utf-8")
         if "Bundle.model_validate" in text or "-> Bundle" in text:

@@ -18,7 +18,7 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrai
 
 export const metadata: Metadata = {
   title: "Sherlock",
-  description: "Sherlock — evidence-led financial investigation for education. Five AI agents, traceable findings, human decisions.",
+  description: "Review institutional financial records, investigate exceptions and prepare reports with Sherlock.",
   applicationName: "Sherlock",
   icons: { icon: [{ url: "/sherlock-mark.svg", type: "image/svg+xml" }] },
 };

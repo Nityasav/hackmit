@@ -91,10 +91,6 @@ CREATE TABLE IF NOT EXISTS review_actions (
     finding_id TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL,
     PRIMARY KEY(ws, snapshot_id, finding_id)
 );
--- The scripted demo is gone, and so is its table. Dropping it here clears the
--- rows an older database still holds, whose workspace references would
--- otherwise refuse the deletion of the workspace that created them.
-DROP TABLE IF EXISTS demo_sessions;
 CREATE TABLE IF NOT EXISTS extraction_items (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
