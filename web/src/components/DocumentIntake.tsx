@@ -73,7 +73,10 @@ function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fi
 }
 
 /**
- * Getting a PDF, a photo or a scan into the books.
+ * Getting a PDF into the books.
+ *
+ * A scan or a photo needs character recognition, which is not installed here,
+ * so those are refused at upload rather than guessed at.
  *
  * A document is preserved byte for byte, read into page text, and then a person
  * checks every extracted value against the page it came from before any of it
@@ -104,6 +107,7 @@ function Lab({ ws }: { ws: string }) {
   const [note, setNote] = useState("");
   const [authorization, setAuthorization] = useState("");
   const [model, setModel] = useState("");
+  const [combine, setCombine] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -112,6 +116,17 @@ function Lab({ ws }: { ws: string }) {
   const doc = state?.documents.find(d => d.id === selected);
   const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
   const prediction = state?.prediction.filter(p => p.document_id === selected).at(-1);
+  // The newest correction per document, kept only where it still matches the
+  // document's current page text — a superseded one describes text that has
+  // since been re-read, and the API refuses it. Restricted to the kind now
+  // selected, because each kind extracts different columns and one register
+  // cannot hold two of them.
+  const readyToCombine = Object.values(
+    (state?.correction || []).reduce<Record<string, Correction>>((acc, c) => ({ ...acc, [c.document_id]: c }), {}),
+  ).filter(c => {
+    const named = state?.documents.find(d => d.id === c.document_id);
+    return !!named && named.role === role && named.text_sha256 === c.text_sha256;
+  });
   async function act(action: () => Promise<unknown>, success: string) {
     setBusy(true); setError(""); setMessage("");
     try { await action(); await refresh(); setMessage(success); }
@@ -149,6 +164,28 @@ function Lab({ ws }: { ws: string }) {
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
       </section>
+      {readyToCombine.length > 1 && <section className="border border-line p-5">
+        <h3 className="text-[15px] font-semibold tracking-tight">Combine several into one register</h3>
+        <p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">
+          Staging one at a time makes one import per document. These have all been checked and are
+          the same kind, so their rows can go into a single spreadsheet you review and commit once.
+          Each document still keeps its own evidence file, so every value stays traceable to the
+          page it came from.
+        </p>
+        <ul className="my-3 space-y-1">{readyToCombine.map(c => {
+          const named = state.documents.find(d => d.id === c.document_id);
+          return <li key={c.id} className="text-[13px]"><label className="flex items-center gap-2">
+            <input type="checkbox" checked={combine.includes(c.id)} disabled={busy}
+              onChange={e => setCombine(prev => e.target.checked ? [...prev, c.id] : prev.filter(x => x !== c.id))} />
+            {named?.name || c.document_id} · {named ? displayLabel(named.role) : ""}
+          </label></li>;
+        })}</ul>
+        <button className={button} disabled={busy || combine.length < 2}
+          onClick={() => act(async () => { await post("/stage-set", { correction_ids: combine, include_records: true }); setCombine([]); },
+            "Combined into one import. Scroll up to the import, check it, then commit it.")}>
+          {combine.length < 2 ? "Select at least two" : `Combine ${combine.length} into one import`}
+        </button>
+      </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
         <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
           {/* The local model takes roughly half a minute per document, so this

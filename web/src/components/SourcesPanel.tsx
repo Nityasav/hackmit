@@ -162,8 +162,8 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
 
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
-        <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
-        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
+        <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
+        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv" disabled={busy}
           onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
         {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
           <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>

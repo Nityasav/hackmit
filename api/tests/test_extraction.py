@@ -514,3 +514,97 @@ def test_a_grant_agreement_is_staged_as_the_contract_it_is():
 
     assert EVIDENCE_ROLE["grants"] == "contract"
     assert "contract" in AGENTS["B2"].roles, "Accruals reads the terms behind a commitment"
+
+
+def _invoice(client, ws, number, amount):
+    """One checked invoice document, ready to stage."""
+    text = (f"Invoice {number} vendor V-1 amount {amount} dated 2026-09-01 "
+            "due 2026-10-01 currency USD")
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": (f"{number}.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": number, "vendor_id": "V-1", "amount": amount,
+                       "invoice_date": "2026-09-01", "due_date": "2026-10-01",
+                       "currency": "USD"}.items():
+        if key in record and value in page:
+            start = page.index(value)
+            record[key] = {"status": "present", "value": value, "page": 1,
+                           "start": start, "end": start + len(value)}
+    return client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "vendor-template-a", "training_authorized": True,
+        "authorization_note": "Synthetic fixture owned by test",
+        "note": "Compared against original", "text_sha256": doc["text_sha256"]}).json()
+
+
+def test_several_invoices_combine_into_one_register(client):
+    """Staging one at a time produced one import per document, so twenty
+    invoices meant twenty batches holding a single row each. They belong in one
+    spreadsheet a person reviews and commits once."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"),
+                   _invoice(client, ws, "A-102", "850.00"),
+                   _invoice(client, ws, "A-103", "430.00")]
+
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True})
+    assert staged.status_code == 201, staged.text
+    assert staged.json()["combined"] == 3 and staged.json()["rows"] == 3
+
+    batch = ingestion.get_batch(ws, staged.json()["batch_id"])
+    csvs = [f for f in batch["files"] if f["name"].endswith(".csv")]
+    assert len(csvs) == 1, "three invoices must produce one register, not three"
+    assert csvs[0]["row_count"] == 3
+    # Every document still contributes its own evidence, because the page
+    # citations belong to the PDF they came from.
+    assert len([f for f in batch["files"] if f["name"].endswith(".txt")]) == 3
+
+
+def test_combined_rows_keep_a_distinct_identity_per_document(client):
+    """Rows gathered from several documents must not collide on record_id, or
+    the register silently holds fewer invoices than were uploaded."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"), _invoice(client, ws, "A-102", "850.00")]
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    keys = [row["key"] for row in register["preview"]]
+    assert len(set(keys)) == len(keys) == 2, keys
+
+
+def test_a_set_mixing_document_kinds_is_refused(client):
+    """Each kind extracts different columns, so one register cannot hold two of
+    them without inventing values for the fields the other lacks."""
+    ws = workspace(client)
+    invoice = _invoice(client, ws, "A-101", "1200.00")
+    policy_doc = upload(client, ws, text="Expenses over 500.00 need a second approver.", role="policy")
+    policy_correction = correction(client, ws, policy_doc)
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [invoice["id"], policy_correction["id"]], "include_records": True})
+
+    assert response.status_code == 422
+    assert "one kind of document at a time" in response.json()["detail"]
+
+
+def test_a_superseded_correction_cannot_be_combined(client):
+    """The same guard the single path applies: values nobody checked against
+    the text they now describe must not reach an import."""
+    ws = workspace(client)
+    first = _invoice(client, ws, "A-101", "1200.00")
+    doc_id = first["document_id"]
+    current = next(d for d in client.get(path(ws)).json()["documents"] if d["id"] == doc_id)
+    client.post(path(ws) + f"/documents/{doc_id}/transcription", json={
+        "expected_text_sha256": current["text_sha256"],
+        "pages": ["Invoice A-101 vendor V-1 amount 9999.00 dated 2026-09-01"],
+        "note": "Re-read the original"})
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [first["id"]], "include_records": True})
+
+    assert response.status_code == 409

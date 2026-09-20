@@ -724,6 +724,138 @@ class Stage(Strict):
     include_records: bool = False
 
 
+class StageSet(Strict):
+    """Several checked documents of one kind, staged as one import.
+
+    Staging one at a time produces one batch per document, so twenty invoices
+    meant twenty separate imports to review and commit, each holding a single
+    row. They belong in one register.
+    """
+
+    #: 29 leaves room for the combined CSV inside the 30-file batch limit.
+    correction_ids: list[str] = Field(min_length=1, max_length=29)
+    include_records: bool = True
+
+
+def _evidence_lines(doc: dict, correction: dict) -> list[str]:
+    """The corroborating text for one document, carrying its page citations."""
+    lines = [f"Reviewed extraction from {doc['name']} (original {doc['id']}, SHA256 {doc['sha256']}).",
+             "Human-reviewed transcription; not an audit conclusion. Original available in Document lab."]
+    for i, record in enumerate(correction["output"]["records"]):
+        for key, obs in record.items():
+            if obs["status"] == "present":
+                lines.append(f"Record {i+1} {key}: {obs['value']} "
+                             f"[original page {obs['page']}, characters {obs['start']}:{obs['end']}]")
+    return lines
+
+
+def _record_rows(doc: dict, correction: dict, required: list[str]) -> list[dict]:
+    """One document's checked values as intake rows.
+
+    `record_id` is namespaced by the document's lineage, so rows gathered from
+    several documents into one register cannot collide on it.
+    """
+    lineage = doc.get("lineage_id", doc["id"])
+    rows = []
+    for i, record in enumerate(correction["output"]["records"]):
+        row = {key: obs["value"] for key, obs in record.items()
+               if obs["status"] == "present" and key in required + CARRY_FIELDS}
+        row = {key: normalize_for_intake(key, value, row.get("currency")) for key, value in row.items()}
+        if "record_id" in required and not row.get("record_id"):
+            row["record_id"] = f"{lineage}:{i+1}"
+        rows.append(row)
+    return rows
+
+
+def _records_csv(required: list[str], rows: list[dict]) -> bytes:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=required + [x for x in CARRY_FIELDS if x not in required])
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue().encode()
+
+
+def _current_correction(c, ws: str, correction_id: str) -> tuple[dict, dict]:
+    """A correction and its document, refusing anything superseded.
+
+    Staging a correction that a newer one replaced, or whose page text was
+    re-transcribed underneath it, would import values nobody checked against
+    the text they now describe.
+    """
+    correction = get(c, ws, correction_id, "correction")
+    doc = document(c, ws, correction["document_id"])
+    latest = [x for x in items(c, ws, "correction") if x["document_id"] == doc["id"]][-1]
+    if latest["id"] != correction["id"] or correction["text_sha256"] != doc["text_sha256"]:
+        raise HTTPException(409, "Correction superseded")
+    return correction, doc
+
+
+@router.post("/stage-set", status_code=201)
+def stage_set(ws: str, body: StageSet, request: Request):
+    """Stage several checked documents of one kind as a single import.
+
+    The rows land in one register — twenty invoices become one spreadsheet to
+    review and commit, not twenty imports holding a row each. Each document
+    still contributes its own evidence file, because the page citations belong
+    to the document they came from and merging those would lose the trail back
+    to which PDF said what.
+    """
+    actor = reviewer(request)
+    if len(set(body.correction_ids)) != len(body.correction_ids):
+        raise HTTPException(422, "The same correction is listed twice")
+
+    with db.connect() as c:
+        pairs = [_current_correction(c, ws, ident) for ident in body.correction_ids]
+
+    kinds = {doc["role"] for _, doc in pairs}
+    if len(kinds) > 1:
+        # Each kind extracts different columns, so one register cannot hold two
+        # of them without inventing values for the fields the other lacks.
+        raise HTTPException(422, "Stage one kind of document at a time; this set mixes "
+                                 + ", ".join(sorted(kinds)))
+    kind = kinds.pop()
+    intake_role = INTAKE_ROLE[kind]
+    if body.include_records and (not intake_role or intake_role in ingestion.DOCUMENT_ROLES):
+        raise HTTPException(422, f"{kind} documents have no record register to combine into; "
+                                 "stage them individually as evidence")
+
+    history = _corrections(ws)
+    uploads, rows = [], []
+    required = list(roles.FIELDS[intake_role]) if body.include_records else []
+    for correction, doc in pairs:
+        revision = next(i + 1 for i, x in enumerate(history) if x["id"] == correction["id"])
+        lineage = doc.get("lineage_id", doc["id"])
+        uploads.append((
+            f"reviewed-evidence-{lineage}.txt",
+            "\n".join(_evidence_lines(doc, correction)).encode(),
+            ingestion.FileOptions(role=EVIDENCE_ROLE.get(kind, "document"),
+                                  source_system="reviewed-extraction",
+                                  external_id=lineage, source_version=revision)))
+        if body.include_records:
+            rows.extend(_record_rows(doc, correction, required))
+
+    if body.include_records:
+        uploads.append(("reviewed-records.csv", _records_csv(required, rows),
+                        ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction",
+                                              source_version=1)))
+
+    with db.connect() as c:
+        # Re-check under the write lock: a correction or transcription may have
+        # moved while the CSV was being built.
+        for ident in body.correction_ids:
+            _current_correction(c, ws, ident)
+        batch = ingestion.stage_in_transaction(c, ws, uploads)
+        staged = put(c, ws, "staging", {
+            "correction_id": body.correction_ids[0],
+            "correction_ids": body.correction_ids,
+            "include_records": body.include_records,
+            "document_id": pairs[0][1]["id"],
+            "batch_id": batch["id"], "status": batch["status"],
+            "combined": len(pairs), "rows": len(rows),
+        }, actor)
+    return staged
+
+
 @router.post("/stage")
 def stage(ws: str, body: Stage, request: Request):
     actor = reviewer(request)
@@ -738,31 +870,19 @@ def stage(ws: str, body: Stage, request: Request):
             return existing[-1]
     # A corroborating TXT source carries original page citations. Financial CSVs
     # stay pending in the existing intake validation/explicit commit workflow.
-    lines = [f"Reviewed extraction from {doc['name']} (original {doc['id']}, SHA256 {doc['sha256']}).",
-             "Human-reviewed transcription; not an audit conclusion. Original available in Document lab."]
-    for i, record in enumerate(correction["output"]["records"]):
-        for key, obs in record.items():
-            if obs["status"] == "present":
-                lines.append(f"Record {i+1} {key}: {obs['value']} [original page {obs['page']}, characters {obs['start']}:{obs['end']}]")
     revision = next(i + 1 for i, x in enumerate(_corrections(ws)) if x["id"] == correction["id"])
     lineage = doc.get("lineage_id", doc["id"])
     evidence_role = EVIDENCE_ROLE.get(doc["role"], "document")
-    uploads = [("reviewed-evidence.txt", "\n".join(lines).encode(), ingestion.FileOptions(role=evidence_role, source_system="reviewed-extraction", external_id=lineage, source_version=revision))]
+    uploads = [("reviewed-evidence.txt", "\n".join(_evidence_lines(doc, correction)).encode(),
+                ingestion.FileOptions(role=evidence_role, source_system="reviewed-extraction",
+                                      external_id=lineage, source_version=revision))]
     intake_role = INTAKE_ROLE[doc["role"]]
     if body.include_records and intake_role and intake_role not in ingestion.DOCUMENT_ROLES:
         required = list(roles.FIELDS[intake_role])
-        rows = []
-        for i, record in enumerate(correction["output"]["records"]):
-            row = {key: obs["value"] for key, obs in record.items() if obs["status"] == "present" and key in required + CARRY_FIELDS}
-            row = {key: normalize_for_intake(key, value, row.get("currency")) for key, value in row.items()}
-            # An internal ingestion ID isn't an extracted fact; namespace it explicitly.
-            if "record_id" in required and not row.get("record_id"):
-                row["record_id"] = f"{lineage}:{i+1}"
-            rows.append(row)
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=required + [x for x in CARRY_FIELDS if x not in required])
-        writer.writeheader(); writer.writerows(rows)
-        uploads.append(("reviewed-records.csv", buf.getvalue().encode(), ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction", source_version=revision)))
+        uploads.append(("reviewed-records.csv",
+                        _records_csv(required, _record_rows(doc, correction, required)),
+                        ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction",
+                                              source_version=revision)))
     with db.connect() as c:
         latest = [x for x in items(c, ws, "correction") if x["document_id"] == doc["id"]][-1]
         if latest["id"] != correction["id"] or document(c, ws, doc["id"])["text_sha256"] != doc["text_sha256"]:

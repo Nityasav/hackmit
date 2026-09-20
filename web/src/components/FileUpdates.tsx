@@ -69,8 +69,8 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
         increase the version, then commit and rescan.
       </p>
       <div className="flex flex-wrap gap-4 text-[13px]">
-        <a className="underline" href="#source-records">Add CSV or text records</a>
-        <a className="underline" href="#source-documents">Add a PDF or photo</a>
+        <a className="underline" href="#source-records">Add CSV records</a>
+        <a className="underline" href="#source-documents">Add a PDF document</a>
         <Link className="underline" href="/investigation">Investigation</Link>
       </div>
 
