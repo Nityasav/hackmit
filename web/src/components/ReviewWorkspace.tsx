@@ -4,6 +4,7 @@ import { displayLabel } from "@/lib/format";
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { Decisions } from "@/components/Decisions";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { SourceDetail } from "@/lib/types";
 
@@ -94,6 +95,11 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
         </div>
         <p className="mt-2 text-xs text-ink-dim">Each conclusion appears below with its evidence. An escalated one is waiting on a person; none of them approves, posts or pays anything.</p></section>}
       {view.changes.length > 0 && <section className="border border-green-300 bg-green-50 p-4"><h2 className="font-semibold">What changed after the latest scan?</h2>{view.changes.map(c => <div className="mt-3" key={c.id}><b>{c.title}</b><p className="text-sm">Before: {c.before}</p><p className="text-sm">Now: {c.after}</p></div>)}<p className="mt-3 text-xs">Adding evidence does not automatically approve its contents or resolve a finding.</p></section>}
+      {/* Also on Investigation, beside the precedent it produces. It belongs
+          on both: that screen shows the loop, this one is where a person
+          comes to review and act, and looking for it here first is the
+          reasonable instinct. */}
+      <Decisions />
       {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="rc">Money coming in</option></select></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
