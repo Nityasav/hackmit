@@ -198,4 +198,14 @@ reports state. Measured numbers come from the evaluator, never from a slide.
 
 ## Team
 
+### Web login configuration
+
+The web dashboard requires Supabase sign-in. Set `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` in ignored `web/.env.local`, then restart the web
+server (rebuild for production). Use the publishable/anon key, never a service-role
+key. Without configuration, the app returns a setup message with HTTP 503 and
+does not bypass authentication. Supabase web login and the optional local API
+accounts are separate; this is still a laptop demo, not end-to-end hosted tenant
+authorization.
+
 - [Nityasav](https://github.com/Nityasav) · [hppddub](https://github.com/hppddub) · Maxim · Stanley
