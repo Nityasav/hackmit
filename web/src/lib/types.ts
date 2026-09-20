@@ -25,6 +25,8 @@ export interface Workspace {
   run_budget: { used: number; total: number };
   source_url?: string;
   intake?: boolean;
+  /** For a recorded workspace, what the recording is of. */
+  recorded_from?: string | null;
   currency?: string;
   profile?: string;
 }

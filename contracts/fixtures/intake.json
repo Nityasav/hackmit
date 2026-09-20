@@ -34,6 +34,11 @@
       "content": "# Fictional Student Support Award\nAward: GRANT-1\nValid: 2026-09-01 through 2027-06-30.\nShared staff costs require actual service records; budget percentages alone are not sufficient.\nAll entities and terms in this document are fictional.\n"
     },
     {
+      "name": "invoices.csv",
+      "role": "invoice",
+      "content": "record_id,vendor_id,invoice_number,service_date,amount,po_id,receipt_id,award_id\nINV-1,V-1,A-100,2026-09-08,1200.00,PO-1,GR-1,\nINV-2,V-1,A-100,2026-09-22,1200.00,,,\nINV-3,V-2,B-200,2026-09-20,850.00,PO-2,,GRANT-1\n"
+    },
+    {
       "name": "service-record.md",
       "role": "service",
       "later": true,

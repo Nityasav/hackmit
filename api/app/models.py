@@ -36,6 +36,9 @@ class Workspace(BaseModel):
     run_budget: RunBudget
     source_url: str | None = None
     intake: bool = False
+    #: For a recorded workspace, what the recording is of: the run, when, and
+    #: with which model. Absent on a live workspace, which speaks for itself.
+    recorded_from: str | None = None
     currency: str = "USD"
     profile: str | None = None
 
