@@ -37,12 +37,12 @@ export default function CommandCenter() {
           <AgentAvatar id="cfo" />
           <b>CFO Agent</b>
           <AiTag>AI briefing</AiTag>
-          <span className="ml-auto text-[13px] text-ink-dim">generated {briefing.generated_at}</span>
+          <span className="ml-auto font-accent text-[13px] text-ink-dim">generated {briefing.generated_at}</span>
         </div>
         <p className="my-2.5 text-[15px]">
           {highlights(briefing.text).map(([part, strong], i) =>
             strong ? (
-              <b key={i} className="rounded-[3px] bg-surface-3 px-0.5 font-semibold">
+              <b key={i} className="rounded-none bg-surface-3 px-0.5 font-semibold">
                 {part}
               </b>
             ) : (
@@ -83,7 +83,7 @@ export default function CommandCenter() {
               <div key={w.id} className="grid grid-cols-[minmax(0,220px)_1fr_46px] items-center gap-2 py-1 text-[13.5px]">
                 <span className="truncate">{w.name}</span>
                 <ProgressBar value={w.progress} />
-                <b className="text-right tabular-nums">{w.progress}%</b>
+                <b className="text-right font-num tabular-nums">{w.progress}%</b>
               </div>
             ))}
           </Card>
@@ -115,17 +115,17 @@ export default function CommandCenter() {
             <div key={k.label} className="p-3">
               <small className="block text-[12.5px] text-ink-dim">{k.label}</small>
               <b className="text-xl font-bold">{k.value}</b>
-              <em className={`block text-[12.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-ink"}`}>
+              <em className={`block font-accent text-[13px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-ink"}`}>
                 {k.note}
               </em>
             </div>
           ))}
           <div className="p-3">
             <small className="block text-[12.5px] text-ink-dim">Tasks done</small>
-            <b className="text-xl font-bold tabular-nums">
+            <b className="text-xl font-bold font-num tabular-nums">
               {done} / {tasks.length}
             </b>
-            <em className="block text-[12.5px] not-italic text-ink-dim">
+            <em className="block font-accent text-[13px] not-italic text-ink-dim">
               {findings.length} findings · {pending} waiting on you
             </em>
           </div>

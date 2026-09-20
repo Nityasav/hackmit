@@ -138,7 +138,7 @@ function SidebarContent() {
                 <motion.span
                   animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
                   className={cn(
-                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[12px] font-bold",
+                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-none px-1.5 text-[12px] font-bold",
                     link.id === "approvals" ? "bg-ink text-white" : "bg-surface-3 text-ink-dim",
                   )}
                 >
@@ -146,7 +146,7 @@ function SidebarContent() {
                 </motion.span>
               )}
               {link.id === "approvals" && pending > 0 && !open && (
-                <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-full bg-ink ring-2 ring-surface-2" />
+                <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-none bg-ink ring-2 ring-surface-2" />
               )}
             </div>
           ))}
@@ -158,7 +158,7 @@ function SidebarContent() {
           link={{
             label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
             href: "/board",
-            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-full p-1 text-ink-dim" />,
+            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
           }}
         />
       </div>
@@ -189,7 +189,7 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-ink to-ink-dim" />
+      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -207,7 +207,7 @@ export const LogoIcon = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0 rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm bg-gradient-to-br from-ink to-ink-dim" />
+      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
     </Link>
   );
 };

@@ -121,7 +121,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[13px] ${
+      className={`cursor-pointer rounded-none border px-2.5 py-1 text-[13px] ${
         active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-ink"
       }`}
     >

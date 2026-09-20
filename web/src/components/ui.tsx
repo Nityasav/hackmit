@@ -29,7 +29,7 @@ export function AgentAvatar({ id, size = "md" }: { id: AgentId; size?: "sm" | "m
   return (
     <span
       title={AGENT_NAME[id]}
-      className={`${AGENT_BG[id]} ${dims} inline-flex flex-none items-center justify-center rounded-[7px] font-bold text-white`}
+      className={`${AGENT_BG[id]} ${dims} inline-flex flex-none items-center justify-center rounded-none font-bold text-white`}
     >
       {AGENT_SHORT[id]}
     </span>
@@ -37,18 +37,18 @@ export function AgentAvatar({ id, size = "md" }: { id: AgentId; size?: "sm" | "m
 }
 
 export function Pulse({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-full bg-ink ${className}`} />;
+  return <span className={`inline-block h-[7px] w-[7px] flex-none animate-ping-soft rounded-none bg-ink ${className}`} />;
 }
 
 export function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`rounded-[10px] border border-line bg-surface p-4 ${className}`}>{children}</div>;
+  return <div className={`rounded-none border border-line bg-surface p-4 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
       {children}
-      {right && <span className="ml-auto text-[13px] font-normal text-ink-dim">{right}</span>}
+      {right && <span className="ml-auto font-accent text-[13px] font-normal text-ink-dim">{right}</span>}
     </div>
   );
 }
@@ -56,8 +56,8 @@ export function CardTitle({ children, right }: { children: React.ReactNode; righ
 export function PageHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-center gap-3">
-      <h1 className="font-display text-2xl font-bold">{title}</h1>
-      {subtitle && <span className="ml-1 text-[14px] text-ink-dim">{subtitle}</span>}
+      <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+      {subtitle && <span className="ml-1 font-accent text-[15px] text-ink-dim">{subtitle}</span>}
       {right && <span className="ml-auto">{right}</span>}
     </div>
   );
@@ -85,7 +85,7 @@ const TONE: Record<Tone, string> = {
 
 export function Pill({ tone = "gray", children, className = "" }: { tone?: Tone; children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONE[tone]} ${className}`}>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-none px-2.5 py-1 text-[12px] font-semibold ${TONE[tone]} ${className}`}>
       {children}
     </span>
   );

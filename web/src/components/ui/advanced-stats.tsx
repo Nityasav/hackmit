@@ -58,7 +58,7 @@ export default function AdvancedStats() {
         <TimelineAnimation
           animationNum={1}
           timelineRef={timelineRef}
-          className="rounded-[10px] border border-line bg-surface p-3 lg:col-span-2"
+          className="rounded-none border border-line bg-surface p-3 lg:col-span-2"
         >
           <div className="mb-2 flex items-baseline gap-2">
             <h2 className="text-[14px] font-semibold">Exposure across the close</h2>
@@ -73,7 +73,7 @@ export default function AdvancedStats() {
           <TimelineAnimation
             animationNum={2}
             timelineRef={timelineRef}
-            className="flex h-full flex-col justify-between rounded-[10px] border border-ink bg-surface-2 p-3"
+            className="flex h-full flex-col justify-between rounded-none border border-ink bg-surface-2 p-3"
           >
             <div>
               <div className="text-[13px] text-ink-dim">Money accounted for</div>
@@ -83,7 +83,7 @@ export default function AdvancedStats() {
             </div>
             <div className="mt-4">
               <div className="mb-1.5 flex items-end justify-between">
-                <span className="text-2xl font-bold tabular-nums">
+                <span className="text-2xl font-bold font-num tabular-nums">
                   {settledPct}%
                 </span>
                 <span className="mb-1 text-[13px] text-ink-dim">
@@ -96,10 +96,10 @@ export default function AdvancedStats() {
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label="Share of flagged money that is accounted for"
-                className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
+                className="h-1.5 w-full overflow-hidden rounded-none bg-surface-3"
               >
                 <div
-                  className="h-full rounded-full bg-ink transition-[width] duration-700"
+                  className="h-full rounded-none bg-ink transition-[width] duration-700"
                   style={{ width: `${settledPct}%` }}
                 />
               </div>
@@ -109,7 +109,7 @@ export default function AdvancedStats() {
           <TimelineAnimation
             animationNum={3}
             timelineRef={timelineRef}
-            className="h-full rounded-[10px] border border-line bg-surface p-3"
+            className="h-full rounded-none border border-line bg-surface p-3"
           >
             <h3 className="text-[14px] font-semibold">Auditor check</h3>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-dim">
@@ -130,13 +130,13 @@ export default function AdvancedStats() {
             animationNum={4 + i}
             timelineRef={timelineRef}
             className={cn(
-              "rounded-[10px] border border-line bg-surface p-3 transition-colors",
+              "rounded-none border border-line bg-surface p-3 transition-colors",
               kpi.tone === "warn" ? "hover:border-ink-faint" : "hover:border-ink",
             )}
           >
             <p className="mb-1.5 text-[12.5px] text-ink-dim">{kpi.label}</p>
             <div className="flex items-baseline justify-between gap-2">
-              <p className="text-xl font-bold tabular-nums">{kpi.value}</p>
+              <p className="text-xl font-bold font-num tabular-nums">{kpi.value}</p>
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[12.5px] font-semibold",
@@ -153,11 +153,11 @@ export default function AdvancedStats() {
         <TimelineAnimation
           animationNum={4 + kpis.length}
           timelineRef={timelineRef}
-          className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-ink"
+          className="rounded-none border border-line bg-surface p-3 transition-colors hover:border-ink"
         >
           <p className="mb-1.5 text-[12.5px] text-ink-dim">Waiting on you</p>
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-xl font-bold tabular-nums">
+            <p className="text-xl font-bold font-num tabular-nums">
               {approvals.filter((a) => a.status === "pending").length}
             </p>
             <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[12.5px] font-semibold text-ink-dim">

@@ -7,8 +7,19 @@
 
 @theme {
   --font-sans: var(--font-raleway), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-num: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-accent: var(--font-playfair), ui-serif, Georgia, serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+
+  /* Square by default. One radius value, and that value is zero. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 
   /* White surfaces on a barely-there page, separated by grey hairlines. */
   --color-canvas: #fbfbfc;
@@ -75,6 +86,14 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
+}
+
+/* Square, everywhere, including vendored components that ship their own radii.
+   One rule so no file has to be edited and no stray curve can creep back. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
 }
 
 html {

@@ -27,13 +27,13 @@ export default function WorkflowsPage() {
           <div className="mb-2 flex items-center gap-2">
             <AgentAvatar id={w.owner} size="sm" />
             <b className="text-[15px]">{w.name}</b>
-            <span className="text-[13.5px] text-ink-dim">owner: {AGENT_NAME[w.owner]}</span>
-            <b className="ml-auto tabular-nums">{w.progress}%</b>
+            <span className="font-accent text-[14px] text-ink-dim">owner: {AGENT_NAME[w.owner]}</span>
+            <b className="ml-auto font-num tabular-nums">{w.progress}%</b>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {w.stages.map((s, i) => (
               <span key={s.name} className="flex items-center gap-1">
-                <span className={`flex items-center gap-2 rounded-[7px] border px-2.5 py-2.5 text-[13px] font-medium ${STAGE_STYLE[s.state]}`}>
+                <span className={`flex items-center gap-2 rounded-none border px-2.5 py-2.5 text-[13px] font-medium ${STAGE_STYLE[s.state]}`}>
                   {s.state === "running" && <Pulse />}
                   {s.state === "done" && <Check className="h-3.5 w-3.5" aria-hidden />}
                   {s.state === "human" && <UserCheck className="h-3.5 w-3.5" aria-hidden />}

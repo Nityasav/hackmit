@@ -62,7 +62,7 @@ function TaskCard({ task, asHandle, ...props }: TaskCardProps) {
               <span className="line-clamp-1">{task.assignee}</span>
             </div>
           )}
-          {task.dueDate && <time className="text-[10px] tabular-nums whitespace-nowrap">{task.dueDate}</time>}
+          {task.dueDate && <time className="text-[10px] font-num tabular-nums whitespace-nowrap">{task.dueDate}</time>}
         </div>
       </div>
     </div>

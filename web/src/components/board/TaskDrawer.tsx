@@ -56,7 +56,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           <div className="my-1.5 text-[17px] font-bold">{task.title}</div>
           <div className="flex items-center gap-2">
             <ProgressBar value={task.progress} className="h-2 flex-1" />
-            <b className="tabular-nums">{task.progress}%</b>
+            <b className="font-num tabular-nums">{task.progress}%</b>
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             <Stat label="Step" value={`${Math.min(doneSteps + 1, task.steps.length)} of ${task.steps.length}`} />
@@ -70,7 +70,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           {task.steps.map((s, i) => (
             <div key={i} className="grid grid-cols-[20px_1fr] gap-2 py-1">
               <span
-                className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[12px] font-bold ${
+                className={`flex h-[18px] w-[18px] items-center justify-center rounded-none text-[12px] font-bold ${
                   s.state === "done"
                     ? "bg-surface-2 text-ink"
                     : s.state === "running"
@@ -127,9 +127,9 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[7px] bg-surface-2 px-2 py-2.5">
+    <div className="rounded-none bg-surface-2 px-2 py-2.5">
       <small className="block text-[12px] text-ink-dim">{label}</small>
-      <b className="text-[15px] tabular-nums">{value}</b>
+      <b className="text-[15px] font-num tabular-nums">{value}</b>
     </div>
   );
 }

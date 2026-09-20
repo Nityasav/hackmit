@@ -69,13 +69,13 @@ export const Component = () => {
   return (
     <section className="w-full">
       <div className="mb-3 flex max-w-2xl flex-col gap-2">
-        <div className="flex w-fit items-center gap-2 rounded-full border border-ink bg-surface-2 px-2.5 py-1">
+        <div className="flex w-fit items-center gap-2 rounded-none border border-ink bg-surface-2 px-2.5 py-1">
           <Sparkles className="h-3.5 w-3.5 text-ink" aria-hidden />
           <span className="text-[13px] font-semibold text-ink">
             {workspace.mode === "live" ? "Running live" : `Mode: ${workspace.mode}`}
           </span>
         </div>
-        <h2 className="font-display text-xl font-bold">How the agents learn</h2>
+        <h2 className="text-xl font-bold tracking-tight">How the agents learn</h2>
         <p className="text-[14px] leading-relaxed text-ink-dim">
           Agents write playbooks from cases they have seen before. A playbook only takes
           effect once a replay of earlier months adds no false positives and you approve it.
@@ -84,7 +84,7 @@ export const Component = () => {
 
       <div className="grid gap-4 md:grid-cols-4">
         {/* Who is on the books */}
-        <div className="flex flex-col gap-3 rounded-[10px] border border-line bg-surface p-3 md:col-span-2">
+        <div className="flex flex-col gap-3 rounded-none border border-line bg-surface p-3 md:col-span-2">
           <div>
             <div className="mb-2 flex w-fit items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1 text-[12.5px] font-semibold text-ink-dim">
               <Lightbulb className="h-3.5 w-3.5" aria-hidden />
@@ -131,7 +131,7 @@ export const Component = () => {
         </div>
 
         {/* Memory on vs off */}
-        <div className="rounded-[10px] border border-line bg-surface p-3">
+        <div className="rounded-none border border-line bg-surface p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="rounded-md border border-line bg-surface-2 p-1.5">
               <ChartColumn className="h-4 w-4 text-ink" aria-hidden />
@@ -159,10 +159,10 @@ export const Component = () => {
               >
                 <p className="text-[12.5px] text-ink-dim">{m.label}</p>
                 <div className="mt-0.5 flex items-baseline justify-between gap-2">
-                  <span className="text-[13.5px] font-semibold tabular-nums">
+                  <span className="text-[13.5px] font-semibold font-num tabular-nums">
                     {m.with}
                   </span>
-                  <span className="text-[12.5px] tabular-nums text-ink-faint">
+                  <span className="text-[12.5px] font-num tabular-nums text-ink-faint">
                     was {m.without}
                   </span>
                 </div>
@@ -172,7 +172,7 @@ export const Component = () => {
         </div>
 
         {/* What the agents are allowed to call */}
-        <div className="rounded-[10px] border border-line bg-surface p-3">
+        <div className="rounded-none border border-line bg-surface p-3">
           <div className="mb-2 w-fit rounded-md border border-line bg-surface-2 p-1.5">
             <Layers className="h-4 w-4 text-ink" aria-hidden />
           </div>
@@ -197,7 +197,7 @@ export const Component = () => {
         </div>
 
         {/* A real decision record */}
-        <div className="rounded-[10px] border border-line bg-surface p-3 md:col-span-4">
+        <div className="rounded-none border border-line bg-surface p-3 md:col-span-4">
           <div className="mb-2 flex items-center gap-2">
             <div className="rounded-md border border-line bg-surface-2 p-1.5">
               <Terminal className="h-4 w-4 text-ink" aria-hidden />
@@ -225,11 +225,11 @@ export const Component = () => {
           return (
             <div
               key={stat.label}
-              className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-ink"
+              className="rounded-none border border-line bg-surface p-3 transition-colors hover:border-ink"
             >
               <Icon className="mb-2 h-4 w-4 text-ink" aria-hidden />
               <p className="text-[12.5px] text-ink-dim">{stat.label}</p>
-              <p className="mt-0.5 text-xl font-bold tabular-nums">
+              <p className="mt-0.5 text-xl font-bold font-num tabular-nums">
                 {stat.value}
               </p>
             </div>

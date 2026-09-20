@@ -54,7 +54,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
             <Box title="🛠 How: tools it called">
               {d.how.map((h, i) => (
                 <div key={i} className="grid grid-cols-[18px_1fr] gap-2 py-0.5">
-                  <span className="mt-px flex h-4 w-4 items-center justify-center rounded-full bg-surface-3 text-[11px] font-bold text-ink-dim">
+                  <span className="mt-px flex h-4 w-4 items-center justify-center rounded-none bg-surface-3 text-[11px] font-bold text-ink-dim">
                     {i + 1}
                   </span>
                   <span>

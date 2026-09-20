@@ -35,7 +35,7 @@ export default function FindingsPage() {
                 <span className="text-ink-dim">{f.summary}</span>
               </div>
               <span className="ml-auto flex flex-none items-center gap-2">
-                {f.amount_cents != null && <b className="tabular-nums">{money(f.amount_cents)}</b>}
+                {f.amount_cents != null && <b className="font-num tabular-nums">{money(f.amount_cents)}</b>}
                 <FindingStatusPill status={f.status} />
               </span>
             </button>

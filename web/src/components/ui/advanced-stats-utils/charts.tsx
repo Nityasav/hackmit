@@ -63,7 +63,7 @@ export function ClippedAreaChart({ data }: { data: ClippedAreaPoint[] }) {
                   <span className="text-muted-foreground">
                     {config[name as keyof typeof config]?.label ?? name}
                   </span>
-                  <span className="font-mono tabular-nums text-foreground">
+                  <span className="font-mono font-num tabular-nums text-foreground">
                     {money(Number(value))}
                   </span>
                 </span>

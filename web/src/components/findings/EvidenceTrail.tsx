@@ -49,7 +49,7 @@ export function EvidenceTrail({ finding }: { finding: Finding }) {
               {i < finding.evidence.length - 1 && (
                 <span className="absolute left-[5px] top-3 h-[calc(100%-4px)] w-px bg-surface-3" aria-hidden />
               )}
-              <span className={`absolute left-0 top-2.5 h-[11px] w-[11px] rounded-full ring-4 ring-surface ${TONE_DOT[n.tone]}`} aria-hidden />
+              <span className={`absolute left-0 top-2.5 h-[11px] w-[11px] rounded-none ring-4 ring-surface ${TONE_DOT[n.tone]}`} aria-hidden />
 
               <button
                 type="button"

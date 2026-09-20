@@ -32,7 +32,7 @@ export default function LearningPage() {
 
       <div className="mb-4 grid gap-2 md:grid-cols-5">
         {LOOP.map((s) => (
-          <div key={s.n} className={`rounded-[9px] border p-2 text-[13px] ${s.gate ? "border-ink bg-surface-2" : "border-line bg-surface"}`}>
+          <div key={s.n} className={`rounded-none border p-2 text-[13px] ${s.gate ? "border-ink bg-surface-2" : "border-line bg-surface"}`}>
             <span className="text-[12px] font-bold text-ink">{s.n}</span>
             <b className="mb-0.5 block text-[13.5px]">{s.title}</b>
             {s.body}
@@ -95,7 +95,7 @@ export default function LearningPage() {
                     <div className="h-2 rounded bg-surface-3" style={{ width: `${(r.without / max) * 100}%` }} />
                     <div className="mt-0.5 h-2 rounded bg-ink" style={{ width: `${(r.with / max) * 100}%` }} />
                   </span>
-                  <b className="text-right tabular-nums">
+                  <b className="text-right font-num tabular-nums">
                     {r.without}→{r.with}
                   </b>
                 </div>
