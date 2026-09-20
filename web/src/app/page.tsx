@@ -8,7 +8,6 @@ import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
 import {
   AgentAvatar,
-  AiTag,
   Button,
   EmptyState,
   Figure,
@@ -31,15 +30,10 @@ export default function CommandCenter() {
 
   return (
     <div className="mx-auto max-w-[1180px]">
-      <PageHeader title={`${workspace.name} · ${workspace.period}`} />
-
       {/* The briefing is the one thing on this page that gets to be loud. */}
-      <Section first className="border-t-2 border-ink pt-6">
+      <Section first>
         <div className="flex items-center gap-2">
-          <AgentAvatar id="cfo" size="sm" />
           <b className="text-[14px]">CFO Agent</b>
-          <AiTag>AI briefing</AiTag>
-          <span className="ml-auto font-accent text-[13px] text-ink-dim">generated {briefing.generated_at}</span>
         </div>
         <p className="mt-4 max-w-[68ch] text-[17px] leading-[1.6]">
           {highlights(briefing.text).map(([part, strong], i) =>
