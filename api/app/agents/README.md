@@ -33,6 +33,21 @@ and its gated offline improvement loop are specified for a later implementation.
 
 ## Payroll & Budget (`py`, ports family)
 
+### Merged evaluation checkpoint (2026-09-19)
+
+All five role implementations now exist, but **not one five-agent live pipeline**. The factory in
+`integrations/cfo_factory.py` registers Payroll only; AP, Grants and the central Auditor adapters are
+still missing. AP reads its sandbox JSON, not arbitrary uploaded intake snapshots. Do not report
+scripted coordinator runs as live five-agent benchmarks.
+
+Offline tests plus opt-in `tests/test_agent_live.py` and `tests/test_merged_agents_live.py` exercise the
+separate runtime paths. AP's loop supports `AP_MODEL`, falling back to `OPENAI_MODEL`, then its original
+default. CFO handoffs now return explicit finding IDs, Auditor can retrieve the exact finding, rejected
+review submissions do not mark tasks done, and a retrieved but unfiled Auditor verdict gets one bounded
+reminder. Payment proposals deduplicate invoice IDs and hold vendors on hold, missing invoice approvals
+and conflicting rejections. A human must resolve approval conflicts; date ordering alone does not
+establish supersession. These controls do not make the sandbox a production payment system.
+
 Ties out payroll and tests fund allocations. The split of responsibility is the point of the design:
 
 - the **model** chooses what evidence to retrieve and what it means

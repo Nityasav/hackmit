@@ -341,3 +341,24 @@ After a meaningful slice or before a context handoff:
 - Limitations: shared parsing/math implementation is not algorithmic independence; semantic model
   mistakes remain possible. No audit opinion, compliance certification, automatic coordinator adapter
   or local-model training. AP and Payroll specialists remain unimplemented.
+
+### Merge and evaluation checkpoint — 2026-09-19
+
+- Supersedes the older status above: merged `max`, latest `main` AP implementation and the explicitly
+  authorized `feature/payroll-budget-agent`. All five role implementations exist across three runtimes.
+- Full five-agent live orchestration is **not done**: the central factory registers only Payroll;
+  AP still uses sandbox records, and Grants/Auditor direct-run results are not central port adapters.
+- Expanded offline suite: 275 passed; 8 opt-in/artifact checks skipped by default. Fresh snapshot
+  evaluation: 13/13 agent executions completed across four scenarios and one false-preparer challenge;
+  five live scenario tests plus one saved-evidence replay test passed. Standalone Payroll live test passed.
+- CFO→AP→Auditor live handoff initially failed three times, exposing decision/finding ID confusion,
+  missing access to the exact finding and a verbal verdict with no filed review. Added structured finding
+  IDs, `get_finding`, successful-tool-only task completion and one bounded submission reminder. Final
+  handoff test passed. Failed outputs retained; a single final pass is not reliability certification.
+- Fixed five newly failing payment regressions: repeated invoice IDs, vendor hold, rejected approval,
+  wrong record-type approval and an unresolved rejection alongside an approval. No payments executed.
+- Full held-out precision/recall and memory ablation remain unmeasured. Snapshot Auditor was conservative
+  on a clean synthetic service record; provenance checks do not guarantee correct semantic dispositions.
+- Next integration work: standardize on one snapshot/claim/review contract; connect AP to scoped intake
+  data; implement AP, Grants and Auditor central adapters; then test a true five-agent live run before
+  claiming the project benchmark passes. Do not substitute scripted workers to make the gate green.

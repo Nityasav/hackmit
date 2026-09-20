@@ -18,6 +18,17 @@ def _function_call(name, args, call_id):
     return SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id=call_id)
 
 
+def test_rejected_review_submission_never_marks_task_done():
+    task_id = _new_task(agent="au")
+    fake = FakeClient([
+        FakeResponse([_function_call("submit_review", {"finding_id": "D-99", "decision": "accept", "evidence_note": "Read records"}, "bad-review")]),
+        FakeResponse([], "Could not file review"),
+    ])
+    run_auditor_agent("Review finding", client=fake, task_id=task_id)
+    task = next(t for t in store.get_bundle("sandbox").tasks if t.id == task_id)
+    assert task.column == "needs_you"
+
+
 class FakeResponse:
     def __init__(self, output, output_text=""):
         self.output = output

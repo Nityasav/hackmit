@@ -83,6 +83,21 @@ def test_assign_task_creates_a_task_and_runs_the_specialist_synchronously():
     assert tasks[0].column == "done"  # AP only read, filed nothing
 
 
+def test_handoff_returns_finding_ids_not_just_decision_id(monkeypatch):
+    from app.agents import ap_write_tools, run_loop
+    from app.agents.cfo_tools import bind_assign_task
+
+    def specialist(*args, **kwargs):
+        ap_write_tools.submit_finding("Review INV-2302", "Needs review", "needs_evidence",
+                                     [{"label": "INV-2302", "kind": "record", "tone": "neutral"}])
+        return SimpleNamespace(answer="Filed", decision_id="D-99", tool_calls_used=1)
+    monkeypatch.setattr(run_loop, "run_ap_agent", specialist)
+    assign = bind_assign_task(workspace="sandbox", client=None, specialist_budget=12)
+    result = assign(agent="ap", title="review", workflow="ap", question="Investigate")
+    assert result["finding_ids"] == ["F-11"]
+    assert result["decision_id"] == "D-99"
+
+
 def test_assign_task_result_reports_specialist_answer_back_to_cfo():
     fake = FakeClient(
         [

@@ -2,6 +2,8 @@ import pytest
 
 from app import store
 from app.agents import ap_write_tools
+from app.agents import ap_tools
+from app.agents.ap_records import Approval
 from app.agents.tool_gateway import ToolGateway
 
 
@@ -151,3 +153,34 @@ def test_gateway_returns_a_rule_violation_as_a_correctable_error():
     result = gateway.call("submit_finding", title="t", summary="s", status="substantiated", evidence=[])
     assert "rejected" in result["error"]
     assert gateway.used == 1  # a real attempt, so it costs budget
+
+
+def test_duplicate_invoice_ids_never_double_payment_total():
+    result = ap_write_tools.prepare_payment_batch(["INV-2291", "INV-2291"])
+    assert result["included"] == ["INV-2291"]
+    assert result["total_cents"] == 240000
+
+
+def test_vendor_on_hold_is_not_paid(monkeypatch):
+    vendor = ap_tools.get_vendor("V-08").model_copy(update={"status": "hold"})
+    monkeypatch.setattr(ap_tools, "get_vendor", lambda *_: vendor)
+    result = ap_write_tools.prepare_payment_batch(["INV-2291"])
+    assert result["included"] == []
+    assert "hold" in result["held"]["INV-2291"]
+
+
+@pytest.mark.parametrize("action,record_type", [("rejected", "invoice"), ("approved", "purchase_order")])
+def test_payment_requires_an_actual_invoice_approval(monkeypatch, action, record_type):
+    approval = Approval(id="TEST", record_type=record_type, record_id="INV-2291", actor="Reviewer",
+                        authority="Procurement", action=action, decided_at="2026-09-20T00:00:00")
+    monkeypatch.setattr(ap_tools, "get_approvals_for_record", lambda *_: [approval])
+    result = ap_write_tools.prepare_payment_batch(["INV-2291"])
+    assert result["included"] == []
+    assert "approval" in result["held"]["INV-2291"]
+
+
+def test_later_rejection_blocks_an_earlier_approval(monkeypatch):
+    approval = ap_tools.get_approvals_for_record("INV-2291")[0]
+    rejected = approval.model_copy(update={"id": "rejected", "action": "rejected", "decided_at": "2026-10-01T00:00:00"})
+    monkeypatch.setattr(ap_tools, "get_approvals_for_record", lambda *_: [approval, rejected])
+    assert ap_write_tools.prepare_payment_batch(["INV-2291"])["included"] == []

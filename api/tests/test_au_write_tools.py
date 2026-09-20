@@ -33,6 +33,17 @@ def test_accept_sets_verified_by_auditor():
     assert filed.verified_by == "au"
 
 
+def test_auditor_can_read_exact_preparer_claim_without_changing_it():
+    from app.agents.tool_gateway import AUDITOR_REGISTRY, ToolGateway
+    finding_id = _file_a_finding()
+    gateway = ToolGateway(registry=AUDITOR_REGISTRY)
+    result = gateway.call("get_finding", finding_id=finding_id)
+    assert result["finding"]["id"] == finding_id
+    assert result["finding"]["verified_by"] is None
+    assert result["finding"]["summary"] == "Invoice matches PO-889 on amount, but no receipt is recorded."
+    assert "error" in gateway.call("get_finding", finding_id="D-99")
+
+
 def test_reject_clears_verification_and_downgrades_status():
     finding_id = _file_a_finding()
     result = au_write_tools.submit_review(
