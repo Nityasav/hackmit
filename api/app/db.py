@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -122,11 +122,16 @@ CREATE TABLE IF NOT EXISTS extraction_active (
 -- the journal entries are all *views* of it. Every artifact carries this id, so
 -- "what else touched this?" is an indexed lookup rather than a reconstruction, and
 -- two agents cannot end up holding different opinions about the same transaction.
+-- An event is identified by (workspace, reference), not by reference alone. The id is
+-- whatever the source called it, and two companies can each have an "INV-1001" without
+-- being the same transaction. A global primary key here made the second workspace to
+-- import the same pack fail on a UNIQUE constraint.
 CREATE TABLE IF NOT EXISTS economic_events (
-    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    id TEXT NOT NULL, ws TEXT NOT NULL REFERENCES workspaces(id),
     kind TEXT NOT NULL, title TEXT NOT NULL, occurred_on TEXT NOT NULL,
     period TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
-    created_at TEXT NOT NULL, created_by TEXT NOT NULL
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL,
+    PRIMARY KEY (ws, id)
 );
 -- Typed edges, carrying HOW each was established. `method` is the honest part: an
 -- exact reference match and a fuzzy description match are both links, and a reader
@@ -134,7 +139,7 @@ CREATE TABLE IF NOT EXISTS economic_events (
 -- (see accounting/match.py); no model writes this column.
 CREATE TABLE IF NOT EXISTS links (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
-    event_id TEXT REFERENCES economic_events(id),
+    event_id TEXT,
     from_type TEXT NOT NULL, from_id TEXT NOT NULL,
     to_type TEXT NOT NULL, to_id TEXT NOT NULL,
     kind TEXT NOT NULL, method TEXT NOT NULL,
@@ -148,7 +153,7 @@ CREATE TABLE IF NOT EXISTS links (
 -- as the work happens rather than reconstructed afterwards.
 CREATE TABLE IF NOT EXISTS agent_decisions (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
-    event_id TEXT REFERENCES economic_events(id),
+    event_id TEXT,
     thread_id TEXT, run_id TEXT, agent TEXT NOT NULL, parent_agent TEXT,
     action TEXT NOT NULL, summary TEXT NOT NULL, why TEXT NOT NULL DEFAULT '',
     confidence INTEGER, evidence TEXT NOT NULL DEFAULT '[]',
@@ -177,6 +182,35 @@ def _add_missing_columns(connection) -> None:
         existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
         if existing and column not in existing:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    _rekey_events(connection)
+
+
+def _rekey_events(connection) -> None:
+    """Move `economic_events` onto a per-workspace key if it predates that fix.
+
+    `CREATE TABLE IF NOT EXISTS` cannot change a primary key, so a database created
+    while the key was global keeps it and fails the first time two workspaces share an
+    event reference. Rebuilding is safe here because the rows carry their own workspace.
+    """
+    columns = list(connection.execute("PRAGMA table_info(economic_events)"))
+    if not columns:
+        return
+    key_columns = {row["name"] for row in columns if row["pk"]}
+    if key_columns == {"ws", "id"}:
+        return
+    connection.executescript("""
+        ALTER TABLE economic_events RENAME TO economic_events_old;
+        CREATE TABLE economic_events (
+            id TEXT NOT NULL, ws TEXT NOT NULL REFERENCES workspaces(id),
+            kind TEXT NOT NULL, title TEXT NOT NULL, occurred_on TEXT NOT NULL,
+            period TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+            created_at TEXT NOT NULL, created_by TEXT NOT NULL,
+            PRIMARY KEY (ws, id)
+        );
+        INSERT INTO economic_events SELECT id, ws, kind, title, occurred_on, period,
+            status, created_at, created_by FROM economic_events_old;
+        DROP TABLE economic_events_old;
+    """)
 
 
 def uid(prefix: str) -> str:

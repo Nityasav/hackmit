@@ -1,7 +1,16 @@
 // Mirror of the bundle contract in /README.md. api/app/models.py mirrors the same shapes.
 // Change all three together.
 
-export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
+/** Mirrors `AgentId` in api/app/models.py, which mirrors the registry in
+ *  api/app/agents/registry.py. Change this, models.py and contracts/README.md in
+ *  one commit: a bundle that fails to parse renders an error, not a workspace. */
+export type AgentId =
+  | "orchestrator"
+  | "A" | "B" | "C" | "D"
+  | "A1" | "A2" | "A3" | "A4"
+  | "B1" | "B2" | "B3" | "B4"
+  | "C1" | "C2" | "C3" | "C4" | "C5"
+  | "D1" | "D2" | "D3" | "D4";
 export type WorkspaceId = string;
 
 /**

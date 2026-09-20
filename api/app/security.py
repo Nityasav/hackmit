@@ -102,14 +102,7 @@ async def guard(request):
     match = re.search(r"/workspaces/([^/]+)", path)
     if match:
         authorize_workspace(user, match[1])
-    if path.startswith("/api/cfo/runs/"):
-        from .cfo.api import runtime
-        try:
-            run = runtime(request).repository.get(path.split("/")[4])
-        except KeyError:
-            raise HTTPException(404, "Run not found.")
-        authorize_workspace(user, run.request.workspace)
-    if write and (path == "/api/cfo/runs" or path.startswith("/api/approvals/")):
+    if write and path.startswith("/api/approvals/"):
         content = bytearray()
         async for chunk in request.stream():
             content.extend(chunk)

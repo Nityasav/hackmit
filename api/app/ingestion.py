@@ -467,6 +467,11 @@ def commit(ws, bid, body: CommitRequest):
         for f in files:
             if not json.loads(f["options"])["excluded"]:
                 connection.execute("UPDATE sources SET committed=1 WHERE id=?", (f["id"],))
+        # Invariant 1: the economic events these records describe get their identity
+        # here, inside the same transaction that commits them, so an event exists
+        # exactly when the records constituting it do.
+        from . import events
+        saved["events"] = events.materialize(connection, ws, config["start"])
         # Duplicate-only imports preserve financial revision and snapshot.
         latest = connection.execute("SELECT id FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
         snapshot_id = latest["id"] if latest else None

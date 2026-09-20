@@ -401,22 +401,47 @@ def test_analyst_cannot_approve_or_export_labels(client, monkeypatch):
     assert client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).status_code == 403
 
 
-def test_incremental_five_agent_scan_is_explicit_and_idempotent(client, monkeypatch):
-    from types import SimpleNamespace
+def test_a_live_rescan_is_explicit_and_reuses_a_run_on_the_same_snapshot(client, monkeypatch):
+    """A paid rescan happens because someone asked, and only once per snapshot.
+
+    The evidence has not changed between two clicks, so neither would the answer;
+    repeating the run would only spend money to reprint it.
+    """
     from app import updates
     ws = reviewed_workspace(client)
     snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
-    requests = []
-    def start(request):
-        requests.append(request)
-        return SimpleNamespace(id="synthetic-five-agent-test")
-    fake = SimpleNamespace(start=start, repository=SimpleNamespace(get=lambda ident: SimpleNamespace(status="working")))
-    monkeypatch.setattr(updates, "runtime", lambda request: fake)
-    first = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    second = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    assert first.status_code == 200 and second.json()["reused"]
-    assert len(requests) == 1 and requests[0].workflow == "five_agent" and requests[0].mode == "live"
-    assert snapshot in requests[0].objective
+
+    started = []
+
+    async def fake_run(workspace, objective, **kwargs):
+        started.append((workspace, objective))
+        return {"thread_id": "thread-test", "status": "completed",
+                "spend": {"spent_cents": 0, "cap_cents": 1000, "remaining_cents": 1000}}
+
+    import app.graph as graph_module
+    monkeypatch.setattr(graph_module, "run_investigation", fake_run)
+
+    first = client.post(f"/api/workspaces/{ws}/updates/scan",
+                        json={"snapshot_id": snapshot, "live": True})
+    second = client.post(f"/api/workspaces/{ws}/updates/scan",
+                         json={"snapshot_id": snapshot, "live": True})
+
+    assert first.status_code == 200, first.text
+    assert second.json()["reused"] is True
+    assert len(started) == 1, "a second click must not start a second paid run"
+    assert snapshot in started[0][1]
+
+
+def test_a_rules_only_rescan_costs_nothing_and_starts_no_agent(client):
+    ws = reviewed_workspace(client)
+    snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
+
+    response = client.post(f"/api/workspaces/{ws}/updates/scan",
+                           json={"snapshot_id": snapshot, "live": False})
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] is None
+    assert response.json()["scan_id"]
 
 
 def test_local_runner_fingerprints_actual_artifacts(tmp_path, monkeypatch):

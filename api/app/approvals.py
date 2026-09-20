@@ -6,14 +6,13 @@ Two rules shape this module.
 only transition out of `pending` runs through `decide`, which records who did it
 and when.
 
-**A proposal may only contain amounts the engine produced.** A specialist's
-`proposed_action` is prose, and prose is not a journal. A journal is built only
-from a deterministic calculation whose `category` is `reclassification`, and
-only when the committed records name both funds involved. Where they do not —
-which is the common case, because a destination fund is a decision, not a
-derivation — the proposal is an evidence request for the structured allocation
-record that `app/accounting/payroll.py` says is required, rather than a journal
-against a fund nobody recorded.
+**A proposal may only contain amounts the engine produced.** An agent's
+`proposed_action` is prose, and prose is not a journal. A journal may only come
+from a deterministic calculation, and only from a claim that survived independent
+review — which is what `store()` refuses without.
+
+Proposals are written by whatever raises them; phase 4 routes an escalated agent
+decision here. Nothing in this module builds one from a model's output.
 
 Every journal is checked with `assert_balanced` before it is stored, so an
 unbalanced proposal is refused at write time and never reaches a reviewer.
@@ -107,121 +106,6 @@ def listing(connection, ws, snapshot_id=None):
 def _superseded(row, snapshot_id):
     """True when the proposal names a snapshot and it is not the one in force."""
     return bool(snapshot_id and row["snapshot_id"] and row["snapshot_id"] != snapshot_id)
-
-
-# --------------------------------------------------------------------------- #
-# Proposals derived from a coordinator run
-# --------------------------------------------------------------------------- #
-
-def _fund_named(records, award_id):
-    """The fund name a committed record uses for an award, or None.
-
-    Never invents one. A reclassification needs both sides named in the records;
-    where the destination is not recorded, that is a question for a human, not a
-    gap to fill in.
-    """
-    for record in records:
-        payload = record["payload"]
-        if payload.get("award_id") == award_id and payload.get("fund"):
-            return payload["fund"]
-    return None
-
-
-def _unrestricted_fund(records):
-    """A recorded fund not tied to any award, if the records name exactly one."""
-    funds = {r["payload"]["fund"] for r in records
-             if r["payload"].get("fund") and not r["payload"].get("award_id")}
-    return funds.pop() if len(funds) == 1 else None
-
-
-def _payroll_account(records):
-    for record in records:
-        if record["role"] == "chart" and record["payload"].get("report_mapping") == "payroll":
-            return record["payload"].get("name") or record["payload"].get("account")
-    return None
-
-
-def proposals_for(run, records):
-    """Every proposal a completed coordinator run supports, as plain dicts.
-
-    Nothing is proposed from a claim's prose. A journal appears only where the
-    engine produced a reclassification amount and the records name both funds.
-    """
-    out = []
-    for accepted in run["accepted"]:
-        claim = accepted["claim"]
-        calculation = accepted.get("calculation")
-        # A claim id is unique only inside its run - `ap-1` is what the first AP task
-        # calls its first claim, in every run and every workspace. `approvals.id` is a
-        # primary key over the whole database, so an id built from the claim alone
-        # collided and the second proposal was silently dropped on write. The run id
-        # carries it, exactly as the finding id it resolves does.
-        finding_id = f"{run['id']}-{claim['id']}"
-        base = {"run_id": run["id"], "task_id": accepted["task_id"], "agent": accepted["role"],
-                "snapshot_id": (run.get("scope") or {}).get("snapshot_id"),
-                "finding_id": finding_id,
-                # An accepted claim was reviewed; that is not the same as approved.
-                "verified": True}
-
-        if calculation and calculation["category"] == "reclassification" and calculation["amount_cents"]:
-            amount = calculation["amount_cents"]
-            account = _payroll_account(records)
-            source_fund = _fund_named(records, _award_of(records, calculation))
-            destination = _unrestricted_fund(records)
-            if account and source_fund and destination:
-                journal = [
-                    {"account": account, "fund": destination, "debit_cents": amount, "credit_cents": 0},
-                    {"account": account, "fund": source_fund, "debit_cents": 0, "credit_cents": amount},
-                ]
-                out.append({**base, "id": f"ADJ-{finding_id}", "kind": "journal",
-                            "title": f"Reclassify {money(amount)} out of {source_fund}",
-                            "summary": f"{claim['title']}. Amount from {calculation['id']}; "
-                                       f"{calculation['description']}",
-                            "journal": journal,
-                            "effects": [
-                                {"label": source_fund, "value": f"−{money(amount)}", "tone": "good"},
-                                {"label": destination, "value": f"+{money(amount)}"},
-                                {"label": "Total expense", "value": "unchanged"},
-                                {"label": "Cash", "value": "unchanged"
-                                    if cash_delta(_lines(journal)) == 0 else money(cash_delta(_lines(journal)))},
-                            ]})
-                continue
-            # The engine established the amount but the records do not name a
-            # destination fund. Inventing one would defeat the provenance rule, so
-            # ask for the record that would settle it.
-            out.append({**base, "id": f"EV-{finding_id}", "kind": "evidence",
-                        "title": f"Provide a structured allocation record for {claim['title']}",
-                        "summary": f"{money(amount)} is unsupported per {calculation['id']}, but the committed "
-                                   "records do not name a destination fund, so no journal can be proposed "
-                                   "from them. A structured allocation record would settle the split."})
-            continue
-
-        if claim["disposition"] == "substantiated":
-            out.append({**base, "id": f"ACK-{finding_id}", "kind": "decision",
-                        "title": f"Decide how to resolve: {claim['title']}",
-                        "summary": f"{claim['conclusion']} No deterministic calculation backs an amount, so no "
-                                   "journal is proposed. Approving records your decision to act on it."})
-
-    # Unresolved items are reported in the run's own report. They describe missing
-    # evidence rather than an action to take, so they are not proposals.
-    return out
-
-
-def _award_of(records, calculation):
-    """The award a reclassification calculation concerns, when the records name one."""
-    awards = {r["payload"]["award_id"] for r in records
-              if r["role"] == "payroll" and r["payload"].get("award_id")}
-    return awards.pop() if len(awards) == 1 else None
-
-
-def sync(ws, run, records):
-    """Write any proposals this run supports that are not already recorded."""
-    proposals = proposals_for(run, records)
-    if not proposals:
-        return
-    with db.connect() as connection:
-        for proposal in proposals:
-            store(connection, ws, proposal)
 
 
 # --------------------------------------------------------------------------- #
@@ -341,8 +225,9 @@ def decisions(connection, ws):
         out.append({
             "id": f"decision-{approval_id}", "run": run, "time": row["created_at"],
             # The contract's agent vocabulary has no human in it. `actor` names who
-            # really decided; `agent` only says whose run the decision belongs to.
-            "agent": "cfo", "actor": actor,
+            # really decided; `agent` only says whose run the decision belongs to, and
+            # a human decision belongs to the organization rather than any one agent.
+            "agent": "orchestrator", "actor": actor,
             "action": f"Human decision: {approval_id} {verdict}",
             "summary": f"A person, not an agent, {verdict} this proposal.{unreviewed} {payload['note']}",
             "tags": [],

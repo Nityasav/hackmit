@@ -28,29 +28,36 @@ These are stable. Build against them freely.
 | --- | --- |
 | Record vocabulary | `api/app/roles.py` |
 | What Books asks for | `api/app/requirements.py` |
-| Schema (v6) | `api/app/db.py` |
+| Schema (v7) | `api/app/db.py` |
 | Exact money | `api/app/accounting/money.py` |
 | Matching, duplicates, policy | `api/app/accounting/match.py` |
-| Agent organization | `api/app/agents/registry.py`, `schemas.py`, `budget.py` |
+| Agent organization | `api/app/agents/registry.py`, `schemas.py`, `budget.py`, `tools.py` |
+| Event identity | `api/app/events.py` |
+| Bank reconciliation, cash | `api/app/accounting/reconcile.py`, `cash.py` |
+| The graph | `api/app/graph/` (add a worker by writing its subagents' tools) |
 | Data generation | `fixtures/generate_saas.py` |
 | Books requirement UI | `web/src/components/DataRequirements.tsx` |
 
 ## Do not touch yet
 
-These are being rewritten in phase 3. Changing them now guarantees a conflict.
+Phase 3 landed, so most of this list is now safe. What remains is what the next phases
+rewrite.
 
 | File | Why |
 | --- | --- |
-| `api/app/agents/runtime.py` | The conversation loop moves into LangGraph |
-| `api/app/projection.py` | Rewritten as an event-graph reader |
-| `api/app/cfo/` | Deleted; the coordinator is replaced by the graph |
-| `web/src/components/investigation/` | Becomes a chat surface |
-| `AgentId` in `api/app/models.py` + `web/src/lib/types.ts` | Breaking, and changes in lockstep |
+| `api/app/graph/` | Phase 4 adds `interrupt()` and the preparer/reviewer edges |
+| `web/src/components/investigation/Investigation.tsx` | Becomes a chat surface in phase 8 |
 
 **One coordination rule.** `AgentId` exists in three places — `api/app/models.py`,
 `web/src/lib/types.ts` and `contracts/`. Whoever changes it changes all three in one
 commit. A bundle that fails to parse renders an error instead of a workspace, so a
-half-done rename takes the whole dashboard down.
+half-done rename takes the whole dashboard down. `web/src/lib/schemas.ts` carries the
+same enum for parsing and moves with them.
+
+**`db.connect()` takes an immediate write lock.** Two of them on one thread deadlock
+against each other for the full fifteen-second timeout. Read what you need before
+opening a connection, and never call a helper that opens its own from inside a
+`with db.connect()` block.
 
 ## The best parallel work
 
@@ -59,7 +66,6 @@ LangGraph, and therefore no possible collision with phase 3.
 
 | Module | Agent | Job |
 | --- | --- | --- |
-| `accounting/reconcile.py` | A3 | Agree bank activity to the ledger; decompose processor payouts |
 | `accounting/statements.py` | B3 | Income statement, balance sheet, cash flow, from the ledger |
 | `accounting/variance.py` | C3 | Decompose budget-to-actual into named drivers |
 | `accounting/close.py` | B1 | Close checklist state and readiness |
@@ -110,7 +116,7 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
 ## Running it
 
 ```bash
-cd api && uv sync && uv run pytest          # 227 passing, 2 skipped
+cd api && uv sync && uv run pytest          # 187 passing
 cd api && uv run uvicorn app.main:app --reload --port 8000
 cd web && bun install && bun dev            # http://localhost:3000
 cd web && npx tsc --noEmit && npx eslint src

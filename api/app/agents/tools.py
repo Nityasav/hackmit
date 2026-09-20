@@ -21,7 +21,7 @@ import json
 from typing import Any
 
 from .. import db
-from ..accounting import match
+from ..accounting import cash, match, reconcile
 from .budget import BudgetExceeded, Meter
 
 
@@ -162,6 +162,43 @@ class Toolbox:
         return {"exceptions": [e for e in result["exceptions"] if e["code"] in policy_codes],
                 "settings": self.config.get("settings") or {}}
 
+
+    def reconcile_bank(self) -> dict:
+        """Agree bank activity to the books, by recorded reference."""
+        self._charge("reconcile_bank")
+        result = reconcile.reconcile_bank(self._records, self.config)
+        for bucket in ("matched", "unmatched_bank", "unmatched_book"):
+            for item in result[bucket]:
+                for citation in item.get("citations", []):
+                    self.read_keys.add(citation["record_key"])
+                    self.read_sources.add(citation["source_id"])
+        self.calculations["reconcile"] = result
+        return result
+
+    def decompose_payout(self, payout_key: str = "") -> dict:
+        """Split a processor payout into gross, deductions and what reached the bank."""
+        self._charge("decompose_payout")
+        payouts = reconcile.decompose_payout(self._records, payout_key)
+        for payout in payouts:
+            for citation in payout["citations"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+            self.calculations[f"payout:{payout['payout_key']}"] = payout
+        return {"payouts": payouts}
+
+    def project_cash(self, horizon_days: int = 45) -> dict:
+        """Cash now, and what is committed to move next."""
+        self._charge("project_cash")
+        result = cash.project(self._records, self.config, horizon_days)
+        result["position"] = cash.position(self._records, self.config)
+        for bucket in ("outflows", "inflows"):
+            for item in result[bucket]:
+                for citation in item["citations"]:
+                    self.read_keys.add(citation["record_key"])
+                    self.read_sources.add(citation["source_id"])
+        self.calculations["cash"] = result
+        return result
+
     # ----------------------------------------------------------------- writes --
     def record_decision(self, *, agent: str, action: str, summary: str, why: str,
                         confidence: int | None, evidence: list[dict], model: str,
@@ -229,6 +266,9 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "three_way_match": toolbox.three_way_match,
         "find_duplicates": toolbox.find_duplicates,
         "check_policy": toolbox.check_policy,
+        "reconcile_bank": toolbox.reconcile_bank,
+        "decompose_payout": toolbox.decompose_payout,
+        "project_cash": toolbox.project_cash,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -264,6 +304,19 @@ def tool_definitions(spec) -> list[dict]:
         "check_policy": {
             "description": "Policy tests using this workspace's own thresholds.",
             "properties": {"invoice_key": {"type": "string"}}, "required": ["invoice_key"]},
+        "reconcile_bank": {
+            "description": "Agree bank activity to the books by recorded reference. "
+                           "Returns matched lines, differences and both unmatched sides.",
+            "properties": {}, "required": []},
+        "decompose_payout": {
+            "description": "Split a processor payout into gross, fees, refunds, "
+                           "chargebacks and the net that reached the bank.",
+            "properties": {"payout_key": {"type": "string"}}, "required": []},
+        "project_cash": {
+            "description": "Cash position now, and the commitments already recorded "
+                           "against it over a horizon in days.",
+            "properties": {"horizon_days": {"type": "integer", "minimum": 1, "maximum": 180}},
+            "required": []},
     }
     return [{
         "type": "function", "name": name,

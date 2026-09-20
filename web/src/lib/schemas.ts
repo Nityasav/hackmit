@@ -22,7 +22,16 @@ function optional<T extends z.ZodTypeAny>(schema: T) {
   return schema.nullish().transform((v) => v ?? undefined);
 }
 
-const agentIdSchema = z.enum(["cfo", "ap", "py", "gr", "au"]);
+// Mirrors `AgentId` in api/app/models.py. A bundle naming an agent this does not
+// list fails to parse and the dashboard renders an error, so the two move together.
+const agentIdSchema = z.enum([
+  "orchestrator",
+  "A", "B", "C", "D",
+  "A1", "A2", "A3", "A4",
+  "B1", "B2", "B3", "B4",
+  "C1", "C2", "C3", "C4", "C5",
+  "D1", "D2", "D3", "D4",
+]);
 
 // As wide as TabId in api/app/models.py. See the note on TabId in types.ts:
 // narrowing this below what the API emits makes whole bundles fail to parse.

@@ -5,7 +5,6 @@ import axios, { AxiosError, type AxiosInstance } from "axios";
  * substitute them into the browser bundle at build time.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-export const CFO_API_URL = process.env.NEXT_PUBLIC_CFO_API_URL || API_URL;
 
 /**
  * Clients are built once at module load rather than per request, so each one
@@ -30,7 +29,6 @@ function createApiClient(baseURL: string): AxiosInstance {
 }
 
 export const api = createApiClient(API_URL);
-export const cfoApi = createApiClient(CFO_API_URL);
 
 /** FastAPI reports problems in `detail`, as a string, a list of errors, or an object. */
 function readDetail(detail: unknown): string | null {
@@ -116,17 +114,3 @@ export function intakeApi<T>(path: string, options: RequestOptions = {}): Promis
   return request<T>(api, path, options);
 }
 
-/** Response body from the CFO investigation API. */
-export function cfoRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  return request<T>(cfoApi, path, options);
-}
-
-/** Like cfoRequest, but a 404 means "nothing yet" rather than an error. */
-export async function cfoRequestOptional<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
-  try {
-    return await request<T>(cfoApi, path, options);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return null;
-    throw error;
-  }
-}

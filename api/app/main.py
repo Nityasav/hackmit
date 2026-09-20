@@ -23,7 +23,6 @@ from starlette.concurrency import run_in_threadpool
 from . import approvals, ingestion, projection
 from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
-from .cfo.api import router as cfo_router
 from .reviews import router as review_router
 from . import security
 from .extraction import router as extraction_router
@@ -40,12 +39,9 @@ async def lifespan(app: FastAPI):
     from .extraction import interrupt_jobs
     interrupt_jobs()
     yield
-    if hasattr(app.state, "cfo_runtime"):
-        await app.state.cfo_runtime.close()
 
 
 app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
-app.include_router(cfo_router)
 app.include_router(review_router)
 app.include_router(security.router)
 app.include_router(extraction_router)

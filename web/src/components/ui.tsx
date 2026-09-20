@@ -12,22 +12,50 @@ import type { AgentId } from "@/lib/types";
  * comes out rather than waiting for a use that never arrives.
  */
 
-const AGENT_BG: Record<AgentId, string> = {
-  cfo: "bg-agent-cfo",
-  ap: "bg-agent-ap",
-  py: "bg-agent-py",
-  gr: "bg-agent-gr",
-  au: "bg-agent-au",
+// Colour by domain rather than by agent: A1 and A3 are both Treasury, and giving
+// twenty-two agents twenty-two colours would carry no information. The domain letter
+// is the first character of every id, and the orchestrator is its own case.
+const DOMAIN_BG: Record<string, string> = {
+  orchestrator: "bg-agent-cfo",
+  A: "bg-agent-ap",
+  B: "bg-agent-py",
+  C: "bg-agent-gr",
+  D: "bg-agent-au",
 };
 
-const AGENT_SHORT: Record<AgentId, string> = { cfo: "CF", ap: "AP", py: "PY", gr: "GR", au: "AU" };
+const AGENT_BG = new Proxy({} as Record<AgentId, string>, {
+  get: (_target, id: string) =>
+    DOMAIN_BG[id] ?? DOMAIN_BG[id.charAt(0)] ?? "bg-agent-cfo",
+});
 
+const AGENT_SHORT = new Proxy({} as Record<AgentId, string>, {
+  get: (_target, id: string) => (id === "orchestrator" ? "CF" : id.toUpperCase()),
+});
+
+/** Display names, mirroring the charters in api/app/agents/registry.py. */
 export const AGENT_NAME: Record<AgentId, string> = {
-  cfo: "CFO Agent",
-  ap: "AP & Payments",
-  py: "Payroll & Budget",
-  gr: "Grants & Compliance",
-  au: "Internal Auditor",
+  orchestrator: "Chief Financial Agent",
+  A: "Treasurer",
+  B: "Controller",
+  C: "FP&A",
+  D: "Audit & Controls",
+  A1: "Accounts Payable",
+  A2: "Accounts Receivable",
+  A3: "Bank Reconciliation",
+  A4: "Cash Management",
+  B1: "Month-End Close",
+  B2: "Accruals & Adjustments",
+  B3: "Financial Reporting",
+  B4: "Close Review",
+  C1: "Budgeting",
+  C2: "Forecasting",
+  C3: "Variance Analysis",
+  C4: "Strategic Planning",
+  C5: "Board Reporting",
+  D1: "Audit",
+  D2: "Controls Testing",
+  D3: "Audit Evidence",
+  D4: "Reporting & Filing",
 };
 
 export function AgentAvatar({ id, size = "md" }: { id: AgentId; size?: "sm" | "md" | "lg" }) {
