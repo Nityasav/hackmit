@@ -86,8 +86,9 @@ function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fi
 /**
  * Getting a PDF into the books.
  *
- * A scan or a photo needs character recognition, which is not installed here,
- * so those are refused at upload rather than guessed at.
+ * A scanned PDF carrying no text layer is read by character recognition
+ * instead, and the page records that it was, so a reviewer checking the values
+ * knows the text is a reading of the page rather than the page itself.
  *
  * A document is preserved byte for byte, read into page text, and then a person
  * checks every extracted value against the page it came from before any of it
