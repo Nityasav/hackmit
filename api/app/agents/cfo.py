@@ -557,6 +557,12 @@ def run(ws: str, body: RunRequest, client=None):
         with db.connect() as connection:
             connection.execute("UPDATE agent_runs SET status='completed',completed_at=?,output=? WHERE id=? AND status='running'",
                                (finished, db.encode(output), run_id))
+            # A precedent the run weighed counts as used, whether it applied it
+            # or declined it. Without this the counter never leaves zero, and
+            # the screen reads "used 0x" beside the very check that used it.
+            approvals.note_precedent_uses(
+                connection, ws, [check.precedent_id for check in result.memory_checks],
+            )
             db.event(connection, ws, "agent_run_completed", {"run_id": run_id, "snapshot_id": toolbox.snapshot_id,
                                                              "tool_calls": len(tool_logs), "usage": usage}, actor=body.agent)
     except Exception as exc:
