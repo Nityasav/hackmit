@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -161,6 +161,16 @@ CREATE TABLE IF NOT EXISTS agent_decisions (
     model TEXT NOT NULL DEFAULT '', cost_cents INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+-- What was asked and what came back, written as it happens. A turn is recorded before
+-- its run starts and updated when it ends, so a run that crashed or is still going leaves
+-- the question on the record: a turn that only appears once it succeeds makes a failure
+-- look like something nobody ever asked.
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    thread_id TEXT NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL,
+    status TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_conversations ON conversations(ws, thread_id);
 -- A precedent is never applied, only checked, and every check is recorded — including
 -- the ones that decline. A precedent silently dropped because it no longer fits is
 -- indistinguishable from one nobody looked at, and the difference is the whole point of

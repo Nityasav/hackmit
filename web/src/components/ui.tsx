@@ -123,10 +123,14 @@ export function ProgressBar({ value, className = "h-1.5" }: { value: number; cla
 }
 
 /** Three tones, because a status is either bad, fine, or neither. */
-type Tone = "red" | "green" | "gray";
+// Amber is a state of its own, not a soft red. "A person has to decide this" is not a
+// weaker version of "this is wrong", and giving them one colour between them is how a
+// screen teaches people that a paused run is a failed one.
+type Tone = "red" | "amber" | "green" | "gray";
 
 const TONE: Record<Tone, string> = {
   red: "bg-red-50 text-red-800 ring-1 ring-red-200",
+  amber: "bg-amber-50 text-amber-900 ring-1 ring-amber-200",
   green: "bg-green-50 text-green-800 ring-1 ring-green-200",
   gray: "bg-surface-2 text-ink-dim ring-1 ring-line",
 };

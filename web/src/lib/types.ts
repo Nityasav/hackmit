@@ -295,3 +295,65 @@ export interface AgentRunResult {
   model_calls: number; tool_calls: number;
   spend: { spent_cents: number; cap_cents: number; remaining_cents: number };
 }
+
+/**
+ * The orchestrator conversation.
+ *
+ * A turn is recorded before its run starts and updated when it ends, so a `running` or
+ * `failed` turn is a real state the screen has to render — not a transient one it can
+ * assume away.
+ */
+export interface ChatTurn {
+  id: string;
+  thread_id: string;
+  role: "person" | "orchestrator";
+  status: "sent" | "running" | "done" | "waiting_on_you" | "failed";
+  created_at: string;
+  body: ChatReply & { text: string; code?: string };
+}
+
+export interface ChatReply {
+  text: string;
+  plan?: string[];
+  routed_to?: string[];
+  findings?: {
+    agent_id: string; agent_name: string; summary: string;
+    /** Computed by the engine. Null when nothing scored ran, which is reported
+     *  rather than defaulted to a number nobody derived. */
+    confidence: number | null;
+    escalated: boolean; decision_id?: string;
+  }[];
+  escalations?: Escalation[];
+  unresolved?: string[];
+  status?: string;
+  spend?: { spent_cents: number; cap_cents: number; remaining_cents: number };
+  note?: string;
+}
+
+/** One question a run stopped on. Answered by id: several agents can pause at once. */
+export interface Escalation {
+  approval_id: string;
+  agent: string;
+  title?: string;
+  summary?: string;
+  reasons: string[];
+  interrupt_id?: string | null;
+}
+
+/** One economic event: the transaction, not any single document of it. */
+export interface TimelineEvent {
+  id: string; kind: string; title: string; occurred_on: string;
+  period: string; status: string; record_count: number;
+}
+
+export interface EventDetail {
+  event: TimelineEvent;
+  roles: string[];
+  records: { role: string; record_key: string; source_id: string; line: number }[];
+  /** `method` separates an exact reference match from a fuzzy or inferred one, which is
+   *  the difference a reviewer most needs to see. */
+  links: { from_type: string; from_id: string; to_type: string; to_id: string;
+           kind: string; method: string; confidence: number }[];
+  decisions: { id: string; agent: string; action: string; summary: string;
+               confidence: number | null; escalated: number; created_at: string }[];
+}

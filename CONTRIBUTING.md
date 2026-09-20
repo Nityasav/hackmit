@@ -116,9 +116,13 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
    parsing and allocation. The UI is the only place that formats.
 2. **No model writes a number.** Agent prose is validated to contain no digits or
    currency symbols. Deterministic code produces every figure; the renderer inserts it.
-3. **Confidence is computed, never claimed.** It comes from the weighted rubric in
-   `match.py`, and every input is recorded so a person can re-derive the score.
-   `AgentResult` has no confidence field, deliberately.
+3. **Confidence is computed, never claimed.** It comes from a rubric in deterministic
+   code — the weighted features in `match.py` for an invoice, the share of activity that
+   reached a named transaction in `variance.py` for an explanation — and every input is
+   recorded so a person can re-derive the score. `AgentResult` has no confidence field,
+   deliberately. An agent that *holds* a scoring tool and concludes without calling it
+   escalates: a threshold is only consulted when a score exists, so skipping the
+   calculation was otherwise the cheapest way past one.
 4. **An agent cites only what it retrieved.** `Toolbox.validate_citations` rejects a
    result pointing at a record the agent never read.
 5. **Only a human decision writes memory.** `approvals.decide()` is the sole writer of
@@ -139,6 +143,23 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
    `resume_investigation` is addressed to a single approval and refuses to guess when
    more than one is waiting — resuming them all together would record a decision on
    questions nobody was shown.
+11. **A precedent is checked, never applied.** `memory.py` re-tests every decision an
+   earlier period recorded against the current one and writes the outcome either way,
+   including when it declines. A precedent silently dropped because it no longer fits is
+   indistinguishable from one nobody looked at. It never suppresses the finding it
+   covers: the control still fired, and hiding it would be the check quietly narrowing
+   itself.
+12. **A decomposition adds up, or it is wrong.** Drivers sum to the figure they explain,
+   asserted before anything is returned. A residual nothing accounts for is reported as
+   unexplained and still listed — never absorbed into a neighbour, and never dropped to
+   make the arithmetic close.
+13. **Say how a selection was made.** A sample without its method is an anecdote.
+   `audit.select` returns the seed, the threshold, what was taken in full and the
+   coverage, floored. Percentages that describe assurance are always floored: rounding
+   up is how a gap comes to be described as complete.
+14. **A turn is recorded before its run starts.** `chat.py` writes the question to the
+   conversation, then runs. A turn that only appears once it succeeds makes a crash look
+   like something the person never asked.
 
 ## Evaluating
 

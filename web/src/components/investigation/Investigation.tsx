@@ -7,8 +7,10 @@ import type { AgentNode, AgentRunResult } from "@/lib/types";
 
 import { AgentBoard } from "./AgentBoard";
 import { byWorker, money, useOrganization } from "./organization";
+import { Orchestrator } from "./Orchestrator";
 import { Precedent } from "./Precedent";
 import { RecordChecks } from "./RecordChecks";
+import { Timeline } from "./Timeline";
 
 /**
  * Investigation: the finance organization, and what it has concluded.
@@ -46,8 +48,18 @@ export function Investigation({ ws }: { ws: string }) {
         )}
       </header>
 
+      {/* The conversation comes first: it is how the organization is actually driven,
+          and everything below it is the detail behind what it reports. */}
+      <Section title="Ask">
+        <Orchestrator ws={ws} />
+      </Section>
+
       <Section title="Record checks">
         <RecordChecks ws={ws} />
+      </Section>
+
+      <Section title="Every transaction in the period">
+        <Timeline ws={ws} />
       </Section>
 
       <Section title="The organization">
