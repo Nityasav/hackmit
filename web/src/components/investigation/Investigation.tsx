@@ -90,8 +90,11 @@ export function Investigation({ ws }: { ws: string }) {
         </Section>
       )}
 
+      {/* The same board the Agents screen opens on. It is here too because this is
+          where a run is started, and what it hands out is the first thing you want
+          to see afterwards. */}
       <Section title="Agent tasks">
-        <AgentBoard />
+        <AgentBoard ws={ws} />
       </Section>
 
       {/* Directly above the precedent it produces, so the loop is one screen:

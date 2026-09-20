@@ -64,9 +64,36 @@ export type Column = "queued" | "working" | "needs_you" | "auditor_review" | "do
 
 export interface TaskStep {
   title: string;
-  detail?: string;
+  detail?: string | null;
   state: "done" | "running" | "todo";
   memory?: boolean;
+  /** When the step landed, as the run recorded it. */
+  at?: string | null;
+}
+
+/** Everything else the run recorded about one task, shown in the drawer. */
+export interface TaskDetail {
+  agent_name: string;
+  charter: string;
+  tier: string;
+  parent: string | null;
+  reviewer: string | null;
+  model: string;
+  objective: string;
+  summary: string;
+  state: string;
+  confidence: number | null;
+  cost_cents: number;
+  model_calls: number;
+  model_budget: number;
+  cost_budget_cents: number;
+  escalation_reasons: string[];
+  error: string | null;
+  thread_id: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
 }
 
 export interface Task {
@@ -84,6 +111,21 @@ export interface Task {
   rationale: string | null;
   note?: string;
   note_tone?: "warn" | "info";
+  /** The proposal this task is waiting on, when it stopped for a person. */
+  approval_id?: string | null;
+  /** The decision record this task wrote, for the evidence behind the card. */
+  decision_id?: string | null;
+  detail?: TaskDetail | null;
+}
+
+/** `/api/workspaces/{ws}/agents/activity`: the board, as the runtime recorded it. */
+export interface AgentActivity {
+  tasks: Task[];
+  /** Tasks still queued, working or in review. Zero means nothing is running. */
+  active: number;
+  waiting: number;
+  note: string;
+  spend?: { today_cents: number; day_cap_cents: number; run_cap_cents: number };
 }
 
 export interface EvidenceNode {

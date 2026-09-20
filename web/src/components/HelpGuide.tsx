@@ -7,10 +7,11 @@ import { NAV } from "@/lib/tabs";
 
 const SEEN_KEY = "sherlock.help.seen.v1";
 
-/** What each of the three screens is for, in the order the work happens. */
+/** What each screen is for, in the order the work happens. */
 const SCREENS: Record<string, string> = {
   books: "Create an institution, upload files, check the import and commit the records.",
   investigation: "Set a review question, start the agents and inspect their findings and evidence.",
+  agents: "Watch every task the agents are running: the steps taken, the evidence read and what stopped for you.",
   briefing: "Review the results, unresolved questions and follow-up. Export a report.",
 };
 

@@ -23,6 +23,7 @@ from typing import Any
 from .. import db, events, memory, roles
 from ..accounting import (accruals, audit, cash, close, controls, match, planning,
                           reconcile, reporting, statements, variance)
+from . import activity
 from .budget import BudgetExceeded, Meter
 
 
@@ -49,6 +50,10 @@ class Toolbox:
         # not match it at all. Narrowing the readable set to the subject alone made
         # every match fail for want of its own evidence.
         self._records = [r for r in records if r["role"] in self._roles]
+        #: The board row this agent's work is being written to, set by the runtime once
+        #: the task exists. None in tests and in any path that runs a tool outside a
+        #: task, where there is nothing to report into and nothing is reported.
+        self.task_id: str | None = None
         #: Everything actually read, so a citation can be checked against it.
         self.read_keys: set[str] = set()
         self.read_sources: set[str] = set()
@@ -536,6 +541,48 @@ class Toolbox:
                     f"{self.spec.id} cited source {source!r}, which it did not read.")
 
 
+#: What each tool is doing, in words a person reading the board can follow. The board
+#: shows work, not an API log, so `read_records` reads as what it was for.
+STEP_TITLE = {
+    "read_records": "Read the records",
+    "read_source": "Read the original file",
+    "read_event": "Pulled everything on one transaction",
+    "three_way_match": "Matched invoice, order and receipt",
+    "find_duplicates": "Tested for duplicate invoices",
+    "check_policy": "Tested it against policy",
+    "reconcile_bank": "Reconciled the bank to the books",
+    "decompose_payout": "Broke a payout into its parts",
+    "project_cash": "Projected the cash position",
+    "build_statements": "Built the statements from the ledger",
+    "close_checklist": "Ran the close checklist",
+    "propose_journal": "Proposed an adjustment",
+    "reperform": "Reperformed the figures independently",
+    "roll_up": "Rolled budget and actuals together",
+    "forecast_series": "Compared forecast to actuals",
+    "decompose_variance": "Traced a variance to its drivers",
+    "model_scenario": "Modelled a scenario",
+    "build_report": "Assembled the reporting",
+    "run_controls": "Ran the control tests",
+    "select_sample": "Selected a sample",
+    "trace_transaction": "Traced one transaction end to end",
+    "read_decisions": "Read what has already been decided",
+    "build_evidence_pack": "Assembled the evidence pack",
+    "check_precedents": "Re-checked earlier decisions",
+    "list_agents": "Looked over the organization",
+    "delegate": "Delegated to a specialist",
+    "summarize": "Summarized what came back",
+}
+
+
+def _step_detail(name: str, arguments: dict) -> str:
+    """The subject of the call, so two calls to one tool are not one line twice."""
+    for key in ("role", "invoice_key", "source_id", "event_id", "payout_key", "account"):
+        value = arguments.get(key)
+        if value:
+            return f"{key.replace('_', ' ')}: {value}"
+    return ""
+
+
 def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
     """Run one named tool call. Unknown names are refused, never guessed at."""
     handlers = {
@@ -567,7 +614,20 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
     handler = handlers.get(name)
     if handler is None:
         raise ScopeError(f"{name!r} is not a tool this runtime implements.")
-    return handler(**arguments)
+
+    # The board is written from here because this is the one place every model-initiated
+    # tool call passes through. A refusal is recorded as loudly as a success: a scope
+    # error the board did not show would look like a step the agent simply never took.
+    title = STEP_TITLE.get(name, name.replace("_", " "))
+    detail = _step_detail(name, arguments)
+    try:
+        result = handler(**arguments)
+    except (ScopeError, BudgetExceeded) as exc:
+        activity.step(toolbox.task_id, title, detail=f"Refused: {exc}", state="todo",
+                      counts_as_tool=True)
+        raise
+    activity.step(toolbox.task_id, title, detail=detail, counts_as_tool=True)
+    return result
 
 
 def tool_definitions(spec) -> list[dict]:

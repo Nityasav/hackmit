@@ -40,6 +40,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
   if (!task) return null;
 
   const doneSteps = task.steps.filter((step) => step.state === "done").length;
+  const detail = task.detail ?? null;
   const running = task.column === "working" || task.column === "auditor_review";
   const seconds = elapsedSeconds(task.started_at, now);
   const started = startedAtLabel(task.started_at);
@@ -120,6 +121,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
                       {step.title}
                     </div>
                     {step.detail && <div className="mt-0.5 font-mono text-[12px] leading-relaxed text-ink-dim">{step.detail}</div>}
+                    {step.at && <div className="mt-0.5 font-num text-[11.5px] tabular-nums text-ink-faint">{stamp(step.at)}</div>}
                   </div>
                 </div>
               ))}
@@ -140,13 +142,96 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
 
           {task.rationale && (
             <>
-              <Heading className="mt-5">Why the coordinator planned it this way</Heading>
+              <Heading className="mt-5">What it concluded</Heading>
               <p className="border border-line bg-surface-2 px-3 py-2.5 text-[13.5px] leading-relaxed">{task.rationale}</p>
+            </>
+          )}
+
+          {/* Everything else the run recorded. A person who opens a card should not
+              have to go anywhere else to find out what this agent is, what it was
+              asked, what it spent or what stopped it. */}
+          {detail && (
+            <>
+              <Heading className="mt-5">This agent</Heading>
+              <p className="text-[13.5px] leading-relaxed">{detail.charter}</p>
+              <dl className="mt-2 border border-line bg-surface-2 text-[13px]">
+                <Row label="Reports to" value={detail.parent ?? "Nobody — it routes the work"} />
+                <Row label="Reviewed by" value={detail.reviewer ?? "Not independently reviewed"} />
+                <Row label="Model" value={detail.model} />
+                <Row label="Level" value={detail.tier} />
+              </dl>
+
+              <Heading className="mt-5">What it was asked</Heading>
+              <p className="whitespace-pre-wrap border border-line bg-surface-2 px-3 py-2.5 text-[13.5px] leading-relaxed">
+                {detail.objective || "No objective was recorded."}
+              </p>
+
+              <Heading className="mt-5">What it spent</Heading>
+              <dl className="border border-line bg-surface-2 text-[13px]">
+                <Row label="Tool calls" value={`${task.tool_calls.used} of ${task.tool_calls.budget}`} />
+                <Row label="Model calls" value={`${detail.model_calls} of ${detail.model_budget}`} />
+                <Row label="Cost" value={`${money(detail.cost_cents)} of ${money(detail.cost_budget_cents)}`} />
+                {detail.confidence !== null && (
+                  <Row label="Confidence" value={`${detail.confidence}% — computed by the engine, not stated by the model`} />
+                )}
+              </dl>
+
+              {detail.escalation_reasons.length > 0 && (
+                <>
+                  <Heading className="mt-5">Why a person is needed</Heading>
+                  {detail.escalation_reasons.map((reason) => (
+                    <div key={reason} className="border-b border-line py-1.5 font-mono text-[12.5px] last:border-0">
+                      {reason}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {detail.error && (
+                <>
+                  <Heading className="mt-5">Why it stopped</Heading>
+                  <p className="border border-line bg-surface-2 px-3 py-2.5 font-mono text-[12.5px] leading-relaxed">
+                    {detail.error}
+                  </p>
+                </>
+              )}
+
+              <Heading className="mt-5">On the record</Heading>
+              <dl className="border border-line bg-surface-2 text-[13px]">
+                <Row label="Run" value={detail.thread_id} />
+                <Row label="Task" value={task.id} />
+                {task.decision_id && <Row label="Decision" value={task.decision_id} />}
+                {task.approval_id && <Row label="Awaiting approval" value={task.approval_id} />}
+                <Row label="Delegated" value={stamp(detail.created_at)} />
+                {detail.started_at && <Row label="Started" value={stamp(detail.started_at)} />}
+                <Row label="Last step" value={stamp(detail.updated_at)} />
+                {detail.finished_at && <Row label="Finished" value={stamp(detail.finished_at)} />}
+              </dl>
             </>
           )}
         </div>
       </aside>
     </>
+  );
+}
+
+const money = (cents: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+/** A recorded instant, in the reader's own clock. Unparseable text is shown as it was. */
+function stamp(value: string): string {
+  const moment = Date.parse(value);
+  return Number.isNaN(moment) ? value : new Date(moment).toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-3 border-b border-line px-3 py-1.5 last:border-0">
+      <dt className="w-32 flex-none text-ink-dim">{label}</dt>
+      <dd className="min-w-0 break-words">{value}</dd>
+    </div>
   );
 }
 
