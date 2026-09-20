@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { useData } from "@/lib/data";
 import { SourcesPanel } from "@/components/SourcesPanel";
+import { GuidedWorkflow } from "@/components/GuidedWorkflow";
 import { CloseProgressChart } from "@/components/ui/close-progress-chart";
 import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
+import type { IntakeUiProgress } from "@/lib/workflow";
 import {
   AgentAvatar,
   Button,
@@ -21,6 +23,7 @@ import {
 export default function CommandCenter() {
   const { bundle, decideApproval } = useData();
   const [toast, setToast] = useState<string | null>(null);
+  const [intakeProgress, setIntakeProgress] = useState<IntakeUiProgress | null>(null);
   const { workspace, agents, briefing, kpis, workflows, tasks, approvals, findings, decisions } = bundle;
   const done = tasks.filter((t) => t.column === "done").length;
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
@@ -32,6 +35,7 @@ export default function CommandCenter() {
     return (
       <div className="mx-auto max-w-[1180px]">
         <PageHeader title={`${workspace.name} · ${workspace.period}`} />
+        <GuidedWorkflow bundle={bundle} intake={intakeProgress} />
         {briefing.actions.length > 0 && (
           <Section first>
             <div className="flex items-center gap-2">
@@ -57,12 +61,13 @@ export default function CommandCenter() {
             </div>
           </Section>
         )}
-        <SourcesPanel key={workspace.id} />
+        <SourcesPanel key={workspace.id} onProgressChange={setIntakeProgress} />
       </div>
     );
 
   return (
     <div className="mx-auto max-w-[1180px]">
+      <GuidedWorkflow bundle={bundle} />
       {/* The briefing is the one thing on this page that gets to be loud. */}
       <Section first>
         <div className="flex items-center gap-2">
