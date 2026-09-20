@@ -164,7 +164,10 @@ TREASURER = (
                 "for duplication and policy breaches, and decide whether it may be paid.",
         tools=("read_records", "read_source", "three_way_match", "find_duplicates", "check_policy"),
         requires=("vendors", "vendor_invoices", "purchase_orders", "goods_receipts",
-                  "approvals", "policy", "approval_limit_cents"),
+                  "approvals", "policy", "approval_limit_cents",
+                  # The documents behind the register rows: the invoice as it was
+                  # issued, and evidence that what is billed for was delivered.
+                  "invoice", "service"),
         output_schema=schemas.APResult, reviewer="D2",
         escalate_when=EscalationRule(
             confidence_below=85, amount_above_cents=500_000,
@@ -245,7 +248,7 @@ FPA = (
         id="C1", name="Budgeting", tier="subagent", parent="C",
         charter="Maintain the approved operating budget and the assumptions behind it.",
         tools=("read_records", "roll_up"),
-        requires=("chart", "budgets", "payroll", "headcount"),
+        requires=("chart", "budgets", "payroll", "headcount", "budget"),
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=40)),
     AgentSpec(
         id="C2", name="Forecasting", tier="subagent", parent="C",
@@ -259,7 +262,7 @@ FPA = (
         charter="Explain why actuals differ from plan, tracing each driver to the "
                 "transactions that caused it.",
         tools=("read_records", "read_event", "decompose_variance"),
-        requires=("chart", "ledger", "budgets", "forecasts"),
+        requires=("chart", "ledger", "budgets", "forecasts", "budget"),
         reviewer="D2",
         escalate_when=EscalationRule(confidence_below=80, on=("unexplained_residual",)),
         budget=Budget(model_calls=4, tool_calls=28, usd_cents=64)),
@@ -294,7 +297,10 @@ AUDIT = (
         tools=("read_records", "read_source", "read_event", "select_sample",
                "trace_transaction", "reperform"),
         requires=("ledger", "vendor_invoices", "purchase_orders", "goods_receipts",
-                  "payments", "approvals", "bank_transactions", "materiality_cents"),
+                  "payments", "approvals", "bank_transactions", "materiality_cents",
+                  # "trace them end to end, from source document" is the charter;
+                  # without these the trail stops at the register row.
+                  "invoice", "service", "contract"),
         escalate_when=EscalationRule(confidence_below=90, on=("broken_trail", "missing_approval")),
         budget=Budget(model_calls=4, tool_calls=36, usd_cents=120)),
     AgentSpec(

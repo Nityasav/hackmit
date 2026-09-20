@@ -16,8 +16,30 @@ type Correction = { id: string; document_id: string; output: Output; group: stri
 type State = { documents: Doc[]; model: Model[]; prediction: { id: string; document_id: string; output: Output | null; error: string | null }[];
   correction: Correction[]; retirement: { model_id: string }[];
   active: { model_id: string; version: number } | null; schemas: Record<string, string[]>; schema_version: string };
+//: Where in this screen an action was taken, so its outcome can be reported
+//: beside the control rather than only at the top of the page.
+type Scope = "top" | "review" | "combine";
+
 const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
+
+/**
+ * Which agents may read a document of each kind, from the `roles` on their
+ * specs in api/app/agents/registry.py.
+ *
+ * Getting this wrong is silent and expensive: a document staged under a kind
+ * no agent reads is preserved, hashed and citable by a person, and invisible
+ * to every agent — so the work of extracting and checking it buys nothing.
+ * The kinds absent here have no reader at all, which is worth saying on the
+ * screen where the choice is made rather than leaving someone to discover it.
+ */
+const READERS: Record<string, string> = {
+  invoice: "Accounts Payable and Audit",
+  service: "Accounts Payable and Audit",
+  policy: "Accounts Payable and Controls Testing",
+  grants: "Accruals & Adjustments and Audit, as a funding contract",
+  budget: "Budgeting and Variance Analysis",
+};
 
 function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {
   let output: Output;
@@ -55,7 +77,10 @@ function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fi
 }
 
 /**
- * Getting a PDF, a photo or a scan into the books.
+ * Getting a PDF into the books.
+ *
+ * A scan or a photo needs character recognition, which is not installed here,
+ * so those are refused at upload rather than guessed at.
  *
  * A document is preserved byte for byte, read into page text, and then a person
  * checks every extracted value against the page it came from before any of it
@@ -86,37 +111,122 @@ function Lab({ ws }: { ws: string }) {
   const [note, setNote] = useState("");
   const [authorization, setAuthorization] = useState("");
   const [model, setModel] = useState("");
+  const [combine, setCombine] = useState<string[]>([]);
+  const [reshaped, setReshaped] = useState(false);
+  const [scope, setScope] = useState<Scope>("top");
+  const [errorScope, setErrorScope] = useState<Scope>("top");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const refresh = useCallback(async () => { const next = await intakeApi<State>(base); setState(next); return next; }, [base]);
   useEffect(() => { let active = true; intakeApi<State>(base).then(s => { if (active) setState(s); }).catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); }); return () => { active = false; }; }, [base]);
+  // Preselect when there is exactly one model to choose. The picker opened on
+  // "Active model — none configured", which is not a model, so the read button
+  // stayed disabled until someone noticed they had to choose — and a disabled
+  // button reads as a broken feature. With two or more, the choice is real and
+  // is left to the person.
+  const onlyModel = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
+  useEffect(() => {
+    if (!model && !state?.active && onlyModel.length === 1) setModel(onlyModel[0].id);
+  }, [model, state?.active, onlyModel]);
   const doc = state?.documents.find(d => d.id === selected);
   const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
   const prediction = state?.prediction.filter(p => p.document_id === selected).at(-1);
-  async function act(action: () => Promise<unknown>, success: string) {
-    setBusy(true); setError(""); setMessage("");
-    try { await action(); await refresh(); setMessage(success); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  // The newest correction per document, kept only where it still matches the
+  // document's current page text — a superseded one describes text that has
+  // since been re-read, and the API refuses it. Restricted to the kind now
+  // selected, because each kind extracts different columns and one register
+  // cannot hold two of them.
+  const sameKind = (state?.documents || []).filter(d => d.role === role);
+  const readyToCombine = Object.values(
+    (state?.correction || []).reduce<Record<string, Correction>>((acc, c) => ({ ...acc, [c.document_id]: c }), {}),
+  ).filter(c => {
+    const named = state?.documents.find(d => d.id === c.document_id);
+    return !!named && named.role === role && named.text_sha256 === c.text_sha256;
+  });
+  /**
+   * Run one action and report where it was taken.
+   *
+   * `where` matters: the outcome used to render once, near the top of a long
+   * page, while the button that caused it sat far below. A person clicked
+   * Accept, it succeeded, and nothing they could see changed — which is how a
+   * working control comes to look broken.
+   */
+  async function act(action: () => Promise<unknown>, success: string, where: Scope = "top") {
+    setBusy(true); setError(""); setErrorScope(where); setMessage(""); setScope(where);
+    try { await action(); await refresh(); setMessage(success); setScope(where); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setErrorScope(where); }
     finally { setBusy(false); }
   }
+
+  /** A confirmation rendered where the action was taken, stated plainly. */
+  function Done({ at }: { at: Scope }) {
+    if (!message || scope !== at) return null;
+    return <p role="status" className="mt-2 border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900">
+      <b>Done.</b> {message}
+    </p>;
+  }
   const post = (path: string, body: unknown) => intakeApi(base + path, { method: "POST", body });
+  // A field marked present must carry an exact page span: the API rejects the
+  // whole submission otherwise, and the rejection used to arrive as a wall of
+  // validator output at the top of a long page, far from the button that
+  // caused it. Naming the fields here stops the submission being made at all.
+  const uncited: string[] = (() => {
+    try {
+      const parsed = JSON.parse(editor) as Output;
+      return (parsed.records || []).flatMap((record, index) =>
+        Object.entries(record)
+          .filter(([, v]) => v && v.status === "present" &&
+            (v.page === null || v.start === null || v.end === null))
+          .map(([field]) => `record ${index + 1} · ${displayLabel(field)}`));
+    } catch { return ["the advanced JSON is not valid"]; }
+  })();
+  /**
+   * A stored record, reshaped to the field set this document type has now.
+   *
+   * The fields a document type extracts are not frozen: the agent rework
+   * changed the vocabulary, and predictions saved before it kept the shape
+   * they were made with — school-era `student_ref` and `fund` where the books
+   * now want `customer_id` and `entity`. Loading one verbatim produced an
+   * editor whose every submission the API refused, with nothing on screen
+   * explaining why.
+   *
+   * Values for fields that still exist are kept, because a person checked
+   * them. Fields that no longer exist are dropped, and fields that did not
+   * exist then are added as abstentions — never as guesses.
+   */
+  function reshape(output: Output | null | undefined, fields: string[]): Output | undefined {
+    if (!output?.records?.length) return undefined;
+    return {
+      schema_version: state?.schema_version || output.schema_version,
+      records: output.records.map(record => Object.fromEntries(fields.map(field => [
+        field,
+        record[field] || { status: "missing", value: null, page: null, start: null, end: null },
+      ])) as Record<string, Observation>),
+    };
+  }
+
   function choose(d: Doc) {
     setSelected(d.id);
+    const fields = state?.schemas[d.role] || [];
     const saved = state?.correction.filter(c => c.document_id === d.id).at(-1);
     const predicted = state?.prediction.filter(p => p.document_id === d.id && p.output).at(-1);
-    const blank = { schema_version: state?.schema_version, records: [Object.fromEntries((state?.schemas[d.role] || []).map(k => [k, { status: "missing", value: null, page: null, start: null, end: null }]))] };
-    setEditor(JSON.stringify(saved?.output || predicted?.output || blank, null, 2));
+    const blank: Output = { schema_version: state?.schema_version || "", records: [Object.fromEntries(fields.map(k => [k, { status: "missing", value: null, page: null, start: null, end: null }])) as Record<string, Observation>] };
+    const loaded = reshape(saved?.output, fields) || reshape(predicted?.output, fields) || blank;
+    const source = saved?.output || predicted?.output;
+    setReshaped(!!source && JSON.stringify(Object.keys(source.records[0] || {}).sort()) !== JSON.stringify([...fields].sort()));
+    setEditor(JSON.stringify(loaded, null, 2));
     setTranscript(JSON.stringify(d.pages.map(p => p.text), null, 2));
     setGroup(saved?.group || ""); setConsent(saved?.training_authorized || false); setIncludeRecords(false); setNote(""); setAuthorization("");
   }
   const availableModels = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
   return <div className="space-y-4">
     {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
-    {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
+    {message && scope === "top" && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
-      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
+      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF only, up to 10 MB and 20 pages. The text is read straight out of the file, so a PDF you can select text in will work. A scan or a photo of a document needs character recognition, which is not installed on this server, and will be rejected rather than guessed at.</p>
         <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
+        {READERS[role] ? <p className="mt-2 text-[12.5px] text-ink-dim">Once you have checked it and staged it, {READERS[role]} can read this as evidence and cite it.</p> : <p className="mt-2 text-[12.5px] text-amber-800">No agent reads this kind yet. It will be preserved, citable by a person, and invisible to every agent — pick the kind that matches what the document actually is.</p>}
         <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
             <span>Choose document</span>
@@ -124,13 +234,43 @@ function Lab({ ws }: { ws: string }) {
               <button type="button" className={`${button} font-semibold`} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
               <span className="min-w-0 break-all text-xs text-ink-dim" aria-live="polite">{file?.name || "No document selected"}</span>
             </div>
-            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
+            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
           </div>
           <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
       </section>
+      {sameKind.length > 1 && <section className="border border-line p-5">
+        <h3 className="text-[15px] font-semibold tracking-tight">Combine several into one register</h3>
+        <p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">
+          Staging one at a time makes one import per document. These have all been checked and are
+          the same kind, so their rows can go into a single spreadsheet you review and commit once.
+          Each document still keeps its own evidence file, so every value stays traceable to the
+          page it came from.
+        </p>
+        <ul className="my-3 space-y-1">{sameKind.map(d => {
+          const ready = readyToCombine.find(c => c.document_id === d.id);
+          return <li key={d.id} className="text-[13px]"><label className={`flex items-center gap-2 ${ready ? "" : "text-ink-dim"}`}>
+            <input type="checkbox" checked={!!ready && combine.includes(ready.id)} disabled={busy || !ready}
+              onChange={e => ready && setCombine(prev => e.target.checked ? [...prev, ready.id] : prev.filter(x => x !== ready.id))} />
+            {d.name}
+            {!ready && <span className="text-[12px]">· check its values and accept them first</span>}
+          </label></li>;
+        })}</ul>
+        <button className={button} disabled={busy || combine.length < 2}
+          onClick={() => act(async () => { await post("/stage-set", { correction_ids: combine, include_records: true }); setCombine([]); },
+            "One import now holds every row from the documents you selected, plus each document\u2019s own evidence file. It is waiting under \u201cAdd records\u201d at the top of this page. Review it there and commit it; until you do, none of this is in the books.", "combine")}>
+          {combine.length < 2 ? "Select at least two" : `Combine ${combine.length} into one import`}
+        </button>
+        <Done at="combine" />
+      </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
+        {!state.model.length && <p className="my-2 max-w-prose text-[12.5px] text-amber-800">
+          No extraction model is registered for this company, so the values cannot be read
+          automatically — a model is registered per company, and a new one starts without. You can
+          still check every value against the pages yourself below, which is the same review a
+          model&rsquo;s output would need anyway.
+        </p>}
         <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
           {/* The local model takes roughly half a minute per document, so this
               one request opts out of the client's short default deadline. At 20s
@@ -140,10 +280,35 @@ function Lab({ ws }: { ws: string }) {
         <div className="grid gap-4 lg:grid-cols-2"><div className="max-h-[650px] overflow-auto">{doc.pages.map(p => <article className="mb-4 border border-line p-3" key={p.page}><h4 className="text-[13px] font-semibold">Page {p.page} · {p.method}</h4>{p.warnings.map(w => <p className="text-[12px] text-amber-800" key={w}>{w}</p>)}{![".txt", ".md"].includes(doc.suffix) && <a target="_blank" rel="noreferrer" className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/pages/${p.page}`}>View the original page image</a>}<pre className="whitespace-pre-wrap text-xs">{p.text}</pre></article>)}</div>
           <div><p className="mb-2 text-[13px]">Check each value against the source. Citation offsets start at zero; the end position is excluded.</p><FieldEditor text={editor} doc={doc} fields={state.schemas[doc.role]} change={setEditor} /><details className="mt-3"><summary className="text-[13px]">Edit the raw extraction JSON</summary><label>Extraction JSON<textarea aria-label="Extraction JSON" spellCheck={false} className={`${input} h-96 font-mono text-xs`} value={editor} onChange={e => setEditor(e.target.value)} /></label></details></div></div>
         <details className="my-3"><summary className="cursor-pointer text-[13px]">The page text itself is wrong</summary><p className="my-2 text-[13px]">Compare each page image first. Saving this creates a new text revision and invalidates the values already placed against the old one. The original file is never overwritten.</p><textarea aria-label="Page transcription JSON array" className={`${input} h-40 font-mono`} value={transcript} onChange={e => setTranscript(e.target.value)} /><button disabled={busy || !note.trim()} className={button} onClick={() => act(() => post(`/documents/${doc.id}/transcription`, { expected_text_sha256: doc.text_sha256, pages: JSON.parse(transcript), note }), "New text revision saved. Re-open the document and check every value again.")}>Save a corrected transcription</button></details>
-        <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Institution, supplier or template<input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Review note<input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>Data authorization<input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
-        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim()} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
+        <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Institution, supplier or template <span className="text-amber-800">(required)</span><input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Review note <span className="text-amber-800">(required)</span><input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>Data authorization <span className="text-amber-800">(required)</span><input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim() || uncited.length > 0} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Your checked values are saved against this document, with every citation you confirmed. Nothing has been posted to the books yet — use \u201cStage it for import\u201d next to send them to an import.", "review")}>Accept what I checked</button>
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Stage new records for import. Leave unchecked if these records are already imported.</label>
-          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
+          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "An import has been created and is waiting under \u201cAdd records\u201d at the top of this page, where a banner offers to open it. Review it there and commit it; until you do, none of this is in the books.", "review")}>Stage it for import</button></div>
+        {/* A disabled control that does not say why reads as a broken one. */}
+        {reshaped &&
+          <p className="mt-2 text-[12.5px] text-amber-800">
+            These values were saved when this document type extracted a different set of fields,
+            so they have been fitted to the current one: anything still extracted was kept, fields
+            that no longer exist were dropped, and new ones start blank rather than guessed. Check
+            them against the pages before accepting.
+          </p>}
+        {uncited.length > 0 &&
+          <p className="mt-2 text-[12.5px] text-amber-800">
+            These are marked present but have no exact page span, which the books will not accept:{" "}
+            {uncited.join("; ")}. Either set the page and character positions, or change the status
+            to ambiguous or unreadable — a value nobody can point at on the page is not evidence.
+          </p>}
+        <Done at="review" />
+        {error && errorScope === "review" && <p role="alert" className="mt-2 border border-red-300 bg-red-50 p-2 text-[12.5px] text-red-800">{error}</p>}
+        {(!group.trim() || !note.trim() || !authorization.trim()) &&
+          <p className="mt-2 text-[12.5px] text-amber-800">Before you can accept: fill in{" "}
+            {[!group.trim() && "the institution, supplier or template", !note.trim() && "a review note",
+              !authorization.trim() && "what authorizes you to hold this document"].filter(Boolean).join(", ")}.
+          </p>}
+        {!correction &&
+          <p className="mt-1 text-[12.5px] text-ink-dim">Staging becomes available once you have accepted the values above. Nothing is imported until you commit the staged batch on Books.</p>}
+        {correction && correction.text_sha256 !== doc.text_sha256 &&
+          <p className="mt-1 text-[12.5px] text-amber-800">The page text was re-read after these values were accepted, so they describe text that has changed. Check them against the pages again and accept once more before staging.</p>}
       </section>}
     </>}
     {busy && <p role="status" className="text-[13px]">Working… keep this open. Reading a document with the model takes about half a minute. The original is safe; do not repeat the action.</p>}

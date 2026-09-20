@@ -63,7 +63,10 @@ def _escalating_model(agent_conditions: dict[str, str] | None = None):
                       "obligation cannot be matched to anything.",
             exceptions=[schemas.Exception_(
                 code=code, detail="Raised by the scripted model for this test.")],
-            citations=cited, proposed_action="Hold for an authorized person.")
+            citations=cited, proposed_action="Hold for an authorized person.",
+            # Required, not defaulted: an agent offered no precedent still has to say
+            # so explicitly, so silence never reads as a completed check.
+            memory_checks=[])
         if schema is schemas.APResult:
             return schemas.APResult(**fields, may_pay=False)
         return schema(**fields)

@@ -172,7 +172,10 @@ def test_staging_requires_review_defaults_to_evidence_and_no_auto_commit(client)
     again = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).json()
     assert again["batch_id"] == staged["batch_id"]
     batch = ingestion.get_batch(ws, staged["batch_id"])
-    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "document"
+    # Staged under what the document IS, not the catch-all. An agent may read
+    # only roles it declared it needs, so everything landing in `document` meant
+    # a person checked every value and no agent could then read any of it.
+    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "invoice"
     assert client.get(f"/api/workspaces/{ws}/updates").json()["total_records"] == 0
     financial = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"], "include_records": True}).json()
     batch = ingestion.get_batch(ws, financial["batch_id"])
@@ -470,3 +473,194 @@ def test_local_runner_rejects_browser_and_wrong_identity():
             "fields": ex.schema("invoice"), "pages": [{"page": 1, "text": "test", "method": "native", "warnings": []}],
             "output_schema": {}, "instruction": "untrusted"}
     assert client.post("/extract", json=body).status_code == 409
+
+
+def test_each_document_kind_is_staged_under_a_role_an_agent_can_read():
+    """A document staged under a role no agent reads is preserved, hashed and
+    citable by a person, and invisible to every agent — so extracting it and
+    checking its values buys nothing, silently. Everything used to land in
+    `document`, which nothing reads.
+    """
+    from app import roles
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    readable = {role for agent in AGENTS.values() for role in agent.roles}
+
+    for kind, staged_as in EVIDENCE_ROLE.items():
+        assert staged_as in roles.DOCUMENT_ROLES, (
+            f"{kind!r} stages as {staged_as!r}, which cannot hold a document at all")
+        if staged_as == "document":
+            continue  # the catch-all; the Document lab says nobody reads it
+        readers = sorted(a.id for a in AGENTS.values() if staged_as in a.roles)
+        assert readers, f"{kind!r} stages as {staged_as!r}, which no agent reads"
+
+
+def test_an_invoice_document_reaches_the_agent_whose_charter_covers_it():
+    """The mapping is only worth anything if it lands somewhere specific."""
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert "invoice" in AGENTS["A1"].roles, "Accounts Payable must read invoice documents"
+    assert "invoice" in AGENTS["D1"].roles, "Audit traces a payment to its source document"
+    assert EVIDENCE_ROLE["invoice"] == "invoice"
+    # And it does not leak to agents whose charter does not cover it.
+    assert "invoice" not in AGENTS["C1"].roles, "Budgeting has no business reading invoices"
+
+
+def test_a_grant_agreement_is_staged_as_the_contract_it_is():
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert EVIDENCE_ROLE["grants"] == "contract"
+    assert "contract" in AGENTS["B2"].roles, "Accruals reads the terms behind a commitment"
+
+
+def _invoice(client, ws, number, amount):
+    """One checked invoice document, ready to stage."""
+    text = (f"Invoice {number} vendor V-1 amount {amount} dated 2026-09-01 "
+            "due 2026-10-01 currency USD")
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": (f"{number}.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": number, "vendor_id": "V-1", "amount": amount,
+                       "invoice_date": "2026-09-01", "due_date": "2026-10-01",
+                       "currency": "USD"}.items():
+        if key in record and value in page:
+            start = page.index(value)
+            record[key] = {"status": "present", "value": value, "page": 1,
+                           "start": start, "end": start + len(value)}
+    return client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "vendor-template-a", "training_authorized": True,
+        "authorization_note": "Synthetic fixture owned by test",
+        "note": "Compared against original", "text_sha256": doc["text_sha256"]}).json()
+
+
+def test_several_invoices_combine_into_one_register(client):
+    """Staging one at a time produced one import per document, so twenty
+    invoices meant twenty batches holding a single row each. They belong in one
+    spreadsheet a person reviews and commits once."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"),
+                   _invoice(client, ws, "A-102", "850.00"),
+                   _invoice(client, ws, "A-103", "430.00")]
+
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True})
+    assert staged.status_code == 201, staged.text
+    assert staged.json()["combined"] == 3 and staged.json()["rows"] == 3
+
+    batch = ingestion.get_batch(ws, staged.json()["batch_id"])
+    csvs = [f for f in batch["files"] if f["name"].endswith(".csv")]
+    assert len(csvs) == 1, "three invoices must produce one register, not three"
+    assert csvs[0]["row_count"] == 3
+    # Every document still contributes its own evidence, because the page
+    # citations belong to the PDF they came from.
+    assert len([f for f in batch["files"] if f["name"].endswith(".txt")]) == 3
+
+
+def test_combined_rows_keep_a_distinct_identity_per_document(client):
+    """Rows gathered from several documents must not collide on record_id, or
+    the register silently holds fewer invoices than were uploaded."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"), _invoice(client, ws, "A-102", "850.00")]
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    keys = [row["key"] for row in register["preview"]]
+    assert len(set(keys)) == len(keys) == 2, keys
+
+
+def test_a_set_mixing_document_kinds_is_refused(client):
+    """Each kind extracts different columns, so one register cannot hold two of
+    them without inventing values for the fields the other lacks."""
+    ws = workspace(client)
+    invoice = _invoice(client, ws, "A-101", "1200.00")
+    policy_doc = upload(client, ws, text="Expenses over 500.00 need a second approver.", role="policy")
+    policy_correction = correction(client, ws, policy_doc)
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [invoice["id"], policy_correction["id"]], "include_records": True})
+
+    assert response.status_code == 422
+    assert "one kind of document at a time" in response.json()["detail"]
+
+
+def test_a_superseded_correction_cannot_be_combined(client):
+    """The same guard the single path applies: values nobody checked against
+    the text they now describe must not reach an import."""
+    ws = workspace(client)
+    first = _invoice(client, ws, "A-101", "1200.00")
+    doc_id = first["document_id"]
+    current = next(d for d in client.get(path(ws)).json()["documents"] if d["id"] == doc_id)
+    client.post(path(ws) + f"/documents/{doc_id}/transcription", json={
+        "expected_text_sha256": current["text_sha256"],
+        "pages": ["Invoice A-101 vendor V-1 amount 9999.00 dated 2026-09-01"],
+        "note": "Re-read the original"})
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [first["id"]], "include_records": True})
+
+    assert response.status_code == 409
+
+
+def test_a_field_set_mismatch_names_the_fields(client):
+    """"Unknown fields are forbidden" gave no way to tell a record saved under
+    an older vocabulary from a typo in the raw JSON. The commonest cause is the
+    former: a document type's field set changes and stored predictions keep the
+    shape they were made with."""
+    ws = workspace(client)
+    doc = upload(client, ws)
+    out = output(doc)
+    out["records"][0].pop(next(iter(out["records"][0])))      # a field that went away
+    out["records"][0]["student_ref"] = {"status": "missing", "value": None,
+                                        "page": None, "start": None, "end": None}
+
+    response = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": out, "group": "g", "training_authorized": False,
+        "authorization_note": "synthetic", "note": "n", "text_sha256": doc["text_sha256"]})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "student_ref" in detail, detail
+    assert "missing:" in detail and "older field set" in detail
+
+
+def test_a_dollar_amount_normalises_against_the_workspace_currency(client):
+    """An invoice that prints "$3,200.00" and names no currency is the ordinary
+    case. Stripping the symbol only when the extraction happened to capture a
+    currency field sent the amount to intake unparsed, and held the whole
+    import for review over a dollar sign in a workspace that keeps its books
+    in dollars."""
+    ws = workspace(client)
+    text = "Invoice A-900 vendor V-1 amount $3,200.00 dated 2026-09-01 due 2026-10-01"
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": ("a900.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": "A-900", "vendor_id": "V-1",
+                       "amount": "$3,200.00", "invoice_date": "2026-09-01",
+                       "due_date": "2026-10-01"}.items():
+        start = page.index(value)
+        record[key] = {"status": "present", "value": value, "page": 1,
+                       "start": start, "end": start + len(value)}
+    correction = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "g", "training_authorized": False, "authorization_note": "synthetic",
+        "note": "n", "text_sha256": doc["text_sha256"]}).json()
+
+    staged = client.post(path(ws) + "/stage",
+                         json={"correction_id": correction["id"], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    assert register["preview"][0]["payload"]["amount_cents"] == 320000
+    assert not [i for i in batch["issues"] if i["code"] == "invalid_value"], batch["issues"]

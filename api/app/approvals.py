@@ -126,6 +126,10 @@ def decide(ws, approval_id, decision, reviewer=REVIEWER):
                            (decision, db.now(), reviewer, ws, approval_id))
         db.event(connection, ws, "approval_decided", {
             "approval_id": approval_id, "decision": decision, "kind": row["kind"],
+            # Which agent raised it, recorded here so the follow-up history is
+            # self-contained rather than needing a join back to a proposal row
+            # that may since have been superseded.
+            "agent": row["agent"],
             "finding_id": row["finding_id"], "task_id": row["task_id"],
             "verified_by_auditor": bool(row["verified"]),
             "applied": False,

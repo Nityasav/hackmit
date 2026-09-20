@@ -27,6 +27,10 @@ const ROLES: Record<string, string> = {
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
+//: Where in this panel an action was taken, so its outcome can be reported
+//: beside the control instead of at the top of a long screen.
+type Scope = "top" | "import";
+
 const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
@@ -53,6 +57,10 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   const [history, setHistory] = useState<{ id: string; status: string; created_at: string }[]>([]);
   const [files, setFiles] = useState<{ file: File; options: SourceOptions }[]>([]);
   const [batch, setBatch] = useState<ImportBatch | null>(null);
+  const [scope, setScope] = useState<Scope>("top");
+  //: Keyed by source, line and field, so two blanks on one row stay separate.
+  const [supply, setSupply] = useState<Record<string, string>>({});
+  const [supplyNote, setSupplyNote] = useState("");
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
   const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
@@ -107,10 +115,23 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     });
   }, [batch?.counts.issues, batch?.status, coverage, files.length, onProgressChange, snapshot]);
 
-  async function act(fn: () => Promise<void>) {
-    setBusy(true); setError(""); setMessage("");
+  /**
+   * Run one action and remember where it was taken.
+   *
+   * Committing an import is done at the bottom of a long panel while its
+   * confirmation rendered at the top, so the most consequential action on this
+   * screen appeared to do nothing. `where` puts the outcome beside the button.
+   */
+  async function act(fn: () => Promise<void>, where: Scope = "top") {
+    setBusy(true); setError(""); setMessage(""); setScope(where);
     try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
     finally { setBusy(false); }
+  }
+  function Outcome({ at }: { at: Scope }) {
+    if (scope !== at) return null;
+    if (error) return <p role="alert" className="mt-3 w-full border border-red-300 bg-red-50 p-3 text-[13px] text-red-800">{error}</p>;
+    if (message) return <p role="status" className="mt-3 w-full border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900"><b>Done.</b> {message}</p>;
+    return null;
   }
   function showBatch(b: ImportBatch) { setBatch(b); setDraft(Object.fromEntries(b.files.map((f) => [f.id, f.options]))); }
   function edit(id: string, updates: Partial<SourceOptions>) {
@@ -120,6 +141,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     setSource(await intakeApi<SourceDetail>(`${base}/sources/${id}?start=${line}`));
   }
   const draftChanged = batch && batch.files.some((f) => JSON.stringify(f.options) !== JSON.stringify(draft[f.id]));
+  //: The newest import that has been staged but never committed. `/imports`
+  //: returns newest first, so the first match is the one to act on.
+  const waiting = history.find((h) => h.status !== "committed");
 
   return <section className="mb-4 border border-line bg-white p-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -136,7 +160,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {text}{unreachable ? ` Check that the API is running on ${API_URL}.` : ""}
       </p>;
     })()}
-    {message && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
+    {message && scope === "top" && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
@@ -162,8 +186,8 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
 
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
-        <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
-        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
+        <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
+        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv" disabled={busy}
           onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
         {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
           <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
@@ -181,6 +205,24 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           await refresh();
         })}>{busy ? "Working…" : "Preview import"}</button>
       </div>
+
+      {/* An import staged from the Document lab is created server-side, so this
+          panel learns about it from the poll and otherwise said nothing: the
+          Document lab told people to "scroll up to the import" and there was
+          nothing up here to scroll to. An import waiting to be committed is
+          the one thing on this screen that needs attention, so it says so and
+          opens itself. */}
+      {!batch && waiting && <div className="mt-4 border border-amber-300 bg-amber-50 p-3">
+        <b className="text-[13px]">An import is staged and waiting to be committed.</b>
+        <p className="my-1 text-[12.5px]">
+          {waiting.created_at.slice(0, 19).replace("T", " ")} · nothing is in the books until you
+          review and commit it.
+        </p>
+        <button className={button} disabled={busy}
+          onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + waiting.id)))}>
+          Open it to review and commit
+        </button>
+      </div>}
 
       {history.length > 0 && <label className="mt-4 block text-xs">Resume an import
         <select className={input + " mt-1"} value={batch?.id || ""} disabled={busy} onChange={(e) => { const id = e.target.value; if (id) act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + id))); }}>
@@ -223,22 +265,62 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {batch.issues.length > 0 && <ul className="mt-3 space-y-1" aria-label="Validation issues">{batch.issues.map((i, n) => <li key={n} className="bg-red-50 p-2 text-xs text-accent-bad">
           <b>{i.code}</b>: {i.message} {i.field && `(${i.field})`}
           {i.source_id !== "batch" && <button className="ml-2 underline" onClick={() => act(() => viewSource(i.source_id, i.locator || 1))}>Open source {i.locator ? `line ${i.locator}` : ""}</button>}
-        </li>)}</ul>}
+          {/* A value the document never stated has to come from somewhere, and
+              there was nowhere to put it. Offered only for a blank the source
+              left empty: a value the source does state is evidence, and the
+              API refuses to overwrite it. */}
+          {i.code === "required_field" && i.field && i.locator && i.source_id !== "batch" &&
+            <span className="ml-2 inline-flex flex-wrap items-center gap-1">
+              <input aria-label={`Supply ${i.field} for line ${i.locator}`} className="border border-line px-2 py-1 text-xs"
+                placeholder={`Supply ${i.field}`} value={supply[`${i.source_id}:${i.locator}:${i.field}`] || ""}
+                onChange={(e) => setSupply((v) => ({ ...v, [`${i.source_id}:${i.locator}:${i.field}`]: e.target.value }))} />
+              <button className="underline" disabled={busy || !(supply[`${i.source_id}:${i.locator}:${i.field}`] || "").trim()}
+                onClick={() => act(async () => {
+                  const key = `${i.source_id}:${i.locator}:${i.field}`;
+                  showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/values", {
+                    method: "POST",
+                    body: { expected_version: batch.version, source_id: i.source_id, note: supplyNote.trim() || "Supplied by the reviewer; the source did not state it.",
+                            edits: [{ locator: i.locator, field: i.field, value: supply[key].trim() }] },
+                  }));
+                  setSupply((v) => ({ ...v, [key]: "" }));
+                  setMessage(`Supplied ${i.field} on line ${i.locator}. It is recorded against you as a value the source did not state, and the import was revalidated.`);
+                }, "import")}>Save value</button>
+            </span>}
+        </li>)}
+        <li className="p-2 text-xs text-ink-dim">
+          <label>Why these values are being supplied
+            <input className="ml-2 w-96 max-w-full border border-line px-2 py-1" value={supplyNote}
+              onChange={(e) => setSupplyNote(e.target.value)}
+              placeholder="e.g. matched by vendor name against the vendor register" />
+          </label>
+        </li></ul>}
         {batch.issues_truncated && <p className="text-xs">Showing the first 500 issues; resolve these and revalidate.</p>}
         {batch.changes.length > 0 && <details className="my-2"><summary className="font-semibold">Review {batch.changes.length} superseding record changes</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(batch.changes, null, 2)}</pre></details>}
         {batch.status !== "committed" ? <div className="mt-3 flex flex-wrap gap-2">
           <button disabled={busy} className={button} onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/mapping", {
             method: "PATCH", body: { expected_version: batch.version, files: draft },
-          }))) }>Save mappings & revalidate</button>
+          })), "import") }>Save mappings & revalidate</button>
           <button disabled={busy || batch.status !== "ready_to_commit" || Boolean(draftChanged)} className={primary} onClick={() => act(async () => {
             showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/commit", {
               method: "POST", body: { expected_version: batch.version, idempotency_key: batch.id + ":" + batch.version },
             }));
             setFiles([]); if (fileInput.current) fileInput.current.value = "";
             await Promise.all([refresh(), refreshBundle()]);
-            setMessage("Records committed. Originals and the snapshot are saved locally. No financial correction or agent investigation was performed.");
-          })}>Confirm & commit records</button>
+            setMessage("Records committed. The originals and this snapshot are saved locally, and the agents can now read these records. No accounting correction was made and no investigation was run.");
+          }, "import")}>Confirm & commit records</button>
           <span className="self-center text-[11px] text-ink-dim">Local reviewer · commits validated records, not accounting adjustments</span>
+          {/* A commit button that greys out and says nothing is the commonest
+              way a working feature reads as a broken one. Both conditions that
+              hold it closed are ordinary and recoverable, so both say so. */}
+          <Outcome at="import" />
+          {(batch.status !== "ready_to_commit" || draftChanged) &&
+            <p className="w-full text-[12.5px] text-amber-800">
+              {draftChanged
+                ? "Save mappings & revalidate first — the column mapping has unsaved changes, and committing would import the rows as they were last validated rather than as they now read."
+                : batch.counts.issues
+                  ? `This import cannot be committed while ${batch.counts.issues} issue(s) remain. Each one is listed above with the source line it came from; fix them at source and upload again, or remove the file from this import.`
+                  : `This import is ${displayLabel(batch.status).toLowerCase()} and not yet ready to commit. Save mappings & revalidate to re-check it.`}
+            </p>}
         </div> : <p className="mt-3 font-mono text-xs text-ink">Saved snapshot: {batch.snapshot_id}</p>}
       </div>}
 

@@ -4,6 +4,7 @@ import { displayLabel } from "@/lib/format";
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { Decisions } from "@/components/Decisions";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { SourceDetail } from "@/lib/types";
 
@@ -18,8 +19,31 @@ type View = { workspace: { name: string; start: string; end: string }; snapshot_
   scan: { id: string; snapshot_id: string; record_count: number; created_at: string } | null;
   findings: Finding[]; changes: { id: string; title: string; before: string; after: string }[];
   live: Live | null; live_stale: boolean;
-  history: { id: string; created_at: string; actor: string; kind: string; payload: { note?: string; status?: string; owner?: string } }[];
+  // `summary` is one plain sentence saying what was actually done. The list
+  // used to show an event kind and a timestamp, which says that something
+  // happened without saying what.
+  history: { id: string; created_at: string; actor: string; kind: string; summary?: string;
+    agent?: string | null;
+    payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
+/**
+ * Agent ids were `cfo`, `ap`, `py`, `gr` and `rc` before the agents were
+ * reworked. None of them exist now — the roster is `orchestrator`, `A`..`D`
+ * and `A1`..`D4` — so this map returned undefined for every finding and every
+ * history row, and the label simply rendered empty.
+ *
+ * The bundle already carries each agent's real name, so the names are read
+ * from there and this keeps only the retired ids, for rows written before the
+ * rework that still name them.
+ */
+const RETIRED_AGENTS: Record<string, string> = {
+  cfo: "CFO Agent (retired)", ap: "AP & Payments (retired)",
+  py: "Payroll & Budget (retired)", gr: "Grants & Compliance (retired)",
+  rc: "Revenue & Collections (retired)",
+};
+// `origin` is what produced a finding, and the values changed with the rework: an agent
+// conclusion is "agent" and a control test is "deterministic". Reading the old strings
+// labelled every agent conclusion a rules-based check.
 const originLabel = (origin: string) => origin === "agent" ? "Agent conclusion" : "Rules-based check";
 const currency = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const control = "border border-line bg-white px-3 py-2 text-sm disabled:opacity-40";
@@ -31,11 +55,17 @@ export function ReviewWorkspace({ section = "overview" }: { section?: "overview"
 }
 
 function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
+  const { bundle } = useData();
+  const agentName = (id: string | null | undefined): string =>
+    (id && bundle.agents.find(a => a.id === id)?.name) || (id && RETIRED_AGENTS[id]) || id || "";
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState("attention");
   const [selected, setSelected] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [byAgent, setByAgent] = useState("");
   const [source, setSource] = useState<SourceDetail | null>(null);
   const [sourceRef, setSourceRef] = useState<{ id: string; start: number } | null>(null);
   const uploaded = ws.startsWith("ws-");
@@ -73,6 +103,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     .sort((a, b) => Number(a.origin === "agent") - Number(b.origin === "agent"));
   const current = filtered.find(f => f.id === selected) || filtered[0];
   const stale = !!view?.scan && view.scan.snapshot_id !== view.snapshot_id;
+  // Dates are ISO, so a prefix comparison is the whole filter. `to` includes
+  // the chosen day rather than cutting it off at midnight.
+  const shownHistory = (view?.history || []).filter(e => {
+    const day = e.created_at.slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    if (byAgent === "__none") return !e.agent;
+    if (byAgent && e.agent !== byAgent) return false;
+    return true;
+  });
+  const historyAgents = [...new Set((view?.history || []).map(e => e.agent).filter(Boolean))] as string[];
   return <div className="mx-auto max-w-6xl space-y-5">
     <div><p className="text-xs uppercase tracking-widest text-ink-dim">Financial review</p>
       <h1 className="mt-2 text-3xl font-semibold">{section === "reports" ? "Director briefing" : section === "actions" ? "Follow-up" : section === "findings" ? "Findings" : "Period review"}</h1>
@@ -86,18 +127,28 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     {view && <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["Records in last scan", view.scan?.record_count || 0], ["Needs attention", view.findings.filter(f => !f.stale && f.status === "attention").length], ["Evidence gaps", view.findings.filter(f => !f.stale && f.status === "gap").length], ["Narrow checks passed", view.findings.filter(f => !f.stale && f.status === "pass").length]].map(([label, n]) => <div key={label} className="border border-line p-4"><b className="block font-num text-3xl">{n}</b><span className="text-sm text-ink-dim">{label}</span></div>)}</div>
       <p className="text-xs text-ink-dim">Snapshot: {view.snapshot_id || "No committed sources"}. Counts describe supplied records, not the whole institution. Amounts overlap and are not a savings total. Decisions apply only to their original snapshot; earlier follow-up remains in the history below.</p>
-      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">What the agents have concluded</h2>
-        <p className="mt-2 text-sm">{view.live.decisions} conclusion{view.live.decisions === 1 ? "" : "s"} recorded · {view.live.escalated} waiting on you · {view.live.reviewed} independently reviewed · {currency(view.live.spend_cents)} of model spend on this company.</p>
+      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">Live agent review{view.live_stale ? " · outdated snapshot" : ""}</h2>
+        <div className="mt-2 flex flex-wrap gap-6 text-sm">
+          <span><b className="font-num">{view.live.decisions}</b> agent conclusion(s)</span>
+          <span><b className="font-num">{view.live.escalated}</b> escalated to a person</span>
+          <span><b className="font-num">{view.live.reviewed}</b> independently reviewed</span>
+          <span><b className="font-num">{currency(view.live.spend_cents)}</b> spent</span>
+        </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-dim">{view.live.agents.map(a => <span key={a}>{a}</span>)}</div>
-        <p className="mt-3 text-xs text-ink-dim">{view.live.note}</p></section>}
+        <p className="mt-2 text-xs text-ink-dim">Each conclusion appears below with its evidence. An escalated one is waiting on a person; none of them approves, posts or pays anything.</p></section>}
       {view.changes.length > 0 && <section className="border border-green-300 bg-green-50 p-4"><h2 className="font-semibold">What changed after the latest scan?</h2>{view.changes.map(c => <div className="mt-3" key={c.id}><b>{c.title}</b><p className="text-sm">Before: {c.before}</p><p className="text-sm">Now: {c.after}</p></div>)}<p className="mt-3 text-xs">Adding evidence does not automatically approve its contents or resolve a finding.</p></section>}
+      {/* Also on Investigation, beside the precedent it produces. It belongs
+          on both: that screen shows the loop, this one is where a person
+          comes to review and act, and looking for it here first is the
+          reasonable instinct. */}
+      <Decisions />
       {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="agent">Agent conclusions</option></select></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
           {f.origin === "agent" && filtered[i - 1]?.origin !== "agent" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Agent conclusions · candidates until a person decides them</h3>}
           <button onClick={() => { setSelected(f.id); setSource(null); }} aria-pressed={current?.id === f.id} className={`w-full border p-4 text-left ${current?.id === f.id ? "border-ink bg-surface-2" : "border-line"}`}>
-          <span className="text-xs uppercase tracking-wide text-ink-dim">{f.role_label} · {originLabel(f.origin)}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
+          <span className="text-xs uppercase tracking-wide text-ink-dim">{f.origin === "agent" ? agentName(f.role) : f.role_label || agentName(f.role)} · {originLabel(f.origin)}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
           <span className={f.status === "attention" ? "text-red-700" : f.status === "gap" ? "text-amber-800" : "text-green-800"}>{f.status === "pass" ? "Passed within stated scope" : f.status === "gap" ? "Evidence needed" : "Investigate"}</span>{f.amount_cents !== null && <span className="ml-3 font-num">{currency(f.amount_cents)}</span>}
           {f.follow_up && <small className="mt-2 block">Follow-up: {displayLabel(f.follow_up.status)} · {f.follow_up.owner || "Unassigned"}</small>}</button></Fragment>)}</div>
           {current && <article className="self-start border border-line p-5"><h2 className="text-xl font-semibold">{current.title}</h2><p className="my-3 leading-relaxed">{current.explanation}</p><p className="text-sm text-ink-dim">{current.review}</p>
@@ -111,7 +162,26 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
             <FollowUpForm key={`${current.id}-${current.snapshot_id}-${current.follow_up?.version || 0}`} ws={ws} finding={current} saved={refresh} />
           </article>}</div>
       </>}
-      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up & scan history ({view.history.length})</summary>{view.history.map(e => <div key={e.id} className="border-t border-line py-3 text-sm"><b>{e.kind} · {e.actor}</b><p>{e.created_at}</p><p>{e.payload.status?.replaceAll("_", " ")} {e.payload.owner} {e.payload.note}</p></div>)}</details>
+      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</summary>
+        <div className="mt-3 flex flex-wrap items-end gap-3 text-xs">
+          <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
+          <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
+          <label>Raised by
+            <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
+              <option value="">Any agent</option>
+              {historyAgents.map(a => <option key={a} value={a}>{agentName(a)}</option>)}
+              {/* A record check is arithmetic over rows, not an agent's conclusion. */}
+              <option value="__none">Record checks (no agent)</option>
+            </select>
+          </label>
+          {(fromDate || toDate || byAgent) &&
+            <button className={control} onClick={() => { setFromDate(""); setToDate(""); setByAgent(""); }}>Clear</button>}
+        </div>{!view.history.length && <p className="mt-3 text-sm text-ink-dim">Nothing yet. Approving or rejecting an agent&rsquo;s conclusion, recording a follow-up on a finding, and running the record checks all appear here.</p>}
+        {!!view.history.length && !shownHistory.length && <p className="mt-3 text-sm text-ink-dim">Nothing in this range. The history holds the most recent hundred entries, so something older may exist and not be shown.</p>}
+        {shownHistory.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
+          <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
+          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${agentName(e.agent)}` : "record check, no agent"}</p>
+        </div>)}</details>
       <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
     </>}
   </div>;
@@ -139,9 +209,13 @@ function briefing(v: View) {
     f.amount_cents === null ? "Amount: not established" : `Check amount: ${currency(f.amount_cents)} (not savings; may overlap other checks)`,
     `Next step: ${f.action}`, `Evidence: ${f.evidence.map(e => `${e.source_id}, line ${e.line}`).join("; ") || "missing input"}`,
     `Human follow-up: ${f.follow_up ? `${f.follow_up.status}; owner ${f.follow_up.owner || "unassigned"}; ${f.follow_up.note}` : "not recorded"}`, ""]),
-    "## Agent conclusions", v.live
-      ? [`${v.live.decisions} conclusion(s) from ${v.live.agents.length} agent(s); ${v.live.escalated} waiting on a person; ${v.live.reviewed} independently reviewed.`,
+    "## Live agent review", v.live
+      ? [`${v.live_stale ? "HISTORICAL SNAPSHOT — RERUN REQUIRED" : "Current snapshot"}`,
+         `${v.live.decisions} agent conclusion(s), ${v.live.escalated} escalated to a person.`,
+         `From ${v.live.agents.length} agent(s); ${v.live.reviewed} independently reviewed.`,
          `Model spend on this company: ${currency(v.live.spend_cents)}.`,
-         ...v.live.agents.map(a => `- ${a}`), v.live.note].join("\n")
-      : "No agent has run against this company.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
+         ...v.live.agents.map(a => `- ${a}`),
+         "Each one is listed above with its evidence. No approval, posting or payment was made.",
+         v.live.note].join("\n")
+      : "No live agent review has run.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
 }

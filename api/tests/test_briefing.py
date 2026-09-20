@@ -167,7 +167,7 @@ def test_the_briefing_exports_once_an_agent_has_concluded_something(client):
     response = client.get(f"/api/workspaces/{ws}/review/report")
 
     assert response.status_code == 200, response.text
-    assert "## Agent conclusions" in response.text
+    assert "## Live agent review" in response.text
     assert f"A1 {AGENTS['A1'].name}" in response.text
 
 

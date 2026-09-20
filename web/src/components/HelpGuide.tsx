@@ -16,7 +16,7 @@ const SCREENS: Record<string, string> = {
 
 const HOW = [
   "Add a company and the period its records cover.",
-  "Add the institution's CSV, text or Markdown files.",
+  "Add the company's CSV record files, and its documents as PDFs.",
   "Check how each file was read, and fix anything flagged.",
   "Commit the records, so the agents work from one fixed set.",
   "Set a review question and start the investigation.",

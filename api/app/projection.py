@@ -133,6 +133,29 @@ def _tasks(decisions: list[dict]) -> list[dict]:
     return out
 
 
+def _with_known_agent(approval: dict) -> dict:
+    """Keep a proposal readable when the agent that raised it no longer exists.
+
+    `AgentId` is a closed vocabulary shared by models.py, types.ts, schemas.ts
+    and contracts/, and it changed when the agents were reworked. Rows written
+    by the previous roster are still in the database, naming agents like `ap`
+    and `cfo` that the current contract does not contain — so the whole bundle
+    failed validation and every screen in the workspace reported the service
+    unreachable, over history nobody was even looking at.
+
+    Widening the vocabulary to admit retired ids would be the wrong repair: it
+    is a contract four files agree on, not a place to keep old names alive.
+    `_reasoning` already coerces the same way for decisions; this does it for
+    proposals, and says in the title which agent actually raised it so the
+    attribution is not quietly rewritten.
+    """
+    if approval.get("agent") in AGENTS:
+        return approval
+    raised_by = approval.get("agent") or "an unrecorded agent"
+    return {**approval, "agent": "orchestrator",
+            "title": f"{approval.get('title', '')} · raised by {raised_by}, a retired agent"}
+
+
 def _reasoning(decisions: list[dict]) -> list[dict]:
     """One `Decision` record per agent action, for the reasoning log."""
     out = []
@@ -156,7 +179,14 @@ def _reasoning(decisions: list[dict]) -> list[dict]:
             "how": [],
             "why": decision["why"] or "No rationale was recorded for this decision.",
             "alternatives": [],
-            "memory_checks": [],
+            # Real checks from the run, not a placeholder. A declined precedent
+            # shows as prominently as an applied one: "ok: false" with a reason
+            # is the evidence that memory was re-checked rather than replayed.
+            "memory_checks": [
+                {"text": f"{check['precedent_id']}: {check['reason']}",
+                 "ok": bool(check.get("applied"))}
+                for check in json.loads(decision["memory_checks"] or "[]")
+            ],
             "outcome": ("Escalated to a person. Nothing was approved, posted or paid."
                         if decision["escalated"] else
                         "Recorded. Reviewer acceptance is not human approval."),
@@ -294,7 +324,7 @@ def _derived(ws):
         "workflows": [],
         "tasks": _tasks(decisions),
         "findings": findings,
-        "approvals": approval_rows,
+        "approvals": [_with_known_agent(row) for row in approval_rows],
         "decisions": _reasoning(decisions) + human_decisions,
         "playbooks": _playbooks(ws),
         "ablation": None,

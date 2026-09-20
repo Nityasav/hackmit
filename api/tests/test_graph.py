@@ -333,7 +333,10 @@ def _clear_model():
         fields = dict(summary="Nothing here needs a person.", disposition="clear",
                       rationale="The records supplied agree with one another.",
                       citations=[_s.Citation(role=role, record_key=key)],
-                      proposed_action="No action proposed.")
+                      proposed_action="No action proposed.",
+                      # Required, not defaulted: an agent offered no precedent still has
+                      # to say so, so silence never reads as a completed check.
+                      memory_checks=[])
         return schema(**fields, may_pay=True) if schema is _s.APResult else schema(**fields)
 
     def read(kwargs):

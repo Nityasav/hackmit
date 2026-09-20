@@ -56,16 +56,27 @@ which is why the floor is pinned. `torchvision` is required even though nothing
 here touches video: loading the processor imports a video processor that needs
 it, and the failure appears only when the model loads, not at install.
 
-Model weights are ~9.3GB, Apache 2.0, not gated, and are downloaded on first
-run into the Hugging Face cache — they are not in this repository.
+Model weights are ~9.3GB, Apache 2.0 and not gated, and are not in this
+repository.
 
-    python3 -m venv .venv          # 3.10+; developed on 3.14
-    .venv/bin/pip install -e .
-    .venv/bin/python serve.py --port 8765
+### The inference service lives in the API
 
-First start downloads the weights and hashes them (a few minutes); later starts
-load in about seven seconds and the hash is cached beside the weights. The
-service binds loopback only and refuses anything else.
+This directory trains, benchmarks and evaluates. Serving the model to the
+running application is `api/app/extractor_server.py`, which is the only
+inference service — a second one briefly existed here and was folded into it.
+That one is the right home: it reuses the API's own `validate`, `schema` and
+`Extraction` rather than keeping a second copy of the contract in step, and it
+refuses a weight bundle whose bytes do not match the fingerprint it was
+registered under.
+
+    # Materialise the weights: the fingerprint check refuses symlinks, and a
+    # Hugging Face cache directory is symlinks all the way down.
+    python -c "from huggingface_hub import snapshot_download; print(snapshot_download('numind/NuExtract3'))"
+    cp -RL "<printed path>" /absolute/path/nuextract3
+
+    export EXTRACTOR_MODEL_DIR=/absolute/path/nuextract3
+    export EXTRACTOR_ARTIFACT_SHA256="$(cd ../api && .venv/bin/python -m app.extractor_server)"
+    cd ../api && .venv/bin/uvicorn app.extractor_server:app --host 127.0.0.1 --port 8901
 
 ### Registering it with the API
 
@@ -74,11 +85,9 @@ The API reaches the service through `SCHOOLTRACE_EXTRACTORS`, a JSON map its
 and an immutable training manifest. Read `artifact_sha256` off the running
 service so the two agree; `infer()` rejects the response if they ever diverge.
 
-    curl -s http://127.0.0.1:8765/health        # -> artifact_sha256
-
     export SCHOOLTRACE_EXTRACTORS='{"nuextract3-local": {
-      "endpoint": "http://127.0.0.1:8765/",
-      "artifact_sha256": "<from /health>",
+      "endpoint": "http://127.0.0.1:8901/extract",
+      "artifact_sha256": "<the EXTRACTOR_ARTIFACT_SHA256 above>",
       "base_revision": "<the model snapshot revision>",
       "training_document_hashes": [],
       "training_manifest_sha256": "<sha256 of an empty training manifest>",

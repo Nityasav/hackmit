@@ -36,6 +36,64 @@ LIMITATIONS = [
 ]
 
 
+def describe_event(entry: dict) -> str:
+    """One plain sentence saying what a person or a scan actually did.
+
+    The history listed an event kind, an actor and a timestamp — `review.scan`,
+    `approval_decided` — which says that something happened without saying
+    what. Anyone reading back through a period has to reconstruct it from the
+    payload, and the export was worse: it printed a status and a note that most
+    kinds do not carry, so most lines read as a date and two empty fields.
+    """
+    payload = entry.get("payload") or {}
+    actor = entry.get("actor") or "someone"
+    kind = entry.get("kind") or ""
+
+    if kind == "approval_decided":
+        verdict = payload.get("decision", "decided")
+        target = payload.get("finding_id") or payload.get("approval_id") or "a proposal"
+        applied = payload.get("applied")
+        tail = ("The proposed entries were posted." if applied else
+                "Nothing was posted, paid or approved in the books; the decision was recorded "
+                "and became precedent the next run has to re-check.")
+        return f"{actor} {verdict} the agent conclusion {target}. {tail}"
+
+    if kind == "review.follow_up":
+        status = str(payload.get("status", "")).replace("_", " ") or "recorded a follow-up on"
+        owner = payload.get("owner")
+        note = (payload.get("note") or "").strip()
+        parts = [f"{actor} marked {payload.get('finding_id', 'a finding')} as {status}"]
+        if owner:
+            parts.append(f"owned by {owner}")
+        line = ", ".join(parts) + "."
+        return f"{line} {note}".strip()
+
+    if kind == "review.scan":
+        checks = payload.get("checks", 0)
+        return (f"{actor} ran the rules-based record checks over snapshot "
+                f"{payload.get('snapshot_id', 'the current one')}, producing {checks} check(s). "
+                "No model was called and nothing was changed.")
+
+    return f"{actor} · {kind}"
+
+
+def event_agent(entry: dict, raisers: dict[str, str]) -> str | None:
+    """Which agent raised what a person acted on, or None for a scan.
+
+    A record check is nobody's conclusion — it is arithmetic over the rows —
+    so it has no agent, and saying so is more useful than attributing it to
+    one.
+    """
+    payload = entry.get("payload") or {}
+    if payload.get("agent"):
+        return payload["agent"]
+    for key in ("approval_id", "finding_id", "task_id"):
+        found = raisers.get(payload.get(key) or "")
+        if found:
+            return found
+    return None
+
+
 def current_snapshot(c, ws):
     ingestion.workspace(c, ws)
     row = c.execute("SELECT id FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
@@ -72,7 +130,24 @@ def review(ws: str, request: Request):
         snapshot = current_snapshot(c, ws)
         scans = [json.loads(r[0]) for r in c.execute("SELECT payload FROM review_scans WHERE ws=? ORDER BY rowid DESC LIMIT 2", (ws,))]
         actions = [json.loads(r[0]) | {"snapshot_id": r[1]} for r in c.execute("SELECT payload,snapshot_id FROM review_actions WHERE ws=?", (ws,))]
-        history = [dict(r) | {"payload": json.loads(r["payload"])} for r in c.execute("SELECT * FROM events WHERE ws=? AND kind LIKE 'review.%' ORDER BY rowid DESC LIMIT 100", (ws,))]
+        # Approving or rejecting what an agent escalated is human follow-up —
+        # arguably the only kind that changes what the agents do next — but it
+        # is recorded as `approval_decided`, so a history filtered to
+        # `review.%` showed everything except the decisions people actually
+        # made. They were in the table the whole time, filtered out on read.
+        history = [dict(r) | {"payload": json.loads(r["payload"])} for r in c.execute(
+            "SELECT * FROM events WHERE ws=? AND (kind LIKE 'review.%' OR kind='approval_decided')"
+            " ORDER BY rowid DESC LIMIT 100", (ws,))]
+        # Which agent raised the thing a person acted on. Newer approval events
+        # carry it; older ones and follow-ups are resolved from the proposal or
+        # the decision trail, so the whole history can be filtered by agent and
+        # not just the part recorded since.
+        raisers = {row["id"]: row["agent"] for row in c.execute(
+            "SELECT id, agent FROM approvals WHERE ws=?", (ws,))}
+        raisers |= {row["id"]: row["agent"] for row in c.execute(
+            "SELECT id, agent FROM agent_decisions WHERE ws=?", (ws,))}
+        history = [entry | {"summary": describe_event(entry),
+                            "agent": event_agent(entry, raisers)} for entry in history]
         # Agent conclusions now live in `agent_decisions`, written by the graph.
         decisions = [dict(row) for row in c.execute(
             "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT 50", (ws,))]
@@ -144,17 +219,24 @@ def markdown(view):
         action = f["follow_up"]
         lines += ["Human follow-up: " + (plain(f"{action['status']}; {action['owner']}; {action['note']}") if action else "Not recorded for this snapshot")]
     if view["live"]:
+        # A tally off the decision trail. This used to read `status`, `briefing`
+        # and `unresolved` from a coordinator run object; that coordinator was
+        # removed, and those keys with it, so exporting a briefing for any
+        # workspace an agent had run raised KeyError.
         live = view["live"]
-        lines += ["", "## Agent conclusions",
-                  f"{live['decisions']} conclusion(s) from {len(live['agents'])} agent(s); "
-                  f"{live['escalated']} waiting on a person; {live['reviewed']} independently reviewed.",
+        lines += ["", "## Live agent review",
+                  "HISTORICAL SNAPSHOT" if view["live_stale"] else "Current snapshot",
+                  f"{live['decisions']} agent conclusion(s), {live['escalated']} escalated to a person.",
+                  f"From {len(live['agents'])} agent(s); {live['reviewed']} independently reviewed.",
                   f"Model spend on this workspace: USD {live['spend_cents'] // 100:,}."
                   f"{live['spend_cents'] % 100:02d}.",
-                  *["- " + plain(a) for a in live["agents"]],
+                  *["- " + plain(agent) for agent in live["agents"]],
+                  "Each conclusion is listed above with its evidence. No approval, "
+                  "posting or payment was made.",
                   plain(live["note"])]
     lines += ["", "## Follow-up history (last hundred events)"]
     for e in view["history"]:
-        lines.append(plain(f"- {e['created_at']} · {e['actor']} · {e['kind']} · {e['payload'].get('status', '')} · {e['payload'].get('note', '')}"))
+        lines.append(plain(f"- {e['created_at']} · {e.get('summary') or e['kind']}"))
     lines += ["", "## Limitations", *["- " + x for x in LIMITATIONS]]
     return "\n".join(lines)
 

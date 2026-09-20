@@ -92,7 +92,8 @@ def _insufficient():
         fields = dict(summary="I cannot settle this on what I was given.",
                       disposition="insufficient_evidence",
                       rationale="The records supplied do not answer the question asked.",
-                      citations=[], proposed_action="A person has to decide.")
+                      citations=[], proposed_action="A person has to decide.",
+                      memory_checks=[])
         return schema(**fields, may_pay=False) if schema is schemas.APResult else schema(**fields)
 
     return FakeModel([([], None)], build=answer)

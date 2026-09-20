@@ -160,6 +160,25 @@ const playbookSchema = z.object({
   status_note: z.string(),
 });
 
+const approvalSchema = z.object({
+  id: z.string(),
+  agent: agentIdSchema,
+  kind: z.enum(["journal", "payment", "playbook", "evidence", "decision"]),
+  title: z.string(),
+  summary: z.string(),
+  verified: z.boolean(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  journal: z.array(z.object({
+    account: z.string(), fund: z.string(),
+    debit_cents: z.number(), credit_cents: z.number(),
+  })).nullable(),
+  effects: z.array(z.object({
+    label: z.string(), value: z.string(),
+    tone: optional(z.enum(["good", "neutral"])),
+  })).nullable(),
+  finding_id: optional(z.string()),
+});
+
 export const bundleSchema = z.object({
   contract_version: z.number().optional(),
   workspace: workspaceSchema,
@@ -169,6 +188,9 @@ export const bundleSchema = z.object({
   findings: z.array(findingSchema),
   decisions: z.array(decisionSchema),
   playbooks: z.array(playbookSchema),
+  // Dropped from this schema, the whole approvals list was silently stripped
+  // and nothing in the UI could offer a person the decision an agent escalated.
+  approvals: z.array(approvalSchema),
 });
 
 /**

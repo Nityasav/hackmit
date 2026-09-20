@@ -30,11 +30,20 @@ Role = Literal[
     # Control
     "approvals", "period_locks", "tax_registrations",
     # Unstructured evidence
-    "contract", "policy", "document",
+    "contract", "policy", "document", "invoice", "service", "budget",
 ]
 
 #: Roles carried as text rather than tabular records.
-DOCUMENT_ROLES: frozenset[str] = frozenset({"contract", "policy", "document"})
+#:
+#: A document staged under a role no agent reads is preserved, hashed and
+#: citable by a person, and invisible to every agent — so extracting it and
+#: checking its values buys nothing. `document` is exactly that: the catch-all
+#: for evidence whose kind nothing claims. The named roles beside it exist so a
+#: document can keep its kind through staging and reach the agent whose charter
+#: covers it, rather than all of them collapsing into the catch-all.
+DOCUMENT_ROLES: frozenset[str] = frozenset({
+    "contract", "policy", "document", "invoice", "service", "budget",
+})
 
 #: Required columns per structured role, in the order a person reads them.
 FIELDS: dict[str, list[str]] = {

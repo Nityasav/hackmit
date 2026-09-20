@@ -109,6 +109,9 @@ def ap_result(**overrides) -> schemas.APResult:
                   "approval is recorded against it.",
         citations=[schemas.Citation(role="vendor_invoices", record_key="VI-1")],
         proposed_action="Release for payment in the next run.",
+        # Required, not defaulted: an agent offered no precedent still has to
+        # say so explicitly, so silence never reads as a completed check.
+        memory_checks=[],
         may_pay=True)
     return schemas.APResult(**{**base, **overrides})
 
@@ -513,7 +516,7 @@ def test_an_agent_with_nothing_to_score_is_not_punished_for_not_scoring():
         summary="The statements tie to the ledger.", disposition="clear",
         rationale="Every check the engine performs holds.",
         citations=[schemas.Citation(role="ledger", record_key="k")],
-        proposed_action="No action proposed.")
+        proposed_action="No action proposed.", memory_checks=[])
 
     assert escalation_reasons(spec, result, None, None) == ()
 
@@ -529,7 +532,7 @@ def test_work_that_cannot_be_scored_against_an_outcome_always_reaches_a_person()
         disposition="clear",
         rationale="The projection follows from the assumptions given.",
         citations=[schemas.Citation(role="ledger", record_key="k")],
-        proposed_action="Weigh the projection against your own view.")
+        proposed_action="Weigh the projection against your own view.", memory_checks=[])
 
     reasons = escalation_reasons(spec, result, 100, None)
 
@@ -546,7 +549,7 @@ def test_a_condition_the_engine_found_escalates_even_when_the_agent_omits_it():
         summary="The variance is explained by the drivers listed.", disposition="clear",
         rationale="Each driver names the transactions behind it.",
         citations=[schemas.Citation(role="ledger", record_key="k")],
-        proposed_action="No action proposed.")
+        proposed_action="No action proposed.", memory_checks=[])
     assert result.exceptions == []
 
     engine = runtime.engine_exceptions(

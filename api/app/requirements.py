@@ -123,8 +123,26 @@ REQUIREMENTS: tuple[Requirement, ...] = (
                         "breach can only be guessed at.",
                 needed_by=("orchestrator", "A", "D", "A1", "D2")),
     Requirement(id="contract", label="Customer and vendor contracts", kind="document", role="contract",
-                unlocks="Terms behind revenue and commitments, for accrual and cut-off judgments.",
-                needed_by=("orchestrator", "B", "B2"), optional=True),
+                unlocks="Terms behind revenue and commitments, for accrual and cut-off judgments. "
+                        "A grant or funding agreement is staged here too.",
+                needed_by=("orchestrator", "B", "D", "B2", "D1"), optional=True),
+    # A document extracted in the Document lab is staged under the role that
+    # matches what it is, and an agent may read only roles it declared it needs
+    # — so without these three, an invoice, a service record or a budget paper
+    # was checked by a person and then read by nobody.
+    Requirement(id="invoice", label="Invoice documents", kind="document", role="invoice",
+                unlocks="The invoice as issued, behind the register row. Payables can compare "
+                        "what was billed to what was ordered and received, and audit can trace "
+                        "a payment back to the document it came from.",
+                needed_by=("orchestrator", "A", "D", "A1", "D1"), optional=True),
+    Requirement(id="service", label="Service and delivery records", kind="document", role="service",
+                unlocks="Evidence that what is being billed for was actually delivered. Without "
+                        "it, a receipt is a claim rather than a record.",
+                needed_by=("orchestrator", "A", "D", "A1", "D1"), optional=True),
+    Requirement(id="budget", label="Approved budget papers", kind="document", role="budget",
+                unlocks="The budget as approved, with the assumptions behind it, so a variance "
+                        "can be explained against what was actually agreed.",
+                needed_by=("orchestrator", "C", "C1", "C3"), optional=True),
 
     # ---- Settings ---------------------------------------------------------
     Requirement(id="home_jurisdiction", label="Home tax jurisdiction", kind="setting",
