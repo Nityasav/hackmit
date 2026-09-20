@@ -93,20 +93,6 @@ def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
     return projection.bundle(body.workspace)
 
 
-@app.post("/api/demo/{action}", response_model=Bundle)
-def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month.
-
-    TODO(workflows): drive these from app/workflows/scenarios.py.
-    """
-    if ws not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Reset is only available for demo workspaces")
-    if action == "reset":
-        store.reset(ws)
-        return store.get_bundle(ws)
-    raise HTTPException(status_code=501, detail=f"demo action '{action}' not implemented yet")
-
-
 @app.get("/api/workspaces")
 def workspaces():
     return ingestion.list_workspaces()

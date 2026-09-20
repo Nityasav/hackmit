@@ -295,7 +295,9 @@ real progress after a run.
 
 ---
 
-## Phase 6 — Workflows derived, not authored
+## Phase 6 — Workflows derived, not authored — **DONE**
+
+A workflow is one coordinator run; its stages are the plan's tasks, wrapped by Plan and Report. Nothing is authored.
 
 1. Build `Workflow` objects in the projection from the coordinator's plan and task states: one
    workflow per run, `stages` from `TaskState.status`, `progress` from the done/total ratio,
@@ -309,7 +311,9 @@ real progress after a run.
 
 ---
 
-## Phase 7 — Fold `/cfo` in
+## Phase 7 — Fold `/cfo` in — **DONE**
+
+The launcher is the Command center's fourth agent choice. `/cfo?run=<id>` is the run detail view, reached from the run you started. The scripted and model_preview modes left the UI: they write to the same store as a real run now, so offering them beside one invites confusing the two.
 
 `/cfo` is a working investigation runner hidden behind a text link, and it is the only place the
 five-agent workflow can be started.
@@ -329,7 +333,9 @@ five-agent workflow can be started.
 
 ---
 
-## Phase 8 — Seed sandbox and MIT from real runs
+## Phase 8 — Seed sandbox and MIT from real runs — **DONE for sandbox; MIT cannot be**
+
+`scripts/seed_fixtures.py` records sandbox from a real pipeline run, offline by default. MIT is not regenerable: its source is a published PDF hosted elsewhere and PDF extraction is not implemented, so there is nothing to run agents over. Both now carry `recorded_from`, and the topbar shows it. Playbooks and the ablation are carried through rather than blanked, so the Learning workstream keeps its tab.
 
 Decided: keep both workspaces, but generate their contents instead of authoring them.
 
@@ -354,7 +360,9 @@ reviewable.
 
 ---
 
-## Phase 9 — Delete and correct
+## Phase 9 — Delete and correct — **DONE**
+
+Stack C is gone: 1,700 lines and 87 tests covering code no HTTP route could reach, plus `store.py`'s write API, whose only callers were those tools. Phase 8 forced the decision — Stack C reads its own parallel fixture and depends on the authored file's ID sequences, so it cannot survive the recording. `POST /api/demo/{action}` is deleted rather than finished. The README's L01–L13 claim now names the four invariants that exist, and its stale "live coordinator mode remains blocked" line is gone.
 
 1. `POST /api/demo/{action}` (F12): implement `inject_issue` / `add_evidence` / `next_month` against
    the real pipeline, or delete the endpoint and the `TODO(workflows)` comment. **Recommend
@@ -373,7 +381,9 @@ reviewable.
 
 ---
 
-## Phase 10 — Minimum calculators for AP and grants (F14)
+## Phase 10 — Minimum calculators for AP and grants (F14) — **DONE**
+
+`accounting/ap.py` and `accounting/grants.py`. The three-way-match variance in the plan is not built and cannot be: intake has no purchase-order or goods-receipt role, only references carried on an invoice, so the modules test whether support is referenced and never whether the referenced document agrees on amount. The payoff is visible in the new recording, which carries a priced, auditor-verified AP finding — impossible before this.
 
 Without this, AP and grants claims can never carry an amount, so the Auditor must reject every
 substantiated AP claim (`agents/team.py` rejects a substantiated claim with no calculation) — the
