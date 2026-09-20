@@ -64,10 +64,14 @@ CREATE TABLE IF NOT EXISTS agent_requests (
     run_id TEXT NOT NULL REFERENCES agent_runs(id),
     PRIMARY KEY(ws, request_id)
 );
+CREATE TABLE IF NOT EXISTS cfo_runs (
+    id TEXT PRIMARY KEY, workspace TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS active_records ON records(ws, active);
 CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
 CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
-PRAGMA user_version = 2;
+CREATE INDEX IF NOT EXISTS workspace_cfo_runs ON cfo_runs(workspace, created_at);
+PRAGMA user_version = 3;
 """
 
 
@@ -91,7 +95,7 @@ def connect():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version > 2:
+    if version > 3:
         connection.close()
         raise RuntimeError("Database is newer than this application; refusing to downgrade")
     connection.executescript(SCHEMA)
