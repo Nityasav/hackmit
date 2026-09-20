@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+
+# Third-party dataset — mercor/apex-accounting (CC BY 4.0). Re-fetch with
+# scripts/download_apex_invoices.py rather than vendoring someone else's
+# documents into this repo. The hand-written LABELS for them are committed.
+data/apex_invoices/
+
+# Model artifacts and run output
+adapters/
+predictions*.json
+manifest_*.json
