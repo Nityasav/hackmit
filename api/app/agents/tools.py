@@ -20,9 +20,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .. import db, roles
-from ..accounting import (accruals, cash, close, match, planning, reconcile,
-                          reporting, statements, variance)
+from .. import db, events, memory, roles
+from ..accounting import (accruals, audit, cash, close, controls, match, planning,
+                          reconcile, reporting, statements, variance)
 from .budget import BudgetExceeded, Meter
 
 
@@ -347,6 +347,136 @@ class Toolbox:
         self.calculations["report"] = result
         return result
 
+
+    def run_controls(self) -> dict:
+        """Every control test, over the committed records.
+
+        A passing test is returned as a finding, not as silence. D2 judges the cases the
+        rules cannot settle; it does not decide whether a rule fired.
+        """
+        self._charge("run_controls")
+        found = controls.checks(self._records, self.config)
+        for finding in found:
+            for citation in finding["evidence"]:
+                self.read_sources.add(citation["source_id"])
+            for key in finding["record_keys"]:
+                self.read_keys.add(key)
+        result = {
+            "checks": found,
+            "exceptions": [c for c in found if c["status"] == "attention"],
+            "passes": [c for c in found if c["status"] == "pass"],
+            "gaps": [c for c in found if c["status"] == "gap"],
+            "note": "Deterministic tests. A pass is a statement that this test found "
+                    "nothing, which is narrower than a statement that nothing is wrong.",
+        }
+        self.calculations["controls"] = result
+        return result
+
+    def select_sample(self, role: str = "vendor_invoices", size: int = 10) -> dict:
+        """A reproducible sample, with everything material taken in full."""
+        self._charge("select_sample")
+        result = audit.select(self._records, self.config, role=role, size=size)
+        for item in result["selected"]:
+            self.read_keys.add(item["record_key"])
+            for citation in item["evidence"]:
+                self.read_sources.add(citation["source_id"])
+        self.calculations["sample"] = result
+        return result
+
+    def trace_transaction(self, invoice_key: str) -> dict:
+        """Follow one purchase from the order that started it to the entries that recorded it."""
+        self._charge("trace_transaction")
+        result = audit.trace(self._records, invoice_key)
+        for step in result.get("steps", []):
+            for citation in step["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+        self.calculations["trace:" + invoice_key] = result
+        return result
+
+    def read_decisions(self, limit: int = 50) -> dict:
+        """What the agents have already decided in this workspace, newest first.
+
+        D3 generates nothing. This returns the trail as it was written at the time, so an
+        evidence pack is assembled out of what happened rather than reconstructed
+        afterwards from what the records now look like.
+        """
+        self._charge("read_decisions")
+        with db.connect() as connection:
+            rows = connection.execute(
+                "SELECT id, agent, action, summary, why, confidence, evidence, reviewer,"
+                " review_verdict, escalated, model, cost_cents, created_at, thread_id,"
+                " event_id FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT ?",
+                (self.ws, max(1, min(limit, 200)))).fetchall()
+        decisions = []
+        for row in rows:
+            item = dict(row)
+            item["evidence"] = json.loads(item["evidence"] or "[]")
+            item["escalated"] = bool(item["escalated"])
+            decisions.append(item)
+        return {"decisions": decisions, "count": len(decisions),
+                "note": "Written as the work happened. Nothing here was reconstructed."}
+
+    def build_evidence_pack(self, event_id: str = "") -> dict:
+        """Everything behind one transaction, or the workspace's whole trail.
+
+        Collected, never generated: the records, the decisions that cite them, the links
+        that were drawn and how each was established, and the precedent checks made. A
+        reader who disagrees with a conclusion can follow it back to the bytes.
+        """
+        self._charge("build_evidence_pack")
+        with db.connect() as connection:
+            if event_id:
+                event = events.view(connection, self.ws, event_id)
+                decisions = connection.execute(
+                    "SELECT * FROM agent_decisions WHERE ws=? AND event_id=?"
+                    " ORDER BY rowid", (self.ws, event_id)).fetchall()
+                links = connection.execute(
+                    "SELECT * FROM links WHERE ws=? AND event_id=? ORDER BY rowid",
+                    (self.ws, event_id)).fetchall()
+            else:
+                event = None
+                decisions = connection.execute(
+                    "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid LIMIT 200",
+                    (self.ws,)).fetchall()
+                links = connection.execute(
+                    "SELECT * FROM links WHERE ws=? ORDER BY rowid LIMIT 200",
+                    (self.ws,)).fetchall()
+            checks = memory.history(connection, self.ws)
+
+        pack = {
+            "event": event,
+            "decisions": [dict(row) | {"evidence": json.loads(row["evidence"] or "[]")}
+                          for row in decisions],
+            "links": [dict(row) for row in links],
+            "precedent_checks": checks,
+            "assembled_at": db.now(),
+            "note": "Assembled from what was recorded at the time. Nothing in this pack "
+                    "was generated, inferred or filled in, and an empty section means "
+                    "nothing of that kind was recorded rather than that none exists.",
+        }
+        self.calculations["evidence_pack"] = {
+            "decisions": len(pack["decisions"]), "links": len(pack["links"]),
+            "precedent_checks": len(checks)}
+        return pack
+
+    def check_precedents(self) -> dict:
+        """Re-test what a person decided in earlier periods against this one.
+
+        Never applies anything. Each precedent is checked, the outcome is written to the
+        trail either way, and a finding a person has already decided keeps its exception
+        and gains the earlier decision beside it.
+        """
+        self._charge("check_precedents")
+        found = controls.checks(self._records, self.config)
+        with db.connect() as connection:
+            result = memory.apply_to_findings(connection, self.ws, found,
+                                              actor=self.spec.id)
+        result["findings"] = found
+        self.calculations["precedents"] = {
+            "applied": result["applied"], "declined": result["declined"]}
+        return result
+
     # ----------------------------------------------------------------- writes --
     def record_decision(self, *, agent: str, action: str, summary: str, why: str,
                         confidence: int | None, evidence: list[dict], model: str,
@@ -426,6 +556,12 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "decompose_variance": toolbox.decompose_variance,
         "model_scenario": toolbox.model_scenario,
         "build_report": toolbox.build_report,
+        "run_controls": toolbox.run_controls,
+        "select_sample": toolbox.select_sample,
+        "trace_transaction": toolbox.trace_transaction,
+        "read_decisions": toolbox.read_decisions,
+        "build_evidence_pack": toolbox.build_evidence_pack,
+        "check_precedents": toolbox.check_precedents,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -521,6 +657,39 @@ def tool_definitions(spec) -> list[dict]:
             "description": "The period's reporting assembled from figures that already "
                            "tie, as sections each naming the prose that belongs in it. "
                            "Write the prose; every figure is already computed.",
+            "properties": {}, "required": []},
+        "run_controls": {
+            "description": "Every control test over the committed records, with passes "
+                           "reported as findings rather than as silence. You judge the "
+                           "cases the rules cannot settle; you do not decide whether a "
+                           "rule fired.",
+            "properties": {}, "required": []},
+        "select_sample": {
+            "description": "A reproducible sample of one record type, with everything at "
+                           "or above materiality taken in full. Returns the method and "
+                           "the coverage alongside the selection.",
+            "properties": {"role": {"type": "string", "enum": sorted(spec.roles)},
+                           "size": {"type": "integer", "minimum": 1, "maximum": 50}},
+            "required": []},
+        "trace_transaction": {
+            "description": "Follow one purchase from the order that started it to the "
+                           "entries that recorded it, naming any step that is missing.",
+            "properties": {"invoice_key": {"type": "string"}},
+            "required": ["invoice_key"]},
+        "read_decisions": {
+            "description": "What the agents have already decided here, as it was written "
+                           "at the time.",
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+            "required": []},
+        "build_evidence_pack": {
+            "description": "Everything recorded behind one transaction, or the whole "
+                           "workspace's trail: records, decisions, links and precedent "
+                           "checks. Collected, never generated.",
+            "properties": {"event_id": {"type": "string"}}, "required": []},
+        "check_precedents": {
+            "description": "Re-test what a person decided in earlier periods against "
+                           "this one. Records every check, including the ones it "
+                           "declines, and applies nothing on its own.",
             "properties": {}, "required": []},
     }
     return [{

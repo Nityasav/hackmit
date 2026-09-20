@@ -49,6 +49,12 @@ class WorkspaceCreate(BaseModel):
     #: Answers to the setting-kind requirements. Captured here when known at creation
     #: and editable afterwards; Books asks for whatever is still blank.
     settings: dict[str, str | int] = Field(default_factory=dict)
+    #: The period before this one for the same company, if there is one. What a person
+    #: decided there can reach this period through `memory.py`, which is the only way a
+    #: correction changes later behaviour. Left blank, this period starts with nothing,
+    #: which is the right default: inheriting a stranger's decisions is worse than
+    #: inheriting none.
+    continues: str = ""
 
     @model_validator(mode="after")
     def valid_scope(self):
@@ -122,6 +128,18 @@ def create_workspace(body: WorkspaceCreate):
     config["profile"] = PROFILE if body.kind == "synthetic" else "PUBLIC_DOCUMENTS_ONLY"
     ws = db.uid("ws")
     with db.connect() as connection:
+        if config.get("continues"):
+            # Refused rather than ignored. A lineage that silently points at nothing
+            # would report "no earlier decisions" in exactly the same words as a first
+            # period, and the person would have no way to tell which they were reading.
+            prior = connection.execute("SELECT config FROM workspaces WHERE id=?",
+                                       (config["continues"],)).fetchone()
+            if prior is None:
+                fail("unknown_prior_period",
+                     "The period this continues does not exist in this installation.", 422)
+            if json.loads(prior["config"]).get("end", "") > config["start"]:
+                fail("overlapping_period",
+                     "A period cannot continue one that ends after it starts.", 422)
         connection.execute("INSERT INTO workspaces(id, config) VALUES (?, ?)", (ws, db.encode(config)))
         db.event(connection, ws, "workspace_created", config)
         return workspace(connection, ws)

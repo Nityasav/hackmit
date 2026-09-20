@@ -291,7 +291,8 @@ AUDIT = (
         charter="Sample transactions and trace them end to end, from source document to "
                 "ledger and back.",
         model=MODEL_SOL,
-        tools=("read_records", "read_source", "read_event", "select_sample", "reperform"),
+        tools=("read_records", "read_source", "read_event", "select_sample",
+               "trace_transaction", "reperform"),
         requires=("ledger", "vendor_invoices", "purchase_orders", "goods_receipts",
                   "payments", "approvals", "bank_transactions", "materiality_cents"),
         escalate_when=EscalationRule(confidence_below=90, on=("broken_trail", "missing_approval")),
@@ -303,7 +304,8 @@ AUDIT = (
         model=MODEL_SOL,
         # The tests are deterministic; the model judges the cases the rules cannot settle.
         llm=True,
-        tools=("read_records", "read_source", "run_controls", "check_policy"),
+        tools=("read_records", "read_source", "run_controls", "check_policy",
+               "check_precedents"),
         requires=("vendors", "vendor_invoices", "payments", "expenses", "approvals",
                   "period_locks", "ledger", "policy", "materiality_cents"),
         escalate_when=EscalationRule(confidence_below=90, on=("control_failure",)),
@@ -430,7 +432,7 @@ _LEAF_TOOLS = frozenset({
     "close_checklist", "propose_journal", "build_statements", "reperform",
     "roll_up", "forecast_series", "decompose_variance", "model_scenario",
     "build_report", "select_sample", "run_controls", "read_decisions",
-    "build_evidence_pack", "read_source",
+    "build_evidence_pack", "read_source", "trace_transaction", "check_precedents",
 })
 
 _check()

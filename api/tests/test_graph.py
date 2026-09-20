@@ -380,24 +380,30 @@ def test_an_objective_about_cash_routes_to_the_treasurer(ws):
     assert "Treasurer" in final["plan_rationale"]
 
 
-def test_an_unwired_domain_is_reported_rather_than_silently_skipped(ws):
+def test_every_registered_worker_is_wired(ws):
+    """The four domains the registry names are the four the graph can actually run."""
+    from app.graph.build import WIRED_WORKERS, build_graph
+
+    assert set(WIRED_WORKERS) == {"A", "B", "C", "D"}
+    assert set(WIRED_WORKERS) <= set(build_graph().get_graph().nodes)
+
+
+def test_a_domain_that_is_not_wired_is_reported_rather_than_silently_skipped(ws, monkeypatch):
     """A domain nobody asked anything of must not read as a clean one.
 
-    Named against whatever is still unwired rather than a fixed worker, so wiring one
-    updates this test instead of breaking it — and the day the last one lands, the
-    assertion that there is something to report is what tells you to delete it.
+    All four are wired now, so this drives the branch with one held back rather than
+    deleting it. The branch has to stay: the next agent added to the registry is
+    unwired the moment it lands, and the failure it would otherwise cause is a silent
+    one — an objective answered by nobody, reported as answered.
     """
-    from app.graph.build import WIRED_WORKERS
+    from app.graph import build as build_module
 
-    pending = [w for w in ("A", "B", "C", "D") if w not in WIRED_WORKERS]
-    assert pending, "every worker is wired; this test and its branch can go"
-
-    objective = {"C": "Explain the budget variance.",
-                 "D": "Test the controls and the approvals."}[pending[0]]
-    final = asyncio.run(run_investigation(ws, objective, client=_clear_model()))
+    monkeypatch.setattr(build_module, "WIRED_WORKERS", ("A", "B", "C"))
+    final = asyncio.run(build_module.run_investigation(
+        ws, "Test the controls and the approvals.", client=_clear_model()))
 
     unresolved = " ".join(final["unresolved"])
-    assert AGENTS[pending[0]].name in unresolved
+    assert AGENTS["D"].name in unresolved
     assert "not wired yet" in unresolved
 
 

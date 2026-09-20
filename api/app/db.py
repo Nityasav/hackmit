@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -161,6 +161,18 @@ CREATE TABLE IF NOT EXISTS agent_decisions (
     model TEXT NOT NULL DEFAULT '', cost_cents INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+-- A precedent is never applied, only checked, and every check is recorded — including
+-- the ones that decline. A precedent silently dropped because it no longer fits is
+-- indistinguishable from one nobody looked at, and the difference is the whole point of
+-- carrying a decision between periods at all.
+CREATE TABLE IF NOT EXISTS precedent_checks (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    precedent_id TEXT NOT NULL REFERENCES precedents(id),
+    applies INTEGER NOT NULL, reason TEXT NOT NULL,
+    matched TEXT NOT NULL DEFAULT '[]', changed_sources TEXT NOT NULL DEFAULT '[]',
+    checked_by TEXT NOT NULL, checked_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_precedent_checks ON precedent_checks(ws, precedent_id);
 CREATE INDEX IF NOT EXISTS workspace_events ON economic_events(ws, period);
 CREATE INDEX IF NOT EXISTS event_links ON links(ws, event_id);
 CREATE INDEX IF NOT EXISTS link_endpoints ON links(ws, from_type, from_id);
