@@ -10,7 +10,10 @@ type Mode = "signin" | "signup";
 function AuthForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  // Only ever redirect within this site. A bare "/..." path is fine; anything
+  // absolute or protocol-relative ("//evil.com") would send the user off-site.
+  const requested = params.get("next");
+  const next = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
 
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
