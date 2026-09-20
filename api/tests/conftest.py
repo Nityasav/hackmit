@@ -120,11 +120,15 @@ class FixtureData:
     coordinator's calculation checks are exercised for real.
     """
 
-    def __init__(self, award_share: int = 60, missing_service: bool = False):
+    def __init__(self, award_share: int = 60, missing_service: bool = False, precedents=()):
         if not 0 <= award_share <= 100:
             raise ValueError("Award share must be between zero and one hundred.")
         self.award_share, self.missing_service = award_share, missing_service
         self.snapshot_id = f"TEST-{award_share}-{'missing' if missing_service else 'complete'}"
+        self.precedents = list(precedents)
+        #: Every (workspace, ids) the engine counted, so a test can assert the
+        #: coordinator recorded a use without reaching into the database.
+        self.noted_uses: list[tuple[str, list[str]]] = []
 
     async def snapshot(self, workspace):
         sources = [Source(id="payroll", title="Payroll entry", locator="payroll.csv row 2", domain="py"),
@@ -137,7 +141,10 @@ class FixtureData:
             source_ids=["payroll", "award", "service"])]
         return Scope(workspace=workspace, snapshot_id=self.snapshot_id, institution="Test fixture school",
                      period="September", accounting_profile="Simplified accrual; USD integer cents",
-                     sources=sources, calculations=calculations)
+                     sources=sources, calculations=calculations, precedents=list(self.precedents))
+
+    async def note_precedent_uses(self, workspace, precedent_ids):
+        self.noted_uses.append((workspace, list(precedent_ids)))
 
     async def read_source(self, scope, source_id):
         sources = {s.id: s for s in (await self.snapshot(scope.workspace)).sources}
@@ -163,7 +170,7 @@ class StubPlanner:
 
     async def plan(self, objective, scope):
         ids = [s.id for s in scope.sources]
-        return Plan(rationale="Check the award criterion before preparing the payroll conclusion.", tasks=[
+        return Plan(memory_checks=[], rationale="Check the award criterion before preparing the payroll conclusion.", tasks=[
             TaskSpec(id="terms", role="gr", objective="Identify required payroll allocation evidence.", source_ids=["award"],
                      success_criteria="Cite the award clause and distinguish service evidence from budget assumptions."),
             TaskSpec(id="allocation", role="py", objective="Check payroll allocation against current service evidence.",

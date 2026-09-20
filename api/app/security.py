@@ -23,7 +23,20 @@ ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"} | {
     origin.strip() for origin in os.getenv("SCHOOLTRACE_ALLOWED_ORIGINS", "").split(",") if origin.strip()
 }
 # Vercel gives every deployment its own hostname, so previews need a pattern rather than a list.
-ORIGIN_PATTERN = re.compile(os.environ["SCHOOLTRACE_ALLOWED_ORIGIN_REGEX"]) if os.getenv("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX") else None
+def _origin_pattern():
+    raw = os.getenv("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX")
+    if not raw:
+        return None
+    try:
+        return re.compile(raw)
+    except re.error as exc:
+        # Refusing to start is right — an unparseable allowlist must not quietly allow nothing or
+        # everything — but the bare re.error in a host's log says nothing about which value is wrong.
+        raise RuntimeError(f"SCHOOLTRACE_ALLOWED_ORIGIN_REGEX is not a valid regular expression ({exc}). "
+                           f"Value received: {raw!r}") from None
+
+
+ORIGIN_PATTERN = _origin_pattern()
 # Hosting is opt-in per hostname. Without this the API answers loopback only, which is the single
 # thing standing between an unconfigured deployment and an open admin API: identity() hands anyone
 # admin over every workspace when SCHOOLTRACE_USERS is unset.
@@ -72,6 +85,12 @@ def authorize_workspace(user, ws):
 
 
 async def guard(request):
+    # Liveness is checked before the host gate. A platform's health probe arrives on an internal
+    # hostname that is not in SCHOOLTRACE_PUBLIC_HOSTS, so guarding it would 403 every probe, leave
+    # the deployment permanently unhealthy, and surface as a 502 from the edge. The endpoint
+    # returns a fixed string and reads nothing.
+    if request.url.path == "/api/health":
+        return
     host = request.url.hostname
     peer = request.client.host if request.client else ""
     testing = host == "testserver" and peer == "testclient"

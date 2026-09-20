@@ -1,9 +1,11 @@
-"""Read-only CFO DataSource over committed intake snapshots.
+"""CFO DataSource over committed intake snapshots.
 
 Bridges the intake layer (`app/ingestion.py`, owned by Functionality) to the CFO
-ports so the coordinator investigates real uploaded records. This adapter only
-reads: it never stages, commits, mutates records, publishes snapshots, or
-reaches evaluator truth.
+ports so the coordinator investigates real uploaded records. It never stages,
+commits, mutates records, publishes snapshots, or reaches evaluator truth. Its
+single write is `note_precedent_uses`, which increments a counter recording
+that a run weighed a human decision; it cannot create precedent or alter
+anything an agent reads as evidence.
 
 Amounts are never computed here. The accounting engine is Functionality's
 (`app/accounting/`); this module only forwards its results, because the CFO's
@@ -22,13 +24,37 @@ from ..accounting.ap import calculations as ap_calculations
 from ..accounting.grants import calculations as grants_calculations
 from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
 from ..accounting.review import checks
-from ..cfo.schemas import Calculation, CalculationSpec, Scope, Source, SourceSpan
+from ..cfo.schemas import Calculation, CalculationSpec, Precedent, Scope, Source, SourceSpan
 from ..ingestion import coverage, financial_records
 
 # Intake roles map onto the three specialist domains; everything else is shared context.
 DOMAINS = {"invoice": "ap", "payroll": "py", "grants": "gr"}
 MAX_LINES = 400
 MAX_CHARS = 20_000
+
+
+def _precedents(workspace: str) -> list[Precedent]:
+    """Reviewed human decisions for this workspace, newest-relevant first.
+
+    Read through the same accessor the triage agent uses, so the two run paths
+    are offered the same memory rather than two drifting copies of it.
+    """
+    from .. import approvals, db  # local import keeps the module surface small
+
+    with db.connect() as connection:
+        rows = approvals.active_precedents(connection, workspace)
+    return [
+        Precedent(id=row["id"], pattern=row["pattern"],
+                  verdict=row["verdict"], guidance=row["guidance"])
+        for row in rows
+    ]
+
+
+def _note_precedent_uses(workspace: str, precedent_ids: list[str]) -> None:
+    from .. import approvals, db
+
+    with db.connect() as connection:
+        approvals.note_precedent_uses(connection, workspace, precedent_ids)
 
 
 def _unavailable(exc: HTTPException) -> ValueError:
@@ -127,7 +153,13 @@ class IntakeDataSource:
             calculations=[CalculationSpec(id=c.id, description=c.description, source_ids=list(c.source_ids))
                           for c in engine],
             gaps=gaps,
+            precedents=await run_in_threadpool(_precedents, workspace),
         )
+
+    async def note_precedent_uses(self, workspace: str, precedent_ids: list[str]) -> None:
+        if not precedent_ids:
+            return
+        await run_in_threadpool(_note_precedent_uses, workspace, precedent_ids)
 
     async def read_source(self, scope: Scope, source_id: str) -> SourceSpan:
         view = await _snapshot_view(scope.workspace)

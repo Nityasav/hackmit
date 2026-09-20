@@ -11,7 +11,8 @@ from uuid import uuid4
 from .ports import Auditor, CFOModel, DataSource, Specialist
 from .reporting import render, validate_narrative
 from .repository import RunRepository
-from .schemas import AcceptedClaim, Event, FollowUp, Narrative, Plan, Review, Run, RunRequest, TaskSpec, TaskState, WorkerResult
+from .schemas import (AcceptedClaim, Event, FollowUp, MemoryCheck, Narrative, Plan, Review, Run,
+                      RunRequest, TaskSpec, TaskState, WorkerResult)
 from .tools import BoundaryError, EvidenceTools
 
 
@@ -80,9 +81,15 @@ class CFOEngine:
                         emit("cfo", "plan.coverage_added", role)
             self._validate_plan(plan, run)
             run.plan = plan
+            run.memory_checks = self._checked_memory(plan, run, emit)
             run.tasks = [TaskState(spec=spec) for spec in plan.tasks]
             run.status = "running"
             emit("cfo", "plan.accepted", plan.rationale)
+            # Applied or declined, weighing a precedent is a use of it. Counted
+            # after validation so an invented ID can never increment anything.
+            if run.memory_checks:
+                await self.data.note_precedent_uses(
+                    run.request.workspace, [c.precedent_id for c in run.memory_checks])
 
             while any(t.status == "queued" for t in run.tasks):
                 states = {t.spec.id: t for t in run.tasks}
@@ -157,6 +164,36 @@ class CFOEngine:
             render(run)
             emit("cfo", "run.failed", run.unresolved[-1])
         return run
+
+    @staticmethod
+    def _checked_memory(plan: Plan, run: Run, emit) -> list[MemoryCheck]:
+        """Keep only checks against precedent this run was actually offered.
+
+        A model can emit any string as a `precedent_id`. Taking those at face
+        value would let a run manufacture its own memory — claim to have
+        consulted guidance nobody ever gave, and have it counted and displayed
+        as a human decision. Unknown IDs are dropped and surfaced as unresolved
+        rather than silently ignored, and a precedent the run never mentions is
+        recorded as unaddressed instead of passing as considered.
+        """
+        offered = {p.id: p for p in (run.scope.precedents if run.scope else [])}
+        kept, seen = [], set()
+        for check in plan.memory_checks:
+            if check.precedent_id not in offered:
+                run.unresolved.append(
+                    f"Plan cited precedent {check.precedent_id}, which was not offered to this run; ignored.")
+                emit("cfo", "memory.unknown_precedent", check.precedent_id)
+                continue
+            if check.precedent_id in seen:
+                continue
+            seen.add(check.precedent_id)
+            kept.append(check)
+            emit("cfo", "memory." + ("applied" if check.applied else "declined"),
+                 f"{check.precedent_id}: {check.reason}")
+        for precedent_id in offered.keys() - seen:
+            run.unresolved.append(
+                f"Precedent {precedent_id} was offered to this run and not addressed in its plan.")
+        return kept
 
     def _validate_plan(self, plan: Plan, run: Run):
         if len(plan.tasks) > run.request.limits.max_tasks:

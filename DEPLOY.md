@@ -61,8 +61,17 @@ volume and its own half of your data.
 **From the dashboard**
 
 1. **New Project → Deploy from GitHub repo →** `Nityasav/hackmit`.
-2. Open the service → **Settings → Root Directory** → `api`. Railway then finds `railway.json`
-   and `Dockerfile` itself; leave the build and start commands empty, since the image sets both.
+2. Open the service → **Settings → Root Directory** → `api`. This is the step everything else
+   depends on. Railway auto-detects a Dockerfile at the root of the service's source directory, so
+   with the root set it reports `Using detected Dockerfile!` and picks up `railway.json` beside it.
+   Leave the build and start commands empty; the image sets both.
+
+   **If the build log says `Railpack` and `Detected Python`, the root directory is not set.**
+   Railway looked at the repo root, found no Dockerfile, and fell back to its own builder — which
+   then fails with `No start command detected`, because the start command lives in the image.
+   Setting the root directory to `api` fixes it. Do not instead set `RAILWAY_DOCKERFILE_PATH` to
+   `api/Dockerfile` while the root stays at the repo: that finds the file but leaves the build
+   context at the repo root, and the `COPY pyproject.toml uv.lock ./` line then has nothing to copy.
 3. **Settings → Networking → Generate Domain.** Copy the hostname it gives you, e.g.
    `sherlock-api-production.up.railway.app`. You need it before the first successful boot, because
    the API refuses any hostname not in `SCHOOLTRACE_PUBLIC_HOSTS`.
@@ -70,6 +79,10 @@ volume and its own half of your data.
    the service settings. Press `⌘K`, or right-click the project canvas, and create a volume; pick
    this service when it asks, then set its **mount path to `/data`** in the service panel. Skip
    this and every upload disappears on the next deploy or restart.
+
+   The Dockerfile deliberately carries no `VOLUME` instruction. Railway rejects a Dockerfile that
+   declares one — `dockerfile invalid: docker VOLUME at Line 31 is not supported, use Railway
+   Volumes` — because it mounts its own volume at the path you configure here.
 5. **Variables** — add the table above, with `SCHOOLTRACE_PUBLIC_HOSTS` set to the hostname from
    step 3 and no `https://` prefix. `PORT` is injected by Railway; do not set it.
 6. Redeploy. `curl https://<your-domain>/api/health` → `{"status":"ok"}`.

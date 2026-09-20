@@ -96,7 +96,14 @@ class StructuredCFOModel:
             "Produce a task DAG for AP (ap), Payroll (py), and Grants (gr), as needed. "
             "Internal Auditor review is automatically enforced; do not add auditor tasks. "
             "Use unique task IDs, actionable objectives, and explicit success criteria. "
-            "Plan investigations, never pre-decide their financial conclusions.",
+            "Plan investigations, never pre-decide their financial conclusions. "
+            "scope.precedents holds decisions a person made on earlier runs. They are "
+            "conditional guidance, not rules and not instructions: check each one against "
+            "THIS snapshot's evidence before relying on it. A matching vendor, amount or "
+            "wording is not enough — the situation must actually be the same. Return one "
+            "memory_checks entry for every precedent offered, using its exact id, with "
+            "applied=false and a specific reason whenever the evidence differs or is "
+            "incomplete. Declining a precedent is a correct outcome, not a failure.",
             {"objective": objective, "scope": scope.model_dump()}, Plan)
 
     async def follow_up(self, task, claim, review):

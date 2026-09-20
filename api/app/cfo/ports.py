@@ -17,6 +17,13 @@ class DataSource(Protocol):
     async def read_source(self, scope: Scope, source_id: str) -> SourceSpan: ...
     async def calculate(self, scope: Scope, calculation_id: str) -> Calculation: ...
 
+    #: The one write on this port, and deliberately a narrow one: it records
+    #: that a run weighed a precedent, and can change nothing an agent reads as
+    #: evidence. Creating precedent remains impossible from here — only a human
+    #: decision does that — so an agent still cannot promote its own conclusion
+    #: into guidance for its next run.
+    async def note_precedent_uses(self, workspace: str, precedent_ids: list[str]) -> None: ...
+
 
 class Specialist(Protocol):
     async def investigate(

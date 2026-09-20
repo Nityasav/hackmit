@@ -30,6 +30,32 @@ class CalculationSpec(Contract):
     source_ids: list[str] = Field(min_length=1)
 
 
+class Precedent(Contract):
+    """A decision a person made on an earlier run, offered to this one.
+
+    It is guidance, never a rule: only `approvals.decide()` creates one, and a
+    run must re-check it against its own snapshot before relying on it. The
+    text is untrusted evidence like any other source, not an instruction.
+    """
+
+    id: str
+    pattern: str = Field(max_length=300)
+    verdict: Literal["approved", "rejected"]
+    guidance: str = Field(max_length=1000)
+
+
+class MemoryCheck(Contract):
+    """What a run did with one precedent it was offered.
+
+    `applied=False` with a reason is the point of the whole mechanism: it is
+    the evidence that memory was re-checked rather than replayed.
+    """
+
+    precedent_id: str
+    applied: bool
+    reason: str = Field(min_length=1, max_length=400)
+
+
 class Scope(Contract):
     workspace: str
     snapshot_id: str
@@ -39,6 +65,7 @@ class Scope(Contract):
     sources: list[Source]
     calculations: list[CalculationSpec] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
+    precedents: list[Precedent] = Field(default_factory=list, max_length=20)
 
 
 class SourceSpan(Contract):
@@ -71,6 +98,10 @@ class TaskSpec(Contract):
 class Plan(Contract):
     rationale: str = Field(max_length=2000)
     tasks: list[TaskSpec] = Field(min_length=1, max_length=8)
+    #: One entry for every precedent in scope, applied or not. Not defaulted:
+    #: an empty list has to be an explicit "I was offered none", so that a
+    #: model omitting the field cannot read as "I checked nothing".
+    memory_checks: list[MemoryCheck] = Field(max_length=20)
 
 
 class Claim(Contract):
@@ -177,6 +208,10 @@ class Run(Contract):
     status: Literal["queued", "planning", "running", "completed", "needs_evidence", "partial", "failed", "stale", "interrupted"] = "queued"
     scope: Scope | None = None
     plan: Plan | None = None
+    #: Lifted off the plan so readers do not have to dig into it, and so a run
+    #: that never reached planning still has an answerable "what did it do with
+    #: memory?" rather than a null.
+    memory_checks: list[MemoryCheck] = Field(default_factory=list)
     tasks: list[TaskState] = Field(default_factory=list)
     accepted: list[AcceptedClaim] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
