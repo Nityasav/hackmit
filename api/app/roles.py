@@ -89,6 +89,9 @@ DATE_FIELDS: frozenset[str] = frozenset({
     "order_date", "received_date", "invoice_date", "due_date", "payment_date",
     "settlement_date", "payout_date", "period_start", "period_end", "pay_date",
     "expense_date", "approved_at", "locked_at", "registered_from", "registered_to",
+    # When an entry was *written*, as against the date it is dated. A post-close entry
+    # is one where these differ across a lock, and nothing else can tell them apart.
+    "posted_at",
 })
 
 #: Columns parsed as whole numbers rather than money or dates.
@@ -103,6 +106,7 @@ OPTIONAL_FIELDS: list[str] = [
     "event_ref", "po_id", "po_line_id", "receipt_id", "invoice_number", "invoice_refs",
     "payment_reference", "bank_reference", "processor", "tax_amount", "delegation",
     "cost_centre", "quantity", "unit_amount", "vendor_id", "customer_id", "employee_id",
+    "posted_at",
 ]
 
 #: The business key for a role: the column(s) that identify one record across versions.
@@ -155,8 +159,20 @@ LABELS: dict[str, str] = {
     "tax_registrations": "Tax registrations",
     "contract": "Contracts",
     "policy": "Policies",
+    "invoice": "Invoice documents",
+    "service": "Service agreements",
+    "budget": "Budget documents",
     "document": "Other documents",
 }
+
+#: Two registries that describe the same roles will eventually disagree, and the way
+#: this one disagreed was a document kind with no label: `/api/roles` raised KeyError
+#: and the browser lost source detection for every file, not just the unlabelled kind.
+#: Checked at import so the next one to add a kind finds out here rather than there.
+_unlabelled = sorted((set(FIELDS) | DOCUMENT_ROLES) - set(LABELS))
+if _unlabelled:
+    raise AssertionError(
+        "Every role needs a label a person can read. Missing: " + ", ".join(_unlabelled))
 
 ACCOUNT_TYPES: frozenset[str] = frozenset({"asset", "liability", "equity", "revenue", "expense"})
 DIRECTIONS: frozenset[str] = frozenset({"in", "out"})
@@ -170,6 +186,26 @@ def key_of(role: str, payload: dict) -> str:
     """
     parts = [str(payload.get(field, "")) for field in KEY_FIELDS[role]]
     return "\x1f".join(parts)
+
+
+def readable_key(role: str, key: str) -> str:
+    """A composite key as a person should read it.
+
+    Keys are joined with a unit separator so `("PO-1", "2")` cannot collide with
+    `("PO-12",)`. That character is invisible, so a purchase-order line printed raw
+    reads as `PO-70011` — a document number that does not exist, which sends a reviewer
+    looking for something that was never there. Anything shown to a person, or handed to
+    a model that might quote it, goes through here; the stored key never changes.
+    """
+    parts = key.split("")
+    if len(parts) == 1:
+        return key
+    if role not in KEY_FIELDS:
+        return " · ".join(parts)
+    fields = KEY_FIELDS.get(role, ())
+    if len(fields) == len(parts):
+        return " · ".join(f"{value}" for value in parts)
+    return " · ".join(parts)
 
 
 def row_issues(role: str, payload: dict, config: dict) -> list[tuple[str, str, str | None]]:

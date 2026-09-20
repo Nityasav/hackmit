@@ -17,11 +17,13 @@ create, alter or supersede a record, post a journal, or decide an approval.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from .. import db
-from ..accounting import cash, match, reconcile
-from .budget import Meter
+from .. import db, events, memory, roles
+from ..accounting import (accruals, audit, cash, close, controls, match, planning,
+                          reconcile, reporting, statements, variance)
+from .budget import BudgetExceeded, Meter
 
 
 class ScopeError(PermissionError):
@@ -87,9 +89,21 @@ class Toolbox:
         window = rows[offset:offset + min(limit, 200)]
         for row in window:
             self.read_keys.add(row["record_key"])
+            # The source id is in the output this agent is about to read, so citing it
+            # is citing what it saw. Recording only the record key meant a legitimate
+            # citation was refused as fabricated, which is a far worse failure than the
+            # one the check exists to prevent: the guard must catch invention, not
+            # punish an agent for quoting the evidence it was handed.
+            self.read_sources.add(row["source_id"])
         return {
             "role": role, "total": len(rows), "offset": offset,
-            "records": [{"record_key": r["record_key"], "payload": r["payload"],
+            "records": [{"record_key": r["record_key"],
+                         # What a person should read. A composite key joined by an
+                         # invisible separator prints as one run-on identifier, and an
+                         # agent quoting it sends a reviewer looking for a document
+                         # that does not exist.
+                         "display": roles.readable_key(r["role"], r["record_key"]),
+                         "payload": r["payload"],
                          "source_id": r["source_id"], "line": r["locator"]} for r in window],
             "note": "Supplied records only. Nothing here implies the population is complete.",
         }
@@ -198,6 +212,271 @@ class Toolbox:
         self.calculations["cash"] = result
         return result
 
+
+    def build_statements(self) -> dict:
+        """Income statement, balance sheet and cash flow, from the ledger.
+
+        Deterministic end to end. B3 holds this tool and no model writes any figure it
+        returns; the agent's job is to notice when something does not tie and to say so.
+        """
+        self._charge("build_statements")
+        result = statements.statements(self._records, self.config)
+        self.calculations["statements"] = result
+        return result
+
+    def close_checklist(self) -> dict:
+        """What is outstanding before the period can be closed."""
+        self._charge("close_checklist")
+        result = close.checklist(self._records, self.config)
+        self.calculations["close"] = result
+        return result
+
+    def propose_journal(self) -> dict:
+        """Accruals the period owes, from deliveries with no invoice against them.
+
+        Proposals only. Every journal is balanced before it is returned, and nothing
+        downstream of this can post one.
+        """
+        self._charge("propose_journal")
+        result = accruals.unbilled_receipts(self._records, self.config)
+        for proposal in result["proposals"]:
+            for citation in proposal["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+            self.calculations[proposal["id"]] = proposal
+        return result
+
+    def reperform(self) -> dict:
+        """Recompute the close independently, for a reviewer that trusts nothing.
+
+        B4 must not accept a figure because a preparer reported it. This runs the same
+        deterministic code against the same records and returns the answer directly, so
+        a disagreement is visible rather than negotiable.
+        """
+        self._charge("reperform")
+        result = {
+            "statements": statements.statements(self._records, self.config),
+            "close": close.checklist(self._records, self.config),
+        }
+        self.calculations["reperformed"] = {
+            "balances": result["statements"]["balance_sheet"]["balances"],
+            "ties": result["statements"]["cash_flow"]["ties"],
+            "ready": result["close"]["ready"],
+        }
+        return result
+
+
+    def roll_up(self) -> dict:
+        """The budget and the actuals gathered into the chart's own categories."""
+        self._charge("roll_up")
+        result = planning.roll_up(self._records, self.config)
+        self.calculations["roll_up"] = result
+        return result
+
+    def forecast_series(self) -> dict:
+        """How the forecast did, account by account, with the basis each one recorded."""
+        self._charge("forecast_series")
+        result = planning.forecast_accuracy(self._records, self.config)
+        for account in result["accounts"]:
+            for citation in account["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+        self.calculations["forecast"] = result
+        return result
+
+    def decompose_variance(self, account: str = "", plan: str = "budgets") -> dict:
+        """A variance broken into the transactions that caused it.
+
+        One account when named, otherwise the largest variances in the period. Every
+        driver carries the ledger lines behind it, so what the agent writes about a
+        variance is constrained to what the arithmetic already attributed.
+        """
+        self._charge("decompose_variance")
+        if account:
+            result = variance.decompose(self._records, account, self.config, plan=plan)
+            explained = [result]
+        else:
+            result = variance.explain(self._records, self.config, plan=plan)
+            explained = result["explained"]
+        for item in explained:
+            for driver in item.get("drivers", []):
+                for citation in driver["evidence"]:
+                    self.read_keys.add(citation["record_key"])
+                    self.read_sources.add(citation["source_id"])
+        # Scored so an escalation threshold has something to read. `attributed_pct` is the
+        # share of the activity that reached a named transaction, which is exactly what
+        # confidence in an explanation should mean.
+        self.calculations["variance:" + (account or "period")] = {
+            "confidence": result["attributed_pct"],
+            "amount_cents": abs(result.get("variance_cents") or result.get("amount_cents") or 0),
+            "unexplained_cents": result["unexplained_cents"],
+            "detail": result,
+        }
+        return result
+
+    def model_scenario(self, revenue_growth_pct: int = 0, expense_growth_pct: int = 0,
+                       headcount_change: int = 0, periods: int = 3) -> dict:
+        """Project this period forward under supplied assumptions.
+
+        A projection, never a measurement. C4 escalates unconditionally because there is
+        nothing to score one against.
+        """
+        self._charge("model_scenario")
+        result = planning.scenario(
+            self._records, self.config, revenue_growth_pct=revenue_growth_pct,
+            expense_growth_pct=expense_growth_pct, headcount_change=headcount_change,
+            periods=periods)
+        self.calculations["scenario"] = result
+        return result
+
+    def build_report(self) -> dict:
+        """The period's reporting, assembled from figures that already tie.
+
+        Returns sections with their figures and an `intent` for the prose that belongs in
+        each. There is no slot for a figure, which is what makes "writes prose, never
+        numbers" a property of the tool rather than an instruction in a prompt.
+        """
+        self._charge("build_report")
+        result = reporting.management_report(self._records, self.config)
+        for section in result["sections"]:
+            for item in section.get("drivers", []):
+                for driver in item.get("drivers", []):
+                    for citation in driver["evidence"]:
+                        self.read_keys.add(citation["record_key"])
+                        self.read_sources.add(citation["source_id"])
+        self.calculations["report"] = result
+        return result
+
+
+    def run_controls(self) -> dict:
+        """Every control test, over the committed records.
+
+        A passing test is returned as a finding, not as silence. D2 judges the cases the
+        rules cannot settle; it does not decide whether a rule fired.
+        """
+        self._charge("run_controls")
+        found = controls.checks(self._records, self.config)
+        for finding in found:
+            for citation in finding["evidence"]:
+                self.read_sources.add(citation["source_id"])
+            for key in finding["record_keys"]:
+                self.read_keys.add(key)
+        result = {
+            "checks": found,
+            "exceptions": [c for c in found if c["status"] == "attention"],
+            "passes": [c for c in found if c["status"] == "pass"],
+            "gaps": [c for c in found if c["status"] == "gap"],
+            "note": "Deterministic tests. A pass is a statement that this test found "
+                    "nothing, which is narrower than a statement that nothing is wrong.",
+        }
+        self.calculations["controls"] = result
+        return result
+
+    def select_sample(self, role: str = "vendor_invoices", size: int = 10) -> dict:
+        """A reproducible sample, with everything material taken in full."""
+        self._charge("select_sample")
+        result = audit.select(self._records, self.config, role=role, size=size)
+        for item in result["selected"]:
+            self.read_keys.add(item["record_key"])
+            for citation in item["evidence"]:
+                self.read_sources.add(citation["source_id"])
+        self.calculations["sample"] = result
+        return result
+
+    def trace_transaction(self, invoice_key: str) -> dict:
+        """Follow one purchase from the order that started it to the entries that recorded it."""
+        self._charge("trace_transaction")
+        result = audit.trace(self._records, invoice_key)
+        for step in result.get("steps", []):
+            for citation in step["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+        self.calculations["trace:" + invoice_key] = result
+        return result
+
+    def read_decisions(self, limit: int = 50) -> dict:
+        """What the agents have already decided in this workspace, newest first.
+
+        D3 generates nothing. This returns the trail as it was written at the time, so an
+        evidence pack is assembled out of what happened rather than reconstructed
+        afterwards from what the records now look like.
+        """
+        self._charge("read_decisions")
+        with db.connect() as connection:
+            rows = connection.execute(
+                "SELECT id, agent, action, summary, why, confidence, evidence, reviewer,"
+                " review_verdict, escalated, model, cost_cents, created_at, thread_id,"
+                " event_id FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT ?",
+                (self.ws, max(1, min(limit, 200)))).fetchall()
+        decisions = []
+        for row in rows:
+            item = dict(row)
+            item["evidence"] = json.loads(item["evidence"] or "[]")
+            item["escalated"] = bool(item["escalated"])
+            decisions.append(item)
+        return {"decisions": decisions, "count": len(decisions),
+                "note": "Written as the work happened. Nothing here was reconstructed."}
+
+    def build_evidence_pack(self, event_id: str = "") -> dict:
+        """Everything behind one transaction, or the workspace's whole trail.
+
+        Collected, never generated: the records, the decisions that cite them, the links
+        that were drawn and how each was established, and the precedent checks made. A
+        reader who disagrees with a conclusion can follow it back to the bytes.
+        """
+        self._charge("build_evidence_pack")
+        with db.connect() as connection:
+            if event_id:
+                event = events.view(connection, self.ws, event_id)
+                decisions = connection.execute(
+                    "SELECT * FROM agent_decisions WHERE ws=? AND event_id=?"
+                    " ORDER BY rowid", (self.ws, event_id)).fetchall()
+                links = connection.execute(
+                    "SELECT * FROM links WHERE ws=? AND event_id=? ORDER BY rowid",
+                    (self.ws, event_id)).fetchall()
+            else:
+                event = None
+                decisions = connection.execute(
+                    "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid LIMIT 200",
+                    (self.ws,)).fetchall()
+                links = connection.execute(
+                    "SELECT * FROM links WHERE ws=? ORDER BY rowid LIMIT 200",
+                    (self.ws,)).fetchall()
+            checks = memory.history(connection, self.ws)
+
+        pack = {
+            "event": event,
+            "decisions": [dict(row) | {"evidence": json.loads(row["evidence"] or "[]")}
+                          for row in decisions],
+            "links": [dict(row) for row in links],
+            "precedent_checks": checks,
+            "assembled_at": db.now(),
+            "note": "Assembled from what was recorded at the time. Nothing in this pack "
+                    "was generated, inferred or filled in, and an empty section means "
+                    "nothing of that kind was recorded rather than that none exists.",
+        }
+        self.calculations["evidence_pack"] = {
+            "decisions": len(pack["decisions"]), "links": len(pack["links"]),
+            "precedent_checks": len(checks)}
+        return pack
+
+    def check_precedents(self) -> dict:
+        """Re-test what a person decided in earlier periods against this one.
+
+        Never applies anything. Each precedent is checked, the outcome is written to the
+        trail either way, and a finding a person has already decided keeps its exception
+        and gains the earlier decision beside it.
+        """
+        self._charge("check_precedents")
+        found = controls.checks(self._records, self.config)
+        with db.connect() as connection:
+            result = memory.apply_to_findings(connection, self.ws, found,
+                                              actor=self.spec.id)
+        result["findings"] = found
+        self.calculations["precedents"] = {
+            "applied": result["applied"], "declined": result["declined"]}
+        return result
+
     # ----------------------------------------------------------------- writes --
     def record_decision(self, *, agent: str, action: str, summary: str, why: str,
                         confidence: int | None, evidence: list[dict], model: str,
@@ -269,6 +548,21 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "reconcile_bank": toolbox.reconcile_bank,
         "decompose_payout": toolbox.decompose_payout,
         "project_cash": toolbox.project_cash,
+        "build_statements": toolbox.build_statements,
+        "close_checklist": toolbox.close_checklist,
+        "propose_journal": toolbox.propose_journal,
+        "reperform": toolbox.reperform,
+        "roll_up": toolbox.roll_up,
+        "forecast_series": toolbox.forecast_series,
+        "decompose_variance": toolbox.decompose_variance,
+        "model_scenario": toolbox.model_scenario,
+        "build_report": toolbox.build_report,
+        "run_controls": toolbox.run_controls,
+        "select_sample": toolbox.select_sample,
+        "trace_transaction": toolbox.trace_transaction,
+        "read_decisions": toolbox.read_decisions,
+        "build_evidence_pack": toolbox.build_evidence_pack,
+        "check_precedents": toolbox.check_precedents,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -317,6 +611,87 @@ def tool_definitions(spec) -> list[dict]:
                            "against it over a horizon in days.",
             "properties": {"horizon_days": {"type": "integer", "minimum": 1, "maximum": 180}},
             "required": []},
+        "build_statements": {
+            "description": "Income statement, balance sheet and cash flow computed from "
+                           "the ledger in exact cents, with the checks that say whether "
+                           "they tie. You do not write any of these figures.",
+            "properties": {}, "required": []},
+        "close_checklist": {
+            "description": "Every close question, answered from the records, with what "
+                           "is blocking the period and what is merely outstanding.",
+            "properties": {}, "required": []},
+        "propose_journal": {
+            "description": "Accruals for deliveries inside the period with no invoice "
+                           "against them. Balanced proposals; nothing posts.",
+            "properties": {}, "required": []},
+        "reperform": {
+            "description": "Recompute the statements and the close independently, so a "
+                           "preparer's figure can be checked rather than believed.",
+            "properties": {}, "required": []},
+        "roll_up": {
+            "description": "Budget and actuals gathered into the chart's own reporting "
+                           "categories, with headcount where it was supplied.",
+            "properties": {}, "required": []},
+        "forecast_series": {
+            "description": "How the recorded forecast did against the actuals, account "
+                           "by account, with the basis each forecast claimed for itself.",
+            "properties": {}, "required": []},
+        "decompose_variance": {
+            "description": "A variance broken into the economic events that caused it, "
+                           "each naming the ledger lines behind it. Name an account, or "
+                           "leave it out for the largest variances in the period. You "
+                           "explain what the drivers mean; you never compute one.",
+            "properties": {"account": {"type": "string"},
+                           "plan": {"type": "string", "enum": ["budgets", "forecasts"]}},
+            "required": []},
+        "model_scenario": {
+            "description": "Project this period forward under assumptions you are given. "
+                           "The result is a projection about a period that has not "
+                           "happened, and must be reported as one.",
+            "properties": {
+                "revenue_growth_pct": {"type": "integer", "minimum": -100, "maximum": 200},
+                "expense_growth_pct": {"type": "integer", "minimum": -100, "maximum": 200},
+                "headcount_change": {"type": "integer", "minimum": -500, "maximum": 500},
+                "periods": {"type": "integer", "minimum": 1, "maximum": 24}},
+            "required": []},
+        "build_report": {
+            "description": "The period's reporting assembled from figures that already "
+                           "tie, as sections each naming the prose that belongs in it. "
+                           "Write the prose; every figure is already computed.",
+            "properties": {}, "required": []},
+        "run_controls": {
+            "description": "Every control test over the committed records, with passes "
+                           "reported as findings rather than as silence. You judge the "
+                           "cases the rules cannot settle; you do not decide whether a "
+                           "rule fired.",
+            "properties": {}, "required": []},
+        "select_sample": {
+            "description": "A reproducible sample of one record type, with everything at "
+                           "or above materiality taken in full. Returns the method and "
+                           "the coverage alongside the selection.",
+            "properties": {"role": {"type": "string", "enum": sorted(spec.roles)},
+                           "size": {"type": "integer", "minimum": 1, "maximum": 50}},
+            "required": []},
+        "trace_transaction": {
+            "description": "Follow one purchase from the order that started it to the "
+                           "entries that recorded it, naming any step that is missing.",
+            "properties": {"invoice_key": {"type": "string"}},
+            "required": ["invoice_key"]},
+        "read_decisions": {
+            "description": "What the agents have already decided here, as it was written "
+                           "at the time.",
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+            "required": []},
+        "build_evidence_pack": {
+            "description": "Everything recorded behind one transaction, or the whole "
+                           "workspace's trail: records, decisions, links and precedent "
+                           "checks. Collected, never generated.",
+            "properties": {"event_id": {"type": "string"}}, "required": []},
+        "check_precedents": {
+            "description": "Re-test what a person decided in earlier periods against "
+                           "this one. Records every check, including the ones it "
+                           "declines, and applies nothing on its own.",
+            "properties": {}, "required": []},
     }
     return [{
         "type": "function", "name": name,

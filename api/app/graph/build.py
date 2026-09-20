@@ -14,26 +14,35 @@ of them. Here every delegation returns.
 concurrent branches draw on the same allowance. A per-branch meter would let four agents
 each spend the run's cap.
 
-Phase 3 wires the orchestrator and the Treasurer subgraph. B, C and D are registered the
-same way, and the orchestrator already knows how to route to them; their subagents' tools
-are what remain to be written.
+All four workers are wired. The graph is built from the registry, so the topology here
+is whatever `registry.py` says it is; adding an agent is a registry edit and a tool, never
+a change to this file.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
 
 from .. import db, ingestion
 from ..agents import runtime
 from ..agents.budget import BudgetExceeded, Meter, RUN_CAP_CENTS, check_day_cap
 from ..agents.registry import AGENTS, children
 from ..agents.runtime import AgentFailed
-from ..agents.tools import ScopeError
+from ..agents.tools import ScopeError, Toolbox
+from . import escalation
 from .state import RunState, initial
 
 #: Worker subgraphs wired so far. The rest are registered as they gain their tools;
 #: routing to an unwired worker reports that plainly rather than silently doing nothing.
-WIRED_WORKERS = ("A",)
+WIRED_WORKERS = ("A", "B", "C", "D")
 
 
 # --------------------------------------------------------------------------- #
@@ -96,6 +105,34 @@ def _subagent_node(agent_id: str):
     return node
 
 
+def _decision_node(agent_id: str):
+    """Stop and wait for a person, if this agent's finding needs one.
+
+    Deliberately its own node. LangGraph re-runs the node that raised an interrupt when
+    the run resumes, so anything expensive sitting beside the pause is paid for twice and
+    anything non-deterministic beside it changes identity between the question and the
+    answer. This node only reads what the working node already wrote.
+    """
+
+    async def node(state: RunState) -> dict:
+        mine = [f for f in state.get("findings", [])
+                if f["agent_id"] == agent_id and f.get("escalated")]
+        if not mine:
+            return {}
+        finding = mine[0]
+        outcome = escalation.request_decision(
+            ws=state["ws"], agent_id=agent_id, thread_id=state["thread_id"],
+            decision_id=finding["decision_id"],
+            title=f"{AGENTS[agent_id].name}: {finding['summary'][:120]}",
+            summary=finding["rationale"],
+            reasons=tuple(finding["escalation_reasons"]),
+            event_id=finding.get("event_id"),
+            citations=finding.get("citations", []))
+        return {"results": {f"{agent_id}:decision": outcome}}
+
+    return node
+
+
 def _worker_subgraph(worker_id: str):
     """A worker and its subagents, compiled as one graph.
 
@@ -105,11 +142,15 @@ def _worker_subgraph(worker_id: str):
     no ordering to preserve between them.
     """
     graph = StateGraph(RunState)
-    subagents = [spec.id for spec in children(worker_id)]
-    for agent_id in subagents:
+    for spec in children(worker_id):
+        agent_id = spec.id
+        decide = f"{agent_id}-decide"
         graph.add_node(agent_id, _subagent_node(agent_id))
+        graph.add_node(decide, _decision_node(agent_id))
         graph.add_edge(START, agent_id)
-        graph.add_edge(agent_id, END)
+        # Work, then wait. Separating them is what makes a resume free and repeatable.
+        graph.add_edge(agent_id, decide)
+        graph.add_edge(decide, END)
     return graph.compile()
 
 
@@ -191,7 +232,31 @@ async def _synthesize_node(state: RunState) -> dict:
 # Assembly
 # --------------------------------------------------------------------------- #
 
-def build_graph():
+def checkpointer_path() -> str:
+    """Where a paused run's state lives.
+
+    Beside the intake database rather than inside it: LangGraph owns this schema and
+    migrates it on its own timetable, and mixing the two would make either one's upgrade
+    the other's problem.
+    """
+    root = Path(os.environ.get("SCHOOLTRACE_DATA_DIR",
+                               Path(__file__).resolve().parents[2] / "data"))
+    root.mkdir(parents=True, exist_ok=True)
+    return str(root / "graph-checkpoints.sqlite3")
+
+
+@asynccontextmanager
+async def _saver():
+    """The async saver, because the graph is invoked with `ainvoke`.
+
+    The synchronous one raises on every async method, so a run would fail the moment it
+    tried to checkpoint — which is exactly the moment an escalation needs it to work.
+    """
+    async with AsyncSqliteSaver.from_conn_string(checkpointer_path()) as saver:
+        yield saver
+
+
+def build_graph(checkpointer=None):
     """The whole organization, compiled. Built from the registry, not hand-wired."""
     graph = StateGraph(RunState)
     graph.add_node("plan", _plan_node)
@@ -204,7 +269,9 @@ def build_graph():
     graph.add_conditional_edges("plan", _route,
                                 {**{w: w for w in WIRED_WORKERS}, END: END})
     graph.add_edge("synthesize", END)
-    return graph.compile()
+    # Without a checkpointer `interrupt()` cannot resume: the state it paused on would
+    # have nowhere to live. Tests that never escalate may compile without one.
+    return graph.compile(checkpointer=checkpointer)
 
 
 async def run_investigation(ws: str, objective: str, *, event_ids: list[str] | None = None,
@@ -224,12 +291,87 @@ async def run_investigation(ws: str, objective: str, *, event_ids: list[str] | N
     meter = Meter(run_cap_cents=min(cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
 
     state = initial(ws, thread_id, objective, snapshot["id"], period, event_ids)
-    graph = build_graph()
-    # One thread per (workspace, period), so a close that spans days resumes at the node
-    # it stopped on rather than starting the period again.
-    final = await graph.ainvoke(state, config={
-        "configurable": {"thread_id": f"{ws}:{period}:{thread_id}",
-                         "meter": meter, "client": client},
-        "recursion_limit": 50,
-    })
-    return {**final, "spend": meter.snapshot(), "thread_id": thread_id}
+    # One thread per (workspace, period, run), so a close that spans days resumes at the
+    # node it stopped on rather than starting the period again.
+    config = {"configurable": {"thread_id": f"{ws}:{period}:{thread_id}",
+                               "meter": meter, "client": client},
+              "recursion_limit": 50}
+    async with _saver() as saver:
+        final = await build_graph(saver).ainvoke(state, config=config)
+    return _outcome(final, meter, thread_id)
+
+
+def _outcome(final: dict, meter: Meter, thread_id: str) -> dict:
+    """One shape whether the run finished or stopped for a person.
+
+    Each pending question carries its own interrupt id, because several agents can stop
+    at once and one person's answer must resolve exactly the question they were shown.
+    """
+    waiting = final.get("__interrupt__") or []
+    payloads = [{**getattr(item, "value", item), "interrupt_id": getattr(item, "id", None)}
+                for item in waiting]
+    return {
+        **{k: v for k, v in final.items() if k != "__interrupt__"},
+        "spend": meter.snapshot(), "thread_id": thread_id,
+        "waiting_on_you": payloads,
+        # A paused run is not a finished one, and must never read as though it were.
+        "status": "waiting_on_you" if payloads else final.get("status", "completed"),
+    }
+
+
+async def resume_investigation(ws: str, thread_id: str, decision: str, *,
+                               approval_id: str | None = None,
+                               period: str | None = None, cap_cents: int | None = None,
+                               client=None) -> dict:
+    """Continue a run that stopped for a person, with what they decided.
+
+    `approval_id` names *which* question is being answered. Several agents can pause in
+    one run, and resuming them all with one answer would record a decision on questions
+    nobody was shown — so the answer is addressed to a single interrupt by id. Omitting
+    it is only safe when exactly one question is outstanding, and this refuses to guess
+    when more than one is.
+
+    The meter starts fresh: the earlier spend is already recorded against the decisions
+    it paid for, and carrying a spent meter into a resume would refuse work not yet done.
+    """
+    config_row = ingestion.workspace_config(ws)
+    period = period or str(config_row.get("start", ""))[:7]
+    meter = Meter(run_cap_cents=min(cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
+    config = {"configurable": {"thread_id": f"{ws}:{period}:{thread_id}",
+                               "meter": meter, "client": client},
+              "recursion_limit": 50}
+
+    async with _saver() as saver:
+        graph = build_graph(saver)
+        outstanding = await _outstanding(graph, config)
+        if not outstanding:
+            raise KeyError(f"No paused run with thread {thread_id!r}.")
+        target = _addressed(outstanding, approval_id)
+        final = await graph.ainvoke(
+            Command(resume={target: {"decision": decision}}), config=config)
+    return _outcome(final, meter, thread_id)
+
+
+async def _outstanding(graph, config) -> dict[str, str]:
+    """Interrupt id -> the approval it is asking about, for this thread."""
+    snapshot = await graph.aget_state(config)
+    found = {}
+    for task in snapshot.tasks:
+        for item in getattr(task, "interrupts", ()) or ():
+            value = getattr(item, "value", {}) or {}
+            found[getattr(item, "id", "")] = value.get("approval_id", "")
+    return found
+
+
+def _addressed(outstanding: dict[str, str], approval_id: str | None) -> str:
+    if approval_id:
+        for interrupt_id, proposal in outstanding.items():
+            if proposal == approval_id:
+                return interrupt_id
+        raise KeyError(f"{approval_id!r} is not waiting on this run.")
+    if len(outstanding) > 1:
+        raise ValueError(
+            "This run is waiting on more than one decision. Name the approval you are "
+            "answering; resuming them all with one answer would record a decision on "
+            "questions nobody was shown.")
+    return next(iter(outstanding))

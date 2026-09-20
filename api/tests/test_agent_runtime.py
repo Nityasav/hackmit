@@ -22,6 +22,7 @@ from app.agents import budget as budget_module
 from app.agents import schemas
 from app.agents.budget import BudgetExceeded, Meter, cost_cents
 from app.agents.registry import AGENTS, ancestry, children
+from app.agents import runtime
 from app.agents.runtime import AgentFailed, escalation_reasons, run_agent
 from app.agents.tools import ScopeError, Toolbox
 from tests.conftest import SAMPLE_FILES, sample
@@ -60,21 +61,41 @@ def invoice_key(ws: str, number: str) -> str:
 
 
 class FakeModel:
-    """A scripted Responses client. Each turn is (tool_calls, final_result)."""
+    """A scripted Responses client. Each turn is (tool_calls, final_result).
 
-    def __init__(self, turns, usage=(1000, 200)):
-        self.turns, self.usage = list(turns), usage
+    `build` lets one script serve several agents: the runtime asks each agent for that
+    agent's own schema, so a fixed `APResult` handed to A2 fails validation and the agent
+    retries until its budget is gone. A callable receives the requested schema and
+    returns something valid for it.
+    """
+
+    def __init__(self, turns, usage=(1000, 200), build=None):
+        self.turns, self.usage, self.build = list(turns), usage, build
         self.calls = 0
+        #: Turns consumed per conversation. One client serves every agent in a graph
+        #: run, and a single global counter meant the first agent ate the whole script
+        #: and the rest got its leftovers — concluding without reading, so their
+        #: citations were refused. Each conversation gets the script from the start.
+        self._per_conversation: dict[str, int] = {}
         self.seen_tools: list[str] = []
         self.responses = self
 
     async def parse(self, **kwargs):
         self.calls += 1
-        tool_calls, final = self.turns[min(self.calls - 1, len(self.turns) - 1)]
+        system = kwargs["input"][0].get("content", "") if kwargs.get("input") else ""
+        turn = self._per_conversation.get(system, 0)
+        self._per_conversation[system] = turn + 1
+        tool_calls, final = self.turns[min(turn, len(self.turns) - 1)]
+        # A turn may be a callable when the call it should make depends on which agent
+        # is asking — each one may read a different set of roles.
+        if callable(tool_calls):
+            tool_calls = tool_calls(kwargs)
         output = [SimpleNamespace(type="function_call", name=name,
                                   arguments=json.dumps(args), call_id=f"c{i}")
                   for i, (name, args) in enumerate(tool_calls)]
         self.seen_tools += [name for name, _ in tool_calls]
+        if not output and self.build is not None:
+            final = self.build(kwargs.get("text_format"), kwargs)
         return SimpleNamespace(
             output=output, output_parsed=None if output else final,
             usage=SimpleNamespace(input_tokens=self.usage[0], output_tokens=self.usage[1]))
@@ -268,6 +289,21 @@ def test_a_narrowed_box_cannot_reach_records_outside_the_delegation(ws):
         box.three_way_match(invoice_key(ws, "INV-200"))
 
 
+def test_citing_a_source_the_agent_was_shown_is_allowed(ws):
+    """The guard catches invention. It must not refuse evidence the agent was handed.
+
+    `read_records` puts a source id in front of the agent for every row it returns, so
+    citing one is citing what it saw. Recording only the record key made a live A1 run
+    fail with "cited a source it did not read" on a citation that was entirely correct.
+    """
+    box = _toolbox(ws)
+    shown = box.read_records("vendor_invoices")["records"][0]
+
+    box.validate_citations([schemas.Citation(
+        role="vendor_invoices", record_key=shown["record_key"],
+        source_id=shown["source_id"])])
+
+
 def test_citing_a_record_the_agent_never_read_is_refused(ws):
     box = _toolbox(ws)
     fabricated = [schemas.Citation(role="vendor_invoices", record_key="VI-999")]
@@ -456,3 +492,76 @@ def test_escalation_reads_thresholds_from_the_spec_not_the_model():
     assert escalation_reasons(spec, result, 100, 1_000) == ()
     assert escalation_reasons(spec, result, 84, 1_000)  # below the confidence threshold
     assert escalation_reasons(spec, result, 100, 500_000)  # at the amount that always escalates
+
+
+def test_an_agent_that_can_score_and_did_not_does_not_pass_as_confident():
+    """The hole this closes: a threshold is only consulted when a score exists, so the
+    cheapest way past one was to skip the calculation it is measured against."""
+    spec = AGENTS["A1"]
+    result = ap_result(citations=[schemas.Citation(role="vendor_invoices", record_key="k")])
+
+    reasons = escalation_reasons(spec, result, None, None)
+
+    assert reasons
+    assert any("without running the calculation" in reason for reason in reasons)
+
+
+def test_an_agent_with_nothing_to_score_is_not_punished_for_not_scoring():
+    """B3 computes statements, which either tie or do not. There is no rubric to run,
+    and demanding one would escalate every reporting task for no reason."""
+    spec = AGENTS["B3"]
+    assert not set(spec.tools) & runtime.SCORING_TOOLS
+
+    result = schemas.AgentResult(
+        summary="The statements tie to the ledger.", disposition="clear",
+        rationale="Every check the engine performs holds.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="No action proposed.", memory_checks=[])
+
+    assert escalation_reasons(spec, result, None, None) == ()
+
+
+def test_work_that_cannot_be_scored_against_an_outcome_always_reaches_a_person():
+    """C4 projects a period that has not happened, so there is nothing to score it
+    against. Said outright rather than by a threshold no score would ever meet."""
+    spec = AGENTS["C4"]
+    assert spec.escalate_when.always
+
+    result = schemas.AgentResult(
+        summary="Three periods projected under the assumptions supplied.",
+        disposition="clear",
+        rationale="The projection follows from the assumptions given.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="Weigh the projection against your own view.", memory_checks=[])
+
+    reasons = escalation_reasons(spec, result, 100, None)
+
+    assert reasons
+    assert any("cannot be scored against an outcome" in reason for reason in reasons)
+
+
+def test_a_condition_the_engine_found_escalates_even_when_the_agent_omits_it():
+    """An escalation rule that reads only the model's own exception list is decorative."""
+    spec = AGENTS["C3"]
+    assert "unexplained_residual" in spec.escalate_when.on
+
+    result = schemas.AgentResult(
+        summary="The variance is explained by the drivers listed.", disposition="clear",
+        rationale="Each driver names the transactions behind it.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="No action proposed.", memory_checks=[])
+    assert result.exceptions == []
+
+    engine = runtime.engine_exceptions(
+        {"variance:6100": {"confidence": 96, "amount_cents": 100, "unexplained_cents": 4_000}})
+
+    assert engine == frozenset({"unexplained_residual"})
+    assert any("unexplained_residual" in reason
+               for reason in escalation_reasons(spec, result, 96, 100, engine))
+
+
+def test_a_fully_attributed_variance_raises_no_engine_condition():
+    """A check whose exception fires on a clean baseline teaches people to skim past it."""
+    assert runtime.engine_exceptions(
+        {"variance:6100": {"confidence": 100, "amount_cents": 100,
+                           "unexplained_cents": 0}}) == frozenset()

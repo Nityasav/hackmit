@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 
-from . import approvals as approvals_module, db, events
+from . import approvals as approvals_module, db, events, roles
 from .agents.registry import AGENTS
 from .ingestion import coverage, source_view
 from .models import Bundle
@@ -59,7 +59,13 @@ def _previews(ws: str, source_ids: set[str]) -> dict[str, str]:
 def _evidence_nodes(decision: dict, previews: dict[str, str]) -> list[dict]:
     nodes = []
     for citation in json.loads(decision["evidence"] or "[]"):
-        label = citation.get("record_key") or citation.get("source_id") or "evidence"
+        # Computed, not read off the citation: an agent's `Citation` carries the exact
+        # stored key, because that is what the guard validates against. The readable
+        # form is derived here so a purchase-order line never reaches a screen as
+        # `PO-70011`, which is a document number that does not exist.
+        key = citation.get("record_key") or ""
+        label = (roles.readable_key(citation.get("role", ""), key) if key
+                 else citation.get("source_id") or "evidence")
         locator = citation.get("source_id", "")
         if citation.get("line"):
             locator = f"{locator} line {citation['line']}"

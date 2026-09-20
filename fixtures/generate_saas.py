@@ -137,7 +137,8 @@ class Books:
     def add(self, role: str, row: dict) -> None:
         self.rows[role].append(row)
 
-    def post(self, when: date, event_ref: str, memo: str, lines: list[tuple[str, int, int]]) -> str:
+    def post(self, when: date, event_ref: str, memo: str, lines: list[tuple[str, int, int]],
+             posted_at: date | None = None) -> str:
         """Write one balanced journal entry. Refuses to emit an unbalanced one.
 
         `lines` are (account, debit_cents, credit_cents). The balance check happens
@@ -155,6 +156,9 @@ class Books:
             self.add("ledger", {
                 "entry_id": entry_id, "line_id": str(index), "date": when.isoformat(),
                 "account": account, "debit": money(debit), "credit": money(credit),
+                # When the entry was written, as against the date it carries. Normally
+                # the same day; a post-close entry is where they differ across a lock.
+                "posted_at": (posted_at or when).isoformat(),
                 "memo": memo, "event_ref": event_ref,
             })
         return entry_id
@@ -243,10 +247,13 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
     becomes the opening payables balance.
     """
     carried_in = 0
-    for _ in range(40):
+    # 26 billed inside the period, 14 carried in, for the same reason as sales: the
+    # first set is the month's cost, the second is opening payables to pay down.
+    for index in range(40):
+        in_period = index < 26
         vendor = rng.choice(vendors)
-        # Roughly a third of the population is carried in from before the period.
-        ordered = business_day(start + timedelta(days=rng.randrange(-45, 12)))
+        ordered = business_day(start + timedelta(
+            days=rng.randrange(0, 12) if in_period else rng.randrange(-45, -12)))
         received = business_day(ordered + timedelta(days=rng.randrange(1, 8)))
         billed = business_day(received + timedelta(days=rng.randrange(0, 5)))
         amount = rng.randrange(45_000, 2_400_000, 100)
@@ -255,12 +262,18 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
         ref = f"EVT-{period}-P{n:04d}"
         po_id, receipt_id = f"PO-{7000 + n}", f"GR-{8000 + n}"
         invoice_id, invoice_number = f"VI-{9000 + n}", f"INV-{20000 + n}"
-        approver = f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}"
+        # The person who raises the order and the person who approves paying it must
+        # be different, or the segregation-of-duties control fires on every invoice and
+        # a real breach becomes indistinguishable from the baseline. Phase 4 plants the
+        # exceptions; the clean period must not come with one built in.
+        requester = f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}"
+        approver = f"{GIVEN[(n + 7) % len(GIVEN)]} {FAMILY[(n + 5) % len(FAMILY)]}"
+        assert requester != approver
 
         books.add("purchase_orders", {
             "po_id": po_id, "line_id": "1", "vendor_id": vendor["vendor_id"],
             "description": vendor["memo"], "order_date": ordered.isoformat(),
-            "amount": money(amount), "approver": approver, "event_ref": ref})
+            "amount": money(amount), "approver": requester, "event_ref": ref})
         books.add("goods_receipts", {
             "receipt_id": receipt_id, "line_id": "1", "po_id": po_id, "po_line_id": "1",
             "received_date": received.isoformat(), "amount": money(amount), "event_ref": ref})
@@ -300,6 +313,34 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
                 "bank_reference": reference, "event_ref": ref})
             artifacts["payments"] = [payment_id]
         books.record_event(ref, "purchase", f"{vendor['name']} — {vendor['memo']}", billed, period, artifacts)
+
+    # Deliveries late in the month whose invoice has not arrived yet. Entirely ordinary
+    # at a period end, and the reason accruals exist: the cost belongs to this period
+    # and no bill names it. Nothing is posted for them, which is what leaves the month
+    # understated until someone accrues it.
+    for _ in range(4):
+        vendor = rng.choice(vendors)
+        ordered = business_day(end - timedelta(days=rng.randrange(9, 16)))
+        received = business_day(ordered + timedelta(days=rng.randrange(1, 5)))
+        amount = rng.randrange(180_000, 900_000, 100)
+        counter["n"] += 1
+        n = counter["n"]
+        ref = f"EVT-{period}-U{n:04d}"
+        po_id, receipt_id = f"PO-{7000 + n}", f"GR-{8000 + n}"
+        books.add("purchase_orders", {
+            "po_id": po_id, "line_id": "1", "vendor_id": vendor["vendor_id"],
+            "description": vendor["memo"], "order_date": ordered.isoformat(),
+            "amount": money(amount),
+            "approver": f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}",
+            "event_ref": ref})
+        books.add("goods_receipts", {
+            "receipt_id": receipt_id, "line_id": "1", "po_id": po_id, "po_line_id": "1",
+            "received_date": received.isoformat(), "amount": money(amount),
+            "event_ref": ref})
+        books.record_event(ref, "purchase", f"{vendor['name']} — delivered, not yet billed",
+                           received, period,
+                           {"purchase_orders": [po_id], "goods_receipts": [receipt_id]})
+
     return carried_in
 
 
@@ -312,10 +353,14 @@ def sales_cycle(books, rng, period, start, end, customers, counter) -> int:
     reconciliation would have no credits to match. Returns carried-in receivables.
     """
     carried_in = 0
-    for _ in range(30):
+    # 22 billed inside the period, 14 carried in. The first set is the month's services
+    # revenue; the second is opening receivables with something to collect against.
+    for index in range(36):
+        in_period = index < 22
         customer = rng.choice(customers)
-        issued = business_day(start + timedelta(days=rng.randrange(-60, 20)))
-        amount = rng.randrange(120_000, 4_800_000, 100)
+        issued = business_day(start + timedelta(
+            days=rng.randrange(0, 20) if in_period else rng.randrange(-60, -5)))
+        amount = rng.randrange(400_000, 3_200_000, 100)
         tax = amount * 725 // 10_000 if customer["country"] == "US" else 0
         counter["n"] += 1
         n = counter["n"]
@@ -369,7 +414,7 @@ def processor_cycle(books, rng, period, start, end, counter):
         n = counter["n"]
         ref = f"EVT-{period}-X{n:04d}"
         paid_out = business_day(start + timedelta(days=14 * index + 12))
-        gross = rng.randrange(1_800_000, 4_200_000, 100)
+        gross = rng.randrange(28_000_000, 44_000_000, 100)
         fees = gross * rng.randrange(210, 310) // 10_000
         refunds = rng.randrange(0, gross // 40, 100)
         chargebacks = rng.randrange(0, gross // 200, 100)
@@ -417,7 +462,9 @@ def payroll_cycle(books, rng, period, start, end, employees, counter):
             "pay_date": pay_date.isoformat(), "gross": money(gross),
             "deductions": money(deductions), "net": money(gross - deductions),
             "employer_cost": money(employer), "department": employee["department"],
-            "event_ref": ref})
+            # One pay run, one bank debit: every line of the register shares the batch
+            # reference, and the bank sees their net total.
+            "bank_reference": f"PAYRUN-{period}", "event_ref": ref})
     net = total_gross - total_deductions
     books.post(pay_date, ref, "Payroll", [
         (SALARIES, total_gross, 0), (EMPLOYER_COST, total_employer, 0),
@@ -449,7 +496,10 @@ def expense_cycle(books, rng, period, start, end, employees, counter):
             "record_id": record_id, "employee_id": employee["employee_id"],
             "expense_date": spent.isoformat(), "category": category, "amount": money(amount),
             "merchant": f"{rng.choice(VENDOR_STEMS)} {rng.choice(VENDOR_SUFFIXES)}",
-            "department": employee["department"], "event_ref": ref})
+            "department": employee["department"],
+            # The card reference the statement will show. Without it the expense cannot
+            # be traced to its bank line, and the line reports as unexplained.
+            "bank_reference": record_id, "event_ref": ref})
         books.post(spent, ref, f"Expense {record_id}", [(account, amount, 0), (CASH, 0, amount)])
         books.add("bank_transactions", {
             "bank_id": f"BK-{640000 + n}", "bank_account": "Operating",
@@ -514,6 +564,196 @@ def documents(out: Path) -> None:
         "Subscription fees are earned rateably across the service month. A milestone fee\n"
         "is earned on acceptance, which is the date recorded on the delivery note.\n",
         encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Controlled defects
+# --------------------------------------------------------------------------- #
+#
+# Each defect ships with a **benign lookalike**: something that resembles it closely and
+# must not be reported. Recall alone is easy — a check that flags everything catches
+# every defect — so the lookalikes are what make the measurement mean anything.
+#
+# Nothing here encodes its own answer. No filename, id, memo or description says
+# "defect", because a detector that can read the label is not being tested. The truth
+# file is written separately and lives outside anything the application can reach.
+
+
+def plant_defects(books: Books, rng, period, start, end, vendors, customers, employees, counter):
+    """Inject controlled defects and their lookalikes. Returns truth records.
+
+    Called after the clean period is built, so every defect is a modification of
+    something that already balanced. The journals stay balanced: a defect is a control
+    or matching failure, not a broken ledger, and an unbalanced one would be caught by
+    intake before any agent saw it.
+    """
+    truth: list[dict] = []
+
+    def approve(invoice, actor):
+        """Give a planted invoice the approval a real one would carry."""
+        counter["n"] += 1
+        books.add("approvals", {
+            "record_id": f"AP-P{counter['n']:05d}", "actor": actor,
+            "authority": "Delegated authority", "action": "approve_invoice",
+            "target_type": "vendor_invoice", "target_id": invoice["record_id"],
+            "approved_at": invoice["invoice_date"], "event_ref": invoice["event_ref"]})
+
+    def planted(issue_id, family, expectation, record_keys, note):
+        truth.append({"issue_id": issue_id, "family": family, "period": period,
+                      "expected": expectation, "record_keys": record_keys, "note": note})
+
+    def lookalike(issue_id, family, record_keys, note):
+        truth.append({"issue_id": issue_id, "family": family, "period": period,
+                      "expected": "clear", "record_keys": record_keys, "note": note})
+
+    orders = books.rows["purchase_orders"]
+    approvals = books.rows["approvals"]
+    # Only bills dated inside the period can carry a defect: a carried-in bill's expense
+    # belongs to the prior period, so a journal copying it would fall outside this one
+    # and intake would refuse the whole import before any control test ran.
+    invoices = [i for i in books.rows["vendor_invoices"]
+                if i["invoice_date"] >= start.isoformat()]
+    assert len(invoices) >= 12, "not enough in-period bills to plant against"
+
+    # --- 1. Duplicate invoice, under an altered number ---------------------
+    # The same obligation billed twice. The number differs by one character, so an
+    # exact-key test on vendor+number+amount will NOT see it: that is the point. The
+    # exact-key duplicate below is what the current test does catch.
+    original = invoices[3]
+    counter["n"] += 1
+    twin = dict(original)
+    twin["record_id"] = f"VI-D{counter['n']}"
+    twin["invoice_number"] = original["invoice_number"] + "-A"
+    twin["event_ref"] = original["event_ref"]
+    books.add("vendor_invoices", twin)
+    approve(twin, "Pia Moreau")
+    books.post(date.fromisoformat(original["invoice_date"]), original["event_ref"],
+               f"Vendor bill {twin['invoice_number']}",
+               [("6100", cents(original["amount"]), 0), (AP, 0, cents(original["amount"]))])
+    planted("dup-invoice-altered-number", "duplicate_invoice", "attention",
+            [twin["record_id"], original["record_id"]],
+            "Same vendor, date and amount under a number one character apart. An "
+            "exact-key test does not see this; it needs fuzzy matching on number.")
+
+    # An exact-key duplicate, which the current test does catch.
+    counter["n"] += 1
+    exact = dict(original)
+    exact["record_id"] = f"VI-D{counter['n']}"
+    books.add("vendor_invoices", exact)
+    approve(exact, "Rae Nakamura")
+    books.post(date.fromisoformat(original["invoice_date"]), original["event_ref"],
+               f"Vendor bill {exact['invoice_number']} (second copy)",
+               [("6100", cents(original["amount"]), 0), (AP, 0, cents(original["amount"]))])
+    planted("dup-invoice-exact", "duplicate_invoice", "attention",
+            [exact["record_id"], original["record_id"]],
+            "Identical vendor, invoice number, amount and currency on two records.")
+
+    # Lookalike: same vendor, same amount, different number and a separate delivery.
+    # Two real deliveries of the same thing are not a duplicate.
+    counter["n"] += 1
+    separate = dict(invoices[5])
+    separate["record_id"] = f"VI-L{counter['n']}"
+    separate["invoice_number"] = f"INV-9{counter['n']:04d}"
+    separate["amount"] = invoices[5]["amount"]
+    separate["invoice_date"] = (date.fromisoformat(invoices[5]["invoice_date"])
+                                + timedelta(days=9)).isoformat()
+    separate["due_date"] = (date.fromisoformat(separate["invoice_date"])
+                            + timedelta(days=30)).isoformat()
+    books.add("vendor_invoices", separate)
+    approve(separate, "Tove Okafor")
+    books.post(date.fromisoformat(separate["invoice_date"]), separate["event_ref"],
+               f"Vendor bill {separate['invoice_number']}",
+               [("6100", cents(separate["amount"]), 0), (AP, 0, cents(separate["amount"]))])
+    lookalike("dup-invoice-lookalike", "duplicate_invoice", [separate["record_id"]],
+              "Same vendor and amount, different number and date: a second delivery, "
+              "not a repeat of the first.")
+
+    # --- 2. Self-approval, and a properly delegated one --------------------
+    target = invoices[7]
+    order = next((o for o in orders if o["po_id"] == target.get("po_id")), None)
+    if order:
+        for approval in approvals:
+            if approval["target_id"] == target["record_id"]:
+                approval["actor"] = order["approver"]
+                planted("self-approval", "segregation_of_duties", "attention",
+                        [target["record_id"]],
+                        "The person who raised the order also approved paying the "
+                        "invoice, with no delegation recorded.")
+                break
+
+    # Lookalike: the same overlap, but with the delegation that authorizes it.
+    delegated_target = invoices[9]
+    delegated_order = next((o for o in orders if o["po_id"] == delegated_target.get("po_id")), None)
+    if delegated_order:
+        for approval in approvals:
+            if approval["target_id"] == delegated_target["record_id"]:
+                approval["actor"] = delegated_order["approver"]
+                approval["delegation"] = "Board delegation 2026-04, finance director absent"
+                lookalike("self-approval-delegated", "segregation_of_duties",
+                          [delegated_target["record_id"]],
+                          "Requester and approver are the same person, and a recorded "
+                          "delegation authorizes it.")
+                break
+
+    # --- 3. Duplicate vendor ------------------------------------------------
+    source_vendor = vendors[2]
+    counter["n"] += 1
+    twin_vendor = {
+        "vendor_id": f"V-D{counter['n']}",
+        # Same counterparty, written the way a second system would spell it.
+        "name": source_vendor["name"].replace(" Systems", " Systems, Inc."),
+        "country": source_vendor["country"],
+        "payment_terms_days": source_vendor["payment_terms_days"],
+    }
+    books.add("vendors", twin_vendor)
+    planted("duplicate-vendor", "duplicate_vendor", "attention",
+            [twin_vendor["vendor_id"], source_vendor["vendor_id"]],
+            "One counterparty under two ids, differing only by a legal suffix.")
+
+    # Lookalike: two genuinely different companies with similar names.
+    counter["n"] += 1
+    books.add("vendors", {
+        "vendor_id": f"V-L{counter['n']}", "name": "Northlight Partners",
+        "country": "US", "payment_terms_days": "30"})
+    lookalike("duplicate-vendor-lookalike", "duplicate_vendor", [f"V-L{counter['n']}"],
+              "Shares a first word with another vendor and is a different company.")
+
+    # --- 4. Entry written after the period was locked -----------------------
+    # Dated the 28th, written twelve days after the close. Nothing about the date is
+    # unusual; the posting timestamp is the whole finding.
+    counter["n"] += 1
+    late_ref = f"EVT-{period}-Z{counter['n']:04d}"
+    entry_id = books.post(end - timedelta(days=2), late_ref, "Accrual adjustment",
+                          [("6400", 450_000, 0), ("2100", 0, 450_000)],
+                          posted_at=end + timedelta(days=12))
+    # A ledger record is keyed on (entry_id, line_id), so the truth has to name the
+    # lines rather than the journal, or scoring finds no overlap and reads as a miss.
+    planted("post-close-entry", "post_close", "attention",
+            [f"{entry_id}1", f"{entry_id}2"],
+            "Dated inside the period and written after the lock on it.")
+
+    # --- 5. Round-number payment -------------------------------------------
+    counter["n"] += 1
+    round_ref = f"EVT-{period}-Z{counter['n']:04d}"
+    round_amount = 2_500_000
+    vendor = vendors[11]
+    books.add("payments", {
+        "payment_id": f"PMT-R{counter['n']}", "vendor_id": vendor["vendor_id"],
+        "payment_date": business_day(start + timedelta(days=18)).isoformat(),
+        "method": "wire", "amount": money(round_amount),
+        "reference": f"WIRE-R{counter['n']}", "event_ref": round_ref})
+    books.post(business_day(start + timedelta(days=18)), round_ref, "Round payment",
+               [(AP, round_amount, 0), (CASH, 0, round_amount)])
+    books.add("bank_transactions", {
+        "bank_id": f"BK-R{counter['n']}", "bank_account": "Operating",
+        "settlement_date": business_day(start + timedelta(days=18)).isoformat(),
+        "direction": "out", "amount": money(round_amount),
+        "description": "WIRE DEBIT", "bank_reference": f"WIRE-R{counter['n']}",
+        "event_ref": round_ref})
+    planted("round-payment", "round_number", "attention", [f"PMT-R{counter['n']}"],
+            "An exactly round wire at a size where that is unusual. Weak on its own.")
+
+    return truth
 
 
 # --------------------------------------------------------------------------- #
@@ -588,7 +828,8 @@ def check(period_dir: Path) -> list[str]:
     return problems
 
 
-def generate_period(books: Books, rng, period, vendors, customers, employees, counter, cash: int) -> None:
+def generate_period(books: Books, rng, period, vendors, customers, employees, counter,
+                    cash: int, defects: bool = False) -> list[dict]:
     start, end = month_bounds(period)
     # Activity first: the opening balances are whatever the period carried in, so they
     # cannot be written until the carried-in population is known.
@@ -606,6 +847,10 @@ def generate_period(books: Books, rng, period, vendors, customers, employees, co
     books.add("period_locks", {"record_id": f"LK-{period}", "period": period,
                                "locked_at": (end + timedelta(days=5)).isoformat(),
                                "locked_by": "finance.director"})
+    # Defects are injected last, into books that already balance, so every one of them
+    # is a control or matching failure rather than a broken ledger.
+    return plant_defects(books, rng, period, start, end, vendors, customers,
+                         employees, counter) if defects else []
 
 
 def main() -> int:
@@ -615,12 +860,11 @@ def main() -> int:
     parser.add_argument("--periods", nargs="+", default=["2026-07", "2026-08", "2026-09"])
     parser.add_argument("--company", default="Halden Cloud Inc.", help="Fictional. Used in the tax registration only.")
     parser.add_argument("--defects", action="store_true",
-                        help="Plant controlled defects. Phase 4; plants nothing today.")
+                        help="Plant controlled defects and their benign lookalikes. The "
+                             "truth file records which is which; the records themselves "
+                             "never say.")
     parser.add_argument("--check", action="store_true", default=True)
     args = parser.parse_args()
-
-    if args.defects:
-        print("note: --defects is a phase-4 hook and plants nothing yet; output is clean.")
 
     rng = random.Random(args.seed)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -643,8 +887,9 @@ def main() -> int:
             "record_id": "TR-001", "jurisdiction": "US-CA", "tax_type": "sales_tax",
             "rate_basis_points": "725", "registered_from": opened_on.isoformat(),
             "memo": args.company})
-        generate_period(books, rng, period, vendors, customers, employees, counter,
-                        cash=rng.randrange(40_000_000, 90_000_000, 100))
+        planted = generate_period(books, rng, period, vendors, customers, employees,
+                                  counter, cash=rng.randrange(40_000_000, 90_000_000, 100),
+                                  defects=args.defects)
 
         period_dir = args.out / period
         period_dir.mkdir(exist_ok=True)
@@ -652,14 +897,18 @@ def main() -> int:
             write_csv(period_dir / f"{role}.csv", rows)
         documents(period_dir)
         (truth_dir / f"{period}.json").write_text(
-            json.dumps({"period": period, "seed": args.seed, "events": books.truth}, indent=2),
-            encoding="utf-8")
+            json.dumps({"period": period, "seed": args.seed, "events": books.truth,
+                        "planted": planted}, indent=2), encoding="utf-8")
 
         found = check(period_dir) if args.check else []
         problems += [f"{period}: {p}" for p in found]
         total = sum(len(rows) for rows in books.rows.values())
+        note = ""
+        if planted:
+            defects = sum(1 for t in planted if t["expected"] != "clear")
+            note = f"  [{defects} defect(s), {len(planted) - defects} lookalike(s)]"
         print(f"{period}: {total:>5} rows across {len(books.rows)} files -> {period_dir}"
-              + ("" if not found else f"  [{len(found)} PROBLEM(S)]"))
+              + note + ("" if not found else f"  [{len(found)} PROBLEM(S)]"))
 
     print(f"\ntruth written to {truth_dir} — keep this out of the API data directory")
     if problems:

@@ -14,6 +14,9 @@ __pycache__/
 
 # local data
 api/data/
+# Generated record packs. These are outputs of fixtures/generate_saas.py, not source,
+# and the truth file beside them is an answer key that must never reach the app.
+generated/
 *.db
 *.sqlite3
 

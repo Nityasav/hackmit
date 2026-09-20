@@ -335,3 +335,124 @@ export interface AgentRunResult {
   model_calls: number; tool_calls: number;
   spend: { spent_cents: number; cap_cents: number; remaining_cents: number };
 }
+
+/**
+ * The orchestrator conversation.
+ *
+ * A turn is recorded before its run starts and updated when it ends, so a `running` or
+ * `failed` turn is a real state the screen has to render — not a transient one it can
+ * assume away.
+ */
+export interface ChatTurn {
+  id: string;
+  thread_id: string;
+  role: "person" | "orchestrator";
+  status: "sent" | "running" | "done" | "waiting_on_you" | "failed";
+  created_at: string;
+  body: ChatReply & { text: string; code?: string };
+}
+
+export interface ChatReply {
+  text: string;
+  plan?: string[];
+  routed_to?: string[];
+  findings?: {
+    agent_id: string; agent_name: string; summary: string;
+    /** Computed by the engine. Null when nothing scored ran, which is reported
+     *  rather than defaulted to a number nobody derived. */
+    confidence: number | null;
+    escalated: boolean; decision_id?: string;
+  }[];
+  escalations?: Escalation[];
+  /** Absent unless the sentence asked for one. Nothing is produced on its own. */
+  deliverable?: { id: string; kind: string; title: string } | null;
+  unresolved?: string[];
+  status?: string;
+  spend?: { spent_cents: number; cap_cents: number; remaining_cents: number };
+  note?: string;
+}
+
+/** One question a run stopped on. Answered by id: several agents can pause at once. */
+export interface Escalation {
+  approval_id: string;
+  /** The id to address and the name to show. A bare id renders as "B4" to a reader who
+   *  has no idea what B4 is, so both endpoints that carry an escalation send both. */
+  agent: { id: string; name: string };
+  title?: string;
+  summary?: string;
+  reasons?: string[];
+  confidence?: number | null;
+  decision_id?: string;
+  thread_id?: string;
+  interrupt_id?: string | null;
+}
+
+/** One economic event: the transaction, not any single document of it. */
+export interface TimelineEvent {
+  id: string; kind: string; title: string; occurred_on: string;
+  period: string; status: string; record_count: number;
+}
+
+export interface EventDetail {
+  event: TimelineEvent;
+  roles: string[];
+  records: { role: string; record_key: string; source_id: string; line: number }[];
+  /** `method` separates an exact reference match from a fuzzy or inferred one, which is
+   *  the difference a reviewer most needs to see. */
+  links: { from_type: string; from_id: string; to_type: string; to_id: string;
+           kind: string; method: string; confidence: number }[];
+  decisions: { id: string; agent: string; action: string; summary: string;
+               confidence: number | null; escalated: number; created_at: string }[];
+}
+
+/**
+ * The period on one page. Computed in integer cents by `accounting/`; the renderer
+ * formats and writes nothing, which is what makes a PDF of it defensible.
+ */
+export interface PeriodSnapshot {
+  workspace: { name: string; start: string; end: string; period: string;
+               jurisdiction: string; currency: string };
+  snapshot_id: string | null;
+  prepared_at: string;
+  records: number;
+  result: { revenue_cents: number; expense_cents: number; net_cents: number;
+            expense_by_category_cents: Record<string, number> };
+  position: { assets_cents: number; liabilities_cents: number; equity_cents: number;
+              opening_cash_cents: number; closing_cash_cents: number };
+  /** The identities that decide whether the figures above may be shown at all. */
+  checks: { trial_balance_balances: boolean; balance_sheet_balances: boolean;
+            balance_sheet_difference_cents: number; cash_flow_ties: boolean;
+            reliable: boolean; problems: string[] };
+  close: { ready: boolean; blocked_by: string[]; counts: Record<string, number>;
+           items: { id: string; title: string; state: string; detail: string;
+                    blocking: boolean }[] };
+  controls: { exceptions: { id: string; title: string; amount_cents: number | null;
+                            records: string[]; action: string }[];
+              exception_count: number; passed: string[]; pass_count: number;
+              gap_count: number; omitted: number };
+  variance: { lines: { account: string; name: string; planned_cents: number;
+                       actual_cents: number; variance_cents: number;
+                       favourable: boolean }[];
+              line_count: number; omitted: number;
+              expense_planned_cents: number; expense_actual_cents: number;
+              unplanned: { account: string; name: string }[] };
+  accruals: { count: number; total_cents: number };
+  bank: { bank_lines: number; matched: number; unmatched_bank: number;
+          unmatched_book: number; differing: number } | null;
+  limitations: string[];
+}
+
+/** A document someone asked for, frozen at the moment they asked. */
+export interface DeliverableRow {
+  id: string; kind: string; kind_label: string; title: string;
+  requested_by: string; thread_id: string; snapshot_id: string | null;
+  created_at: string;
+  /** Drawn from records since superseded: historical rather than wrong. */
+  stale: boolean;
+}
+
+export interface Deliverable extends DeliverableRow {
+  /** Frozen at creation, never recomputed on read: a document that changes when you
+   *  reopen it is not a document. */
+  payload: PeriodSnapshot;
+}

@@ -15,6 +15,8 @@ type Register = {
 };
 
 const control = "border border-line bg-white px-3 py-2 text-sm disabled:opacity-40";
+const fieldLayout: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const fieldControl: React.CSSProperties = { boxSizing: "border-box", height: 40, width: "100%", minWidth: 0, border: "1px solid #d4d4d8", padding: "8px 12px", outlineOffset: -2 };
 
 /**
  * Asking the committed records a question.
@@ -98,41 +100,29 @@ export function RecordsBrowser() {
 
   return (
     <section id="source-registers" className="border border-line p-5">
-      <h3 className="text-[15px] font-semibold tracking-tight">Find records, and take a period away</h3>
+      <h3 className="text-[15px] font-semibold tracking-tight">Filter records</h3>
       <p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-        Search the committed records by date — every payout settled on a day, every invoice due in a
-        month. The register always says which date it filtered on, because invoiced, due and paid are
-        different questions and a total from the wrong one looks just as convincing.
+        Search committed records. Choose the date field when a record has more than one.
       </p>
 
-      <div className="my-3 flex flex-wrap items-end gap-3 text-[13px]">
-        <label>Kind of record
-          <AnimatedDropdown
-            className="ml-2"
-            value={role}
-            disabled={busy}
-            placeholder="Choose…"
+      <div className="my-4 grid items-end gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+        <label style={fieldLayout}>Record type
+          <AnimatedDropdown className="w-full" buttonClassName="h-10" value={role} disabled={busy} placeholder="Choose…"
             options={populated.map(r => ({ value: r, label: `${displayLabel(r)} (${counts[r]})` }))}
-            onChange={value => { setRole(value); setField(""); setRegister(null); setError(""); }}
-          />
+            onChange={value => { setRole(value); setField(""); setRegister(null); setError(""); }} />
         </label>
-        <label>From<input type="date" className={control + " ml-2"} value={start} disabled={busy}
+        <label style={fieldLayout}>From<input style={fieldControl} type="date" className={control} value={start} disabled={busy}
           onChange={e => setStart(e.target.value)} /></label>
-        <label>To<input type="date" className={control + " ml-2"} value={end} disabled={busy}
+        <label style={fieldLayout}>To<input style={fieldControl} type="date" className={control} value={end} disabled={busy}
           onChange={e => setEnd(e.target.value)} /></label>
         {(dates[role]?.dates.length || 0) > 1 && (
-          <label>Date to use
-            <AnimatedDropdown
-              className="ml-2"
-              value={field}
-              disabled={busy}
-              placeholder="Choose…"
+          <label style={fieldLayout}>Date field
+            <AnimatedDropdown className="w-full" buttonClassName="h-10" value={field} disabled={busy} placeholder="Choose…"
               options={dates[role].dates.map(d => ({ value: d, label: displayLabel(d) }))}
-              onChange={value => { setField(value); setError(""); }}
-            />
+              onChange={value => { setField(value); setError(""); }} />
           </label>
         )}
-        <button className={control} disabled={busy || !role} onClick={() => void run()}>
+        <button style={fieldControl} className={control} disabled={busy || !role} onClick={() => void run()}>
           {busy ? "Reading…" : "Find records"}
         </button>
         {register && register.count > 0 && (
@@ -206,8 +196,7 @@ export function RecordsBrowser() {
 
       {undatable.length > 0 && (
         <p className="mb-2 text-[12.5px] text-ink-dim">
-          {undatable.map(displayLabel).join(", ")} are not listed: they are reference data and
-          documents rather than transactions, so they carry no date to search by.
+          No searchable date: {undatable.map(displayLabel).join(", ")}.
         </p>
       )}
 

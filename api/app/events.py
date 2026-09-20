@@ -163,9 +163,12 @@ def view(connection, ws: str, event_id: str) -> dict | None:
 
 def timeline(connection, ws: str, limit: int = 100) -> list[dict]:
     """Events in this workspace, newest first, with how much is attached to each."""
+    # `r.ws = e.ws` is not redundant. An event id is unique per workspace, not globally,
+    # so joining on the id alone counts another company's records into this one's totals
+    # the moment two workspaces import a pack that uses the same references.
     rows = connection.execute(
         "SELECT e.*, COUNT(r.id) AS record_count FROM economic_events e"
-        " LEFT JOIN records r ON r.event_id = e.id AND r.active = 1"
+        " LEFT JOIN records r ON r.event_id = e.id AND r.ws = e.ws AND r.active = 1"
         " WHERE e.ws=? GROUP BY e.id ORDER BY e.occurred_on DESC, e.rowid DESC LIMIT ?",
         (ws, min(limit, 500))).fetchall()
     return [dict(row) for row in rows]

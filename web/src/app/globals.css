@@ -231,4 +231,40 @@ input[type="file"]:disabled::file-selector-button {
   body * { visibility: hidden; }
   .print-report, .print-report * { visibility: visible; }
   .print-report { position: absolute; inset: 0 auto auto 0; width: 100%; margin: 0; color: black; background: white; }
+
+  /* The one-page snapshot. Margins come from @page rather than the element, so the
+     printer's own margin and the page's padding do not stack into a narrow column. */
+  @page { size: A4 portrait; margin: 14mm; }
+
+  .snapshot-page, .snapshot-page * { visibility: visible; }
+  .snapshot-page {
+    position: absolute; inset: 0 auto auto 0;
+    width: 100%; max-width: none;
+    margin: 0; padding: 0; border: 0;
+    color: black; background: white;
+    /* Backgrounds and rules are how the page is read, not decoration: without this
+       every browser drops them and the document prints as undifferentiated text. */
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  /* A section split across a page break turns a one-pager into a confusing two-pager. */
+  .snapshot-page section, .snapshot-page tr, .snapshot-page footer { break-inside: avoid; }
+  .snapshot-page table { width: 100%; }
+
+  /* The deck. One slide per sheet, landscape, so a printed page is a slide rather than
+     a fragment of one. `size` here wins over the A4 portrait set above. */
+  .deck, .deck * { visibility: visible; }
+  .deck {
+    position: absolute; inset: 0 auto auto 0;
+    width: 100%; margin: 0; padding: 0;
+    color: black; background: white;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .deck-slide {
+    width: 100%; max-width: none; aspect-ratio: auto;
+    min-height: 0; margin: 0; border: 0;
+    /* Each slide takes a sheet and the last one does not trail an empty page. */
+    break-after: page; break-inside: avoid;
+  }
+  .deck-slide:last-child { break-after: auto; }
+  .print\:hidden { display: none !important; }
 }

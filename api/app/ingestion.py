@@ -49,6 +49,12 @@ class WorkspaceCreate(BaseModel):
     #: Answers to the setting-kind requirements. Captured here when known at creation
     #: and editable afterwards; Books asks for whatever is still blank.
     settings: dict[str, str | int] = Field(default_factory=dict)
+    #: The period before this one for the same company, if there is one. What a person
+    #: decided there can reach this period through `memory.py`, which is the only way a
+    #: correction changes later behaviour. Left blank, this period starts with nothing,
+    #: which is the right default: inheriting a stranger's decisions is worse than
+    #: inheriting none.
+    continues: str = ""
 
     @model_validator(mode="after")
     def valid_scope(self):
@@ -65,6 +71,7 @@ class WorkspaceCreate(BaseModel):
 
 
 class FileOptions(BaseModel):
+    auto_detect: bool = False
     role: Role = "document"
     source_system: str = Field(default="manual", min_length=1, max_length=100)
     source_version: int = Field(default=1, ge=1, le=1_000_000)
@@ -137,6 +144,18 @@ def create_workspace(body: WorkspaceCreate):
     config["profile"] = PROFILE if body.kind == "synthetic" else "PUBLIC_DOCUMENTS_ONLY"
     ws = db.uid("ws")
     with db.connect() as connection:
+        if config.get("continues"):
+            # Refused rather than ignored. A lineage that silently points at nothing
+            # would report "no earlier decisions" in exactly the same words as a first
+            # period, and the person would have no way to tell which they were reading.
+            prior = connection.execute("SELECT config FROM workspaces WHERE id=?",
+                                       (config["continues"],)).fetchone()
+            if prior is None:
+                fail("unknown_prior_period",
+                     "The period this continues does not exist in this installation.", 422)
+            if json.loads(prior["config"]).get("end", "") > config["start"]:
+                fail("overlapping_period",
+                     "A period cannot continue one that ends after it starts.", 422)
         connection.execute("INSERT INTO workspaces(id, config) VALUES (?, ?)", (ws, db.encode(config)))
         db.event(connection, ws, "workspace_created", config)
         return workspace(connection, ws)
@@ -378,6 +397,22 @@ def stage(ws, uploads: list[tuple[str, bytes, FileOptions]]):
         return stage_in_transaction(connection, ws, uploads)
 
 
+def detected_csv_options(name, content, options):
+    if PurePath(name).suffix.lower() != ".csv":
+        return options
+    try:
+        columns = next(csv.reader(io.StringIO(content.decode("utf-8-sig")), strict=True))
+    except (UnicodeError, csv.Error, StopIteration):
+        return options
+    normalized = [re.sub(r"[ -]+", "_", c.strip().lower()) for c in columns]
+    matches = [role for role, fields in FIELDS.items() if set(fields) <= set(normalized)]
+    if len(set(normalized)) != len(columns) or len(matches) != 1:
+        return options
+    role = matches[0]
+    allowed = set(FIELDS[role]) | set(OPTIONAL_FIELDS)
+    return options.model_copy(update={"role": role, "mapping": {k: v for k, v in zip(normalized, columns) if k in allowed}})
+
+
 def stage_in_transaction(connection, ws, uploads):
     if not 1 <= len(uploads) <= MAX_FILES or sum(len(b) for _, b, _ in uploads) > MAX_BATCH:
         fail("batch_limit", f"Upload 1–{MAX_FILES} files with a combined size of at most 50 MB", 413)
@@ -392,6 +427,8 @@ def stage_in_transaction(connection, ws, uploads):
             fail("unsupported_format", "This intake accepts CSV/TXT/Markdown. Use the Document lab for PDF/image extraction.", 415)
         if not content or len(content) > MAX_FILE:
             fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
+        if options.auto_detect and options.role == "document" and config["kind"] != "public":
+            options = detected_csv_options(name, content, options)
         connection.execute(
             "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
             (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),

@@ -68,6 +68,10 @@ class EscalationRule:
     amount_above_cents: int | None = None
     #: Named conditions that always escalate, regardless of confidence.
     on: tuple[str, ...] = ()
+    #: Every conclusion goes to a person, whatever was computed. For work that cannot be
+    #: scored against anything — a projection about a period that has not happened —
+    #: which is a different statement from "scored, and the score was low".
+    always: bool = False
 
 
 @dataclass(frozen=True)
@@ -269,8 +273,10 @@ FPA = (
         model=MODEL_SOL,
         tools=("read_records", "model_scenario"),
         requires=("ledger", "budgets", "forecasts", "headcount"),
-        # Nothing here can be scored against a fixture, so it always says so.
-        escalate_when=EscalationRule(confidence_below=101),
+        # Nothing here can be scored against an outcome, so it always goes to a person.
+        # Stated outright: a threshold of 101 would have looked equivalent and was not,
+        # because a threshold is only consulted when a score exists at all.
+        escalate_when=EscalationRule(always=True),
         budget=Budget(model_calls=4, tool_calls=20, usd_cents=100)),
     AgentSpec(
         id="C5", name="Board Reporting", tier="subagent", parent="C",
@@ -288,7 +294,8 @@ AUDIT = (
         charter="Sample transactions and trace them end to end, from source document to "
                 "ledger and back.",
         model=MODEL_SOL,
-        tools=("read_records", "read_source", "read_event", "select_sample", "reperform"),
+        tools=("read_records", "read_source", "read_event", "select_sample",
+               "trace_transaction", "reperform"),
         requires=("ledger", "vendor_invoices", "purchase_orders", "goods_receipts",
                   "payments", "approvals", "bank_transactions", "materiality_cents",
                   # "trace them end to end, from source document" is the charter;
@@ -303,7 +310,8 @@ AUDIT = (
         model=MODEL_SOL,
         # The tests are deterministic; the model judges the cases the rules cannot settle.
         llm=True,
-        tools=("read_records", "read_source", "run_controls", "check_policy"),
+        tools=("read_records", "read_source", "run_controls", "check_policy",
+               "check_precedents"),
         requires=("vendors", "vendor_invoices", "payments", "expenses", "approvals",
                   "period_locks", "ledger", "policy", "materiality_cents"),
         escalate_when=EscalationRule(confidence_below=90, on=("control_failure",)),
@@ -430,7 +438,7 @@ _LEAF_TOOLS = frozenset({
     "close_checklist", "propose_journal", "build_statements", "reperform",
     "roll_up", "forecast_series", "decompose_variance", "model_scenario",
     "build_report", "select_sample", "run_controls", "read_decisions",
-    "build_evidence_pack", "read_source",
+    "build_evidence_pack", "read_source", "trace_transaction", "check_precedents",
 })
 
 _check()

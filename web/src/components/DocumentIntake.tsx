@@ -27,6 +27,8 @@ type Scope = "top" | "review" | "combine";
 
 const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
+const uploadField: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const uploadControl: React.CSSProperties = { boxSizing: "border-box", height: 40, minHeight: 40, width: "100%", minWidth: 0, border: "1px solid #d4d4d8", padding: "8px 12px", outlineOffset: -2 };
 
 /**
  * Which agents may read a document of each kind, from the `roles` on their
@@ -119,7 +121,7 @@ function Lab({ ws }: { ws: string }) {
   const [includeRecords, setIncludeRecords] = useState(false);
   const [note, setNote] = useState("");
   const [authorization, setAuthorization] = useState("");
-  const [model, setModel] = useState("");
+  const [selectedModel, setModel] = useState("");
   const [combine, setCombine] = useState<string[]>([]);
   const [reshaped, setReshaped] = useState(false);
   const [scope, setScope] = useState<Scope>("top");
@@ -135,9 +137,7 @@ function Lab({ ws }: { ws: string }) {
   // button reads as a broken feature. With two or more, the choice is real and
   // is left to the person.
   const onlyModel = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
-  useEffect(() => {
-    if (!model && !state?.active && onlyModel.length === 1) setModel(onlyModel[0].id);
-  }, [model, state?.active, onlyModel]);
+  const model = selectedModel || (!state?.active && onlyModel.length === 1 ? onlyModel[0].id : "");
   useEffect(() => { let active = true; intakeApi<{ workspace: { start: string; end: string } }>(`/api/workspaces/${ws}/coverage`).then(c => { if (active) setPeriod(c.workspace); }).catch(() => { /* The sample invoice falls back to today's date; the lab itself does not need the period. */ }); return () => { active = false; }; }, [ws]);
   const doc = state?.documents.find(d => d.id === selected);
   const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
@@ -170,7 +170,7 @@ function Lab({ ws }: { ws: string }) {
   }
 
   /** A confirmation rendered where the action was taken, stated plainly. */
-  function Done({ at }: { at: Scope }) {
+  function renderDone(at: Scope) {
     if (!message || scope !== at) return null;
     return <p role="status" className="mt-2 border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900">
       <b>Done.</b> {message}
@@ -235,28 +235,27 @@ function Lab({ ws }: { ws: string }) {
     {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
     {message && scope === "top" && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
-      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF only, up to 10 MB and 20 pages. The text is read straight out of the file, so a PDF you can select text in will work. A scan or a photo of a document needs character recognition, which is not installed on this server, and will be rejected rather than guessed at.</p>
-        <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
-        {READERS[role] ? <p className="mt-2 text-[12.5px] text-ink-dim">Once you have checked it and staged it, {READERS[role]} can read this as evidence and cite it.</p> : <p className="mt-2 text-[12.5px] text-amber-800">No agent reads this kind yet. It will be preserved, citable by a person, and invisible to every agent — pick the kind that matches what the document actually is.</p>}
-        <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<AnimatedDropdown className="w-full" options={Object.keys(state.schemas).map(r => ({ value: r, label: displayLabel(r) }))} value={role} onChange={setRole} /></label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-            <span>Choose document</span>
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className={`${button} font-semibold`} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
-              {/* The chosen file is not uploaded yet, so this shows its kind before
-                  the server has seen it — read from the name, the only thing known. */}
-              {file && <span className="pr-2"><FileCard formatFile={fileFormat(file.name)} /></span>}
-              <span className="min-w-0 break-all text-xs text-ink-dim" aria-live="polite">{file?.name || "No document selected"}</span>
+      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="mt-2 text-[13px] leading-relaxed text-ink-dim">Text-based PDF · Up to 10 MB and 20 pages. Scans and photos aren’t supported.</p>
+        <p className="mt-1 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
+        {READERS[role] ? <p className="mt-1 text-[12.5px] text-ink-dim">After review and staging: available to {READERS[role]}.</p> : <p className="mt-1 text-[12.5px] text-amber-800">Saved as reference only; no agent uses this document type yet.</p>}
+        <div className="mt-4 grid items-end gap-4 text-[13px] sm:grid-cols-2"><label style={uploadField}>Document type<AnimatedDropdown className="w-full" options={Object.keys(state.schemas).map(r => ({ value: r, label: displayLabel(r) }))} value={role} onChange={setRole} /></label>
+          <div style={uploadField}>
+            <span>PDF file</span>
+            <div className="flex min-w-0 items-center gap-3">
+              <button type="button" className="shrink-0 text-sm font-semibold disabled:opacity-40" style={{ height: 40, background: "#09090b", color: "white", border: "1px solid #09090b", padding: "8px 12px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
+              {/* Not uploaded yet, so the kind is read from the name — the only thing
+                  known about the file before the server has seen it. */}
+              {file && <span className="shrink-0 pr-2"><FileCard formatFile={fileFormat(file.name)} /></span>}
+              <span className="min-w-0 truncate text-xs text-ink-dim" title={file?.name} aria-live="polite">{file?.name || "No document selected"}</span>
             </div>
             <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
           </div>
-          <label>New file or a replacement<AnimatedDropdown className="w-full" placeholder="New document" options={state.documents.filter(d => d.role === role).map(d => ({ value: d.id, label: `Replaces ${d.name} v${d.version}` }))} value={replaces} onChange={setReplaces} /></label>
-          <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
+          <label style={uploadField}>Save as<AnimatedDropdown className="w-full" placeholder="New document" options={state.documents.filter(d => d.role === role).map(d => ({ value: d.id, label: `Replaces ${d.name} v${d.version}` }))} value={replaces} onChange={setReplaces} /></label>
+          <button style={uploadControl} className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         {/* Nothing to scan yet: a fictional supplier invoice, the same purchase
             INV-003 of the full-close starter pack records. */}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[13px]">
           <button className={button} disabled={busy} onClick={() => { setFile(sampleInvoicePdf(sampleDate)); setError(""); setMessage("Sample invoice ready. Choose its kind of document, then upload and read it."); }}>Use a sample invoice (PDF)</button>
-          {file && <span className="text-ink-dim">Chosen: {file.name}</span>}
         </div>
         {/* The card face is drawn from the extension and carries no information
             the text below it does not also say, so it is aria-hidden and the
@@ -297,7 +296,7 @@ function Lab({ ws }: { ws: string }) {
             "One import now holds every row from the documents you selected, plus each document\u2019s own evidence file. It is waiting under \u201cAdd records\u201d at the top of this page. Review it there and commit it; until you do, none of this is in the books.", "combine")}>
           {combine.length < 2 ? "Select at least two" : `Combine ${combine.length} into one import`}
         </button>
-        <Done at="combine" />
+        {renderDone("combine")}
       </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
         {!state.model.length && <p className="my-2 max-w-prose text-[12.5px] text-amber-800">
@@ -333,7 +332,7 @@ function Lab({ ws }: { ws: string }) {
             {uncited.join("; ")}. Either set the page and character positions, or change the status
             to ambiguous or unreadable — a value nobody can point at on the page is not evidence.
           </p>}
-        <Done at="review" />
+        {renderDone("review")}
         {error && errorScope === "review" && <p role="alert" className="mt-2 border border-red-300 bg-red-50 p-2 text-[12.5px] text-red-800">{error}</p>}
         {(!group.trim() || !note.trim() || !authorization.trim()) &&
           <p className="mt-2 text-[12.5px] text-amber-800">Before you can accept: fill in{" "}

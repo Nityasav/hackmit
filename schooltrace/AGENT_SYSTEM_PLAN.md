@@ -4,7 +4,10 @@ Companion to the canonical agent spec (one orchestrator, four worker agents, sev
 subagents). That document says *what the agents are*. This one says *how they are built,
 what data they run on, what they cost, and in what order the work lands*.
 
-Status: plan agreed 2026-09-20. Phase 1 in progress on `feat/agentic-cfo-rework`.
+Status: all eight phases landed on `feat/agentic-cfo-rework` (2026-09-20). Every
+worker is wired, the conversation drives the orchestrator, and each phase's gate has
+a test named after it. What is left is listed under **Still open** below rather than
+as a ninth phase, because none of it is a stage the others depend on.
 
 ## 1. Decisions taken
 
@@ -262,7 +265,24 @@ A declined precedent is a correct outcome and is displayed as prominently as an 
 | 7 | D1, D3, D4, cross-period memory | A correction changes the next period's behaviour, with a recorded check |
 | 8 | Chat UX, event timeline, escalation queue | Full flow end to end |
 
-Phases 1–3 are the spine. If time runs short, cut from 6 and 7 upward.
+All eight are done. Each gate is a test file named for it: `test_statements.py`,
+`test_variance.py`, `test_memory.py`, `test_chat.py`.
+
+## 8a. Still open
+
+Not a phase. None of these blocks anything else, and calling them one would suggest the
+work is unfinished in a way it is not.
+
+- **The preparer/reviewer edge is declared but not a graph edge.** `reviewer` on a spec is
+  enforced by the registry's self-check and recorded on a decision, but D2 does not yet
+  run automatically after A1. Today a review happens because someone asks for one.
+- **C4 and D4 have tools and no fixture that can score them.** A projection cannot be
+  checked against an outcome, which is why C4 escalates unconditionally; D4's filing
+  packages need a jurisdiction's actual forms to mean anything.
+- **Spend is capped per run and per day, not per month.** The day cap is the real
+  protection and it resets.
+- **One workspace is one period.** Lineage links them, and nothing consolidates across
+  them. A group structure is a different data model, not a feature.
 
 ## 9. Risks
 

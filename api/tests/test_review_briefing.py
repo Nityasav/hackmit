@@ -42,7 +42,14 @@ def test_the_review_reports_the_agent_tally_in_the_current_shape(client):
 
     live = client.get(f"/api/workspaces/{ws}/review").json()["live"]
 
-    assert live == {"decisions": 1, "escalated": 1, "spend_cents": 1234}
+    assert live["decisions"] == 1
+    assert live["escalated"] == 1
+    assert live["spend_cents"] == 1234
+    # Asserted field by field rather than as an exact dict. The point of this test is
+    # that the retired shape is gone, and exact equality also forbids the payload ever
+    # gaining a field — which it since has, and that is not a regression.
+    assert live["reviewed"] == 0
+    assert live["agents"]
     # The keys the old coordinator carried are gone, and nothing may read them.
     assert not {"status", "briefing", "unresolved", "tasks"} & set(live)
 

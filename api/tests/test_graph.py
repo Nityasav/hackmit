@@ -16,7 +16,7 @@ import asyncio
 import pytest
 
 from app import db, events, ingestion
-from app.accounting import cash, reconcile
+from app.accounting import cash, match, reconcile
 from app.agents.budget import Meter
 from app.agents.registry import AGENTS, children
 from app.graph import build_graph, run_investigation
@@ -118,6 +118,87 @@ def test_bank_lines_reconcile_to_the_movements_the_books_record(ws):
     assert not result["unmatched_bank"] and not result["unmatched_book"]
 
 
+def test_every_role_that_moves_cash_is_on_the_book_side(ws):
+    """A cash movement the reconciler does not look at reports as unexplained.
+
+    Expenses and payroll were missing from the book side, so a clean period reported
+    twenty-six false exceptions — the kind of noise that teaches a reviewer to stop
+    reading the report. Every role that moves cash has to be indexed, on the figure the
+    bank actually sees: net for a pay run, gross for a bill.
+    """
+    from app.accounting.reconcile import BOOK_SIDE
+
+    assert {"payments", "remittances", "processor_payouts", "expenses", "payroll"} <= set(BOOK_SIDE)
+    # A pay run debits the bank for net pay; matching on gross would differ every time.
+    assert BOOK_SIDE["payroll"] == "net_cents"
+    assert BOOK_SIDE["processor_payouts"] == "net_cents"
+
+
+def test_a_clean_period_reconciles_with_nothing_left_over(ws):
+    """The baseline a planted defect is measured against.
+
+    If a clean period leaves exceptions behind, a real one is indistinguishable from
+    noise and the whole check stops meaning anything.
+    """
+    result = reconcile.reconcile_bank(records_of(ws), ingestion.workspace_config(ws))
+
+    assert result["totals"]["unmatched_bank"] == 0, result["unmatched_bank"][:2]
+    assert result["totals"]["unmatched_book"] == 0, result["unmatched_book"][:2]
+    assert result["totals"]["differing"] == 0
+
+
+def test_a_composite_key_is_readable_where_a_person_or_a_model_sees_it(ws):
+    """`PO-7001` line `1` must not print as `PO-70011`.
+
+    Keys join on a unit separator so two records cannot collide. That character is
+    invisible, so a purchase-order line printed raw reads as a document number that does
+    not exist — and a live A1 run quoted exactly that into its citations, which would
+    send a reviewer looking for nothing.
+    """
+    from app import roles
+
+    stored = roles.key_of("purchase_orders", {"po_id": "PO-7001", "line_id": "1"})
+    assert stored == "PO-70011", "the stored key keeps the separator"
+    assert roles.readable_key("purchase_orders", stored) == "PO-7001 · 1"
+    # A single-field key is left exactly as it is.
+    assert roles.readable_key("vendor_invoices", "VI-9001") == "VI-9001"
+
+
+def test_matching_citations_carry_the_readable_form(ws):
+    result = match.three_way(records_of(ws), invoice_key(ws, "INV-100"),
+                             ingestion.workspace_config(ws))
+    order = next(c for c in result.as_dict()["citations"] if c["role"] == "purchase_orders")
+
+    assert "" not in order["display"]
+    assert order["display"] == "PO-1 · 1"
+
+
+def test_a_composite_key_is_readable_where_a_person_or_a_model_sees_it(ws):
+    """`PO-7001` line `1` must not print as `PO-70011`.
+
+    Keys join on a unit separator so two records cannot collide. That character is
+    invisible, so a purchase-order line printed raw reads as a document number that does
+    not exist — and a live A1 run quoted exactly that into its citations, which would
+    send a reviewer looking for nothing.
+    """
+    from app import roles
+
+    stored = roles.key_of("purchase_orders", {"po_id": "PO-7001", "line_id": "1"})
+    assert stored == "PO-70011", "the stored key keeps the separator"
+    assert roles.readable_key("purchase_orders", stored) == "PO-7001 · 1"
+    # A single-field key is left exactly as it is.
+    assert roles.readable_key("vendor_invoices", "VI-9001") == "VI-9001"
+
+
+def test_matching_citations_carry_the_readable_form(ws):
+    result = match.three_way(records_of(ws), invoice_key(ws, "INV-100"),
+                             ingestion.workspace_config(ws))
+    order = next(c for c in result.as_dict()["citations"] if c["role"] == "purchase_orders")
+
+    assert "" not in order["display"]
+    assert order["display"] == "PO-1 · 1"
+
+
 def test_an_unreferenced_bank_line_is_reported_not_guessed_at(ws):
     """Two amounts being equal is not evidence that they are the same transaction."""
     extra = ("stray.csv",
@@ -213,6 +294,74 @@ def test_expected_collections_are_shown_apart_from_committed_outflows(ws):
 # The graph
 # --------------------------------------------------------------------------- #
 
+def _clear_model():
+    """Every agent reads, scores what it can, then reports a result that needs nobody.
+
+    `insufficient_evidence` escalates by design, so a run built on it pauses — which is
+    correct, and not what these tests are about. Neither is the second escalation this
+    helper has to avoid: an agent holding a scoring tool that concludes without calling
+    it has produced an unscored answer, and the runtime sends that to a person too. So
+    the script calls the scoring tool wherever the agent has one, which is also what a
+    real agent does.
+    """
+    import json as _json
+    from app.agents import schemas as _s
+    from app.agents.registry import AGENTS
+    from app.agents.runtime import SCORING_TOOLS
+
+    def _spec(kwargs):
+        system = kwargs["input"][0].get("content", "")
+        return next((spec for spec in AGENTS.values()
+                     if system.startswith(f"You are {spec.name} ({spec.id})")), None)
+
+    def _first_key(kwargs, role):
+        for message in reversed(kwargs.get("input", [])):
+            if isinstance(message, dict) and message.get("type") == "function_call_output":
+                body = _json.loads(message["output"])
+                if body.get("role") == role and body.get("records"):
+                    return body["records"][0]["record_key"]
+        return None
+
+    def answer(schema, kwargs):
+        role, key = "vendor_invoices", "VI-1"
+        for message in reversed(kwargs.get("input", [])):
+            if isinstance(message, dict) and message.get("type") == "function_call_output":
+                body = _json.loads(message["output"])
+                if body.get("records"):
+                    role, key = body["role"], body["records"][0]["record_key"]
+                    break
+        fields = dict(summary="Nothing here needs a person.", disposition="clear",
+                      rationale="The records supplied agree with one another.",
+                      citations=[_s.Citation(role=role, record_key=key)],
+                      proposed_action="No action proposed.",
+                      # Required, not defaulted: an agent offered no precedent still has
+                      # to say so, so silence never reads as a completed check.
+                      memory_checks=[])
+        return schema(**fields, may_pay=True) if schema is _s.APResult else schema(**fields)
+
+    def read(kwargs):
+        context = _json.loads(kwargs["input"][1]["content"])
+        roles = context["readable_roles"]
+        # An agent that will score an invoice has to read invoices, not whichever role
+        # happens to be first in its scope.
+        spec = _spec(kwargs)
+        if spec and "three_way_match" in spec.tools and "vendor_invoices" in roles:
+            return [("read_records", {"role": "vendor_invoices"})]
+        return [("read_records", {"role": roles[0]})]
+
+    def score(kwargs):
+        spec = _spec(kwargs)
+        held = sorted(set(spec.tools) & SCORING_TOOLS) if spec else []
+        if not held:
+            return []
+        if held[0] == "three_way_match":
+            key = _first_key(kwargs, "vendor_invoices")
+            return [("three_way_match", {"invoice_key": key})] if key else []
+        return [(held[0], {})]
+
+    return FakeModel([(read, None), (score, None), ([], None)], build=answer)
+
+
 def test_the_graph_is_built_from_the_registry(ws):
     graph = build_graph()
     nodes = set(graph.get_graph().nodes)
@@ -234,29 +383,41 @@ def test_an_objective_about_cash_routes_to_the_treasurer(ws):
     assert "Treasurer" in final["plan_rationale"]
 
 
-def test_an_unwired_domain_is_reported_rather_than_silently_skipped(ws):
-    """A domain nobody asked anything of must not read as a clean one."""
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="n/a", rationale="n/a", citations=[]))])
-    final = asyncio.run(run_investigation(
-        ws, "Run the month-end close and test the controls.", client=model))
+def test_every_registered_worker_is_wired(ws):
+    """The four domains the registry names are the four the graph can actually run."""
+    from app.graph.build import WIRED_WORKERS, build_graph
+
+    assert set(WIRED_WORKERS) == {"A", "B", "C", "D"}
+    assert set(WIRED_WORKERS) <= set(build_graph().get_graph().nodes)
+
+
+def test_a_domain_that_is_not_wired_is_reported_rather_than_silently_skipped(ws, monkeypatch):
+    """A domain nobody asked anything of must not read as a clean one.
+
+    All four are wired now, so this drives the branch with one held back rather than
+    deleting it. The branch has to stay: the next agent added to the registry is
+    unwired the moment it lands, and the failure it would otherwise cause is a silent
+    one — an objective answered by nobody, reported as answered.
+    """
+    from app.graph import build as build_module
+
+    monkeypatch.setattr(build_module, "WIRED_WORKERS", ("A", "B", "C"))
+    final = asyncio.run(build_module.run_investigation(
+        ws, "Test the controls and the approvals.", client=_clear_model()))
 
     unresolved = " ".join(final["unresolved"])
-    assert "Controller" in unresolved and "not wired yet" in unresolved
+    assert AGENTS["D"].name in unresolved
+    assert "not wired yet" in unresolved
 
 
 def test_concurrent_subagents_all_reach_the_final_state(ws):
     """The reducers are what stop the last branch overwriting the other three."""
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="Nothing conclusive.",
-                                      rationale="The supplied records do not settle it.",
-                                      citations=[]))])
-    final = asyncio.run(run_investigation(ws, "Review payables and cash.", client=model))
+    final = asyncio.run(run_investigation(ws, "Review payables and cash.",
+                                          client=_clear_model()))
 
     # Four Treasurer subagents ran; every one of them is accounted for, either as a
     # finding or as an unresolved item.
-    accounted = {f["agent_id"] for f in final["findings"]} | {
-        key for key in final["results"]}
+    accounted = {f["agent_id"] for f in final["findings"]} | set(final["results"])
     assert {"A1", "A2", "A3", "A4"} <= accounted
 
 
@@ -271,9 +432,8 @@ def test_spend_is_summed_across_branches_not_overwritten(ws):
 
 
 def test_the_run_reports_a_status_and_a_briefing_with_no_authored_figures(ws):
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="n/a", rationale="n/a", citations=[]))])
-    final = asyncio.run(run_investigation(ws, "Review payables and cash.", client=model))
+    final = asyncio.run(run_investigation(ws, "Review payables and cash.",
+                                          client=_clear_model()))
 
     assert final["status"] in {"completed", "needs_you", "no_findings"}
     assert final["briefing"]

@@ -9,9 +9,13 @@ What the loop refuses to do:
 
 - **Trust a citation.** A result citing a record the agent never retrieved is rejected,
   not repaired. That is the difference between evidence and plausible text.
-- **Trust a number.** Confidence comes from `accounting/match.py`, and prose is
-  validated to contain no figures at all. A model may explain a score; it may not
-  produce one.
+- **Trust a number.** Confidence is computed by the deterministic engine — the match
+  rubric for an invoice, the share of a variance that reached a named transaction for an
+  explanation — and prose is validated to contain no figures at all. A model may explain
+  a score; it may not produce one.
+- **Trust an exception code.** The conditions that always escalate are detected by the
+  engine and unioned with whatever the model reported. An agent that omits the code for
+  what it found escalates anyway.
 - **Degrade quietly.** A breached budget stops the task and says so. A thinner answer is
   indistinguishable from a complete one to whoever reads it, so the runtime never
   returns one.
@@ -129,6 +133,23 @@ def system_prompt(spec: AgentSpec, *, precedents: bool = False) -> str:
             f"{', '.join(spec.escalate_when.on) or 'none named'}.")
 
 
+def engine_exceptions(calculations: dict) -> frozenset[str]:
+    """Conditions the deterministic engine found, whatever the agent reported.
+
+    An escalation rule that reads only the model's own exception list is decorative: an
+    agent that fails to name what it found escapes the rule that exists for exactly that
+    case. These codes are derived from the calculations that actually ran, and they are
+    unioned with the model's rather than replacing them.
+    """
+    codes = set()
+    for key, value in calculations.items():
+        if key.startswith("variance:") and value.get("unexplained_cents"):
+            # Part of the movement reached no named transaction, so the explanation is
+            # incomplete by arithmetic rather than by opinion.
+            codes.add("unexplained_residual")
+    return frozenset(codes)
+
+
 def _and_list(reasons: tuple[str, ...] | list[str]) -> str:
     """Join escalation reasons the way a person would read them aloud."""
     reasons = list(reasons)
@@ -166,7 +187,8 @@ def checked_memory(result: schemas.AgentResult, offered: list[dict],
 
 
 def escalation_reasons(spec: AgentSpec, result: schemas.AgentResult,
-                       confidence: int | None, amount_cents: int | None) -> tuple[str, ...]:
+                       confidence: int | None, amount_cents: int | None,
+                       engine_codes: frozenset[str] = frozenset()) -> tuple[str, ...]:
     """Why a person must see this. Thresholds from the spec, never from the model.
 
     Evaluated after the result exists, against the deterministic confidence and the
@@ -175,12 +197,21 @@ def escalation_reasons(spec: AgentSpec, result: schemas.AgentResult,
     """
     reasons = []
     rule = spec.escalate_when
+    if rule.always:
+        reasons.append("this agent's work cannot be scored against an outcome, so every "
+                       "conclusion it reaches goes to a person")
+    if confidence is None and set(spec.tools) & SCORING_TOOLS:
+        # The hole this closes: a threshold is only consulted when a score exists, so the
+        # cheapest way past one was to skip the calculation it measures. An agent holding
+        # a scoring tool that concluded without using it has not earned a clean result.
+        reasons.append("the agent reached a conclusion without running the calculation "
+                       "its confidence threshold is measured against")
     if confidence is not None and confidence < rule.confidence_below:
         reasons.append(f"confidence {confidence} is below the threshold {rule.confidence_below}")
     if rule.amount_above_cents is not None and amount_cents is not None \
             and amount_cents >= rule.amount_above_cents:
         reasons.append("the amount is at or above the level that always needs a person")
-    named = {e.code for e in result.exceptions} & set(rule.on)
+    named = ({e.code for e in result.exceptions} | set(engine_codes)) & set(rule.on)
     reasons += [f"condition {code} always escalates" for code in sorted(named)]
     if result.disposition == "insufficient_evidence":
         reasons.append("the agent could not reach a conclusion on the evidence supplied")
@@ -228,7 +259,8 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
 
     confidence, amount_cents = _computed_confidence(toolbox, record_keys)
     toolbox.validate_citations(result.citations)
-    reasons = escalation_reasons(spec, result, confidence, amount_cents)
+    reasons = escalation_reasons(spec, result, confidence, amount_cents,
+                                 engine_exceptions(toolbox.calculations))
     memory_checks, memory_notes = checked_memory(result, precedents)
 
     decision_id = toolbox.record_decision(
@@ -291,6 +323,19 @@ def _missing_requirements(spec: AgentSpec, ws: str) -> list[str]:
     return [labels.get(rid, rid) for rid in blocked]
 
 
+#: Calculation keys that carry a computed score. Each writes `confidence` and
+#: `amount_cents`, and what the score *means* is the deciding module's business: for a
+#: three-way match it is the rubric in `accounting/match.py`; for a variance it is the
+#: share of the activity that reached a named transaction. Both are derived from records.
+#: Nothing a model says is ever eligible to appear here.
+SCORED_CALCULATIONS = ("match:", "variance:")
+
+#: Tools whose output carries a computed score. An agent that holds one of these and
+#: reaches a conclusion without calling it has produced an unscored answer, which is
+#: reported rather than treated as confident.
+SCORING_TOOLS = frozenset({"three_way_match", "decompose_variance"})
+
+
 def _computed_confidence(toolbox: Toolbox, record_keys: tuple[str, ...]) -> tuple[int | None, int | None]:
     """The rubric's score for this task, and the amount at stake.
 
@@ -298,10 +343,13 @@ def _computed_confidence(toolbox: Toolbox, record_keys: tuple[str, ...]) -> tupl
     there is no score — which is reported as absent rather than as a default, because a
     made-up confidence is exactly what this whole mechanism exists to prevent.
     """
-    matches = [value for key, value in toolbox.calculations.items() if key.startswith("match:")]
-    if not matches:
+    scored = [value for key, value in toolbox.calculations.items()
+              if key.startswith(SCORED_CALCULATIONS)]
+    if not scored:
         return None, None
-    lowest = min(matches, key=lambda m: m["confidence"])
+    # The weakest one sets it. An agent that matched one invoice perfectly and another
+    # poorly is as reliable as the poor match, not the average of the two.
+    lowest = min(scored, key=lambda item: item["confidence"])
     return lowest["confidence"], lowest["amount_cents"]
 
 

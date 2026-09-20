@@ -21,8 +21,10 @@ from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from . import approvals, ingestion, projection, registers, roles
-from .agents import api as agents_api, registry
+from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
+from .agents.chat import router as chat_router
+from .deliverables import router as deliverables_router
 from .reviews import router as review_router
 from . import security
 from .extraction import router as extraction_router
@@ -42,6 +44,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
+app.include_router(chat_router)
+app.include_router(deliverables_router)
 app.include_router(review_router)
 app.include_router(security.router)
 app.include_router(extraction_router)
@@ -59,7 +63,6 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
-
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
@@ -92,12 +95,11 @@ async def intake_write_guard(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
-
 # Registered last on purpose. Starlette runs the most recently added middleware outermost, so this
 # wraps intake_write_guard rather than sitting inside it. Registered before the guard, a 401 or 403
-# the guard returns would leave the app without ever passing through CORS: the browser cannot read
-# a cross-origin response with no Access-Control-Allow-Origin, so the hosted web app reports the
-# API as unreachable instead of showing "sign in". The status was right; the header was missing.
+# the guard returns leaves the app without ever passing through CORS, and a browser cannot read a
+# cross-origin response that carries no Access-Control-Allow-Origin, whatever its status. The
+# hosted web app then reports the API as unreachable: the status was right, the header was missing.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -202,30 +204,6 @@ def commit(ws: str, bid: str, body: ingestion.CommitRequest):
 def detect_saved_sources(ws: str):
     """Find committed documents that are really structured records, and stage them."""
     return ingestion.detect_saved_sources(ws)
-
-
-@app.get("/api/agents")
-def agent_registry():
-    """The agent tree and what each one needs, so a client can draw the dependency.
-
-    Served rather than restated in TypeScript for the same reason as /api/roles:
-    the registry is the definition, and a second copy would drift the moment an
-    agent gained a requirement.
-    """
-    return {
-        "agents": [
-            {
-                "id": spec.id,
-                "name": spec.name,
-                "tier": spec.tier,
-                "parent": spec.parent,
-                "charter": spec.charter,
-                "reviewer": spec.reviewer,
-                "requires": list(spec.requires),
-            }
-            for spec in registry.AGENTS.values()
-        ],
-    }
 
 
 @app.get("/api/roles")

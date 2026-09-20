@@ -12,6 +12,8 @@ diagnostic.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from .. import db, ingestion
@@ -21,6 +23,15 @@ from .runtime import AgentFailed, run_agent
 from .tools import ScopeError
 
 router = APIRouter(prefix="/api/workspaces/{ws}/agents", tags=["Agent organization"])
+
+
+class Decision(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
+    decision: Literal["approved", "rejected"]
+    #: Which question is being answered. Several agents can pause in one run, and one
+    #: answer applied to all of them would record a decision on questions nobody was
+    #: shown. Omitting it is only safe when exactly one is outstanding.
+    approval_id: str = Field(default="", max_length=120)
 
 
 class RunRequest(BaseModel):
@@ -116,3 +127,85 @@ async def start(ws: str, agent_id: str, body: RunRequest, request: Request):
                                   "spend": meter.snapshot()})
 
     return {"thread_id": thread_id, **run.as_dict(), "spend": meter.snapshot()}
+
+
+@router.get("/escalations")
+def escalations(ws: str):
+    """What is waiting on a person, and what each run stopped to ask.
+
+    A paused run is not a failed one and not a finished one. It is a question, and until
+    it is answered nothing beyond it has happened.
+    """
+    from ..graph import pending
+
+    waiting = pending(ws)
+    return {
+        "escalations": waiting,
+        "count": len(waiting),
+        "note": "Each of these paused a run. Deciding one resumes it; nothing is posted, "
+                "paid or changed in an external system either way.",
+    }
+
+
+@router.post("/escalations/decide")
+async def decide_escalation(ws: str, body: Decision):
+    """Answer a paused run and let it continue.
+
+    The decision is recorded through `approvals.decide()`, which is the only writer of
+    precedent — so answering this is also what teaches the next run what you decided.
+    """
+    from ..graph import resume_investigation
+
+    try:
+        outcome = await resume_investigation(ws, body.thread_id, body.decision,
+                                             approval_id=body.approval_id or None)
+    except BudgetExceeded as exc:
+        raise HTTPException(402, {"code": "budget_exceeded", "message": str(exc)})
+    except KeyError:
+        raise HTTPException(404, "No paused run with that thread id.")
+    except ValueError as exc:
+        # Several questions are waiting and the answer did not say which. Refused rather
+        # than guessed: applying it to the wrong one records a decision the person never
+        # made, against evidence they never saw.
+        raise HTTPException(409, {"code": "ambiguous_decision", "message": str(exc)})
+    return outcome
+
+
+@router.get("/timeline")
+def timeline(ws: str, limit: int = 100):
+    """Every economic event in this workspace, newest first.
+
+    One row per transaction rather than per document, which is the point of the event
+    identity: the invoice, the receipt, the payment and the journal entries are views of
+    one thing, and a timeline that listed each separately would report one purchase four
+    times.
+    """
+    from .. import events
+
+    ingestion.workspace_config(ws)
+    with db.connect() as connection:
+        rows = events.timeline(connection, ws, limit=min(limit, 500))
+    return {
+        "events": rows, "count": len(rows),
+        "note": "One row per economic event. An event carries whatever documents named "
+                "it, which is not a claim that every document that should exist does.",
+    }
+
+
+@router.get("/timeline/{event_id}")
+def event(ws: str, event_id: str):
+    """Everything that carries one event id: records, decisions and links."""
+    from .. import events
+
+    ingestion.workspace_config(ws)
+    with db.connect() as connection:
+        found = events.view(connection, ws, event_id)
+        if found is None:
+            raise HTTPException(404, "No such event in this workspace.")
+        decisions = [dict(row) for row in connection.execute(
+            "SELECT id, agent, action, summary, confidence, escalated, created_at"
+            " FROM agent_decisions WHERE ws=? AND event_id=? ORDER BY rowid", (ws, event_id))]
+        links = [dict(row) for row in connection.execute(
+            "SELECT from_type, from_id, to_type, to_id, kind, method, confidence"
+            " FROM links WHERE ws=? AND event_id=? ORDER BY rowid", (ws, event_id))]
+    return {**found, "decisions": decisions, "links": links}
