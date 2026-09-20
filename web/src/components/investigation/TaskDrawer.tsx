@@ -6,6 +6,32 @@ import { AGENT_NAME, AgentAvatar, Pill, ProgressBar, Pulse } from "@/components/
 import { duration, elapsedSeconds } from "@/lib/format";
 import type { Column, Task } from "@/lib/types";
 
+const DISPOSITION_LABEL: Record<string, string> = {
+  clear: "Nothing here needs a person",
+  exception: "Exception raised",
+  insufficient_evidence: "Not enough evidence to conclude",
+};
+
+const DISPOSITION_TONE: Record<string, "green" | "red" | "amber"> = {
+  clear: "green",
+  exception: "red",
+  insufficient_evidence: "amber",
+};
+
+const VERDICT_LABEL: Record<string, string> = {
+  accepted: "Accepted by the reviewer",
+  rejected: "Rejected by the reviewer",
+  needs_evidence: "Reviewer wants more evidence",
+  not_reviewed: "Not reviewed",
+};
+
+const VERDICT_TONE: Record<string, "green" | "red" | "amber" | "gray"> = {
+  accepted: "green",
+  rejected: "red",
+  needs_evidence: "amber",
+  not_reviewed: "gray",
+};
+
 const COLUMN_LABEL: Record<Column, string> = {
   queued: "Queued",
   working: "Working",
@@ -41,6 +67,8 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
 
   const doneSteps = task.steps.filter((step) => step.state === "done").length;
   const detail = task.detail ?? null;
+  const output = detail?.result && Object.keys(detail.result).length > 0 ? detail.result : null;
+  const review = detail?.review ?? null;
   const running = task.column === "working" || task.column === "auditor_review";
   const seconds = elapsedSeconds(task.started_at, now);
   const started = startedAtLabel(task.started_at);
@@ -144,6 +172,101 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
             <>
               <Heading className="mt-5">What it concluded</Heading>
               <p className="border border-line bg-surface-2 px-3 py-2.5 text-[13.5px] leading-relaxed">{task.rationale}</p>
+            </>
+          )}
+
+          {/* The output, whole. A finished task that shows only a headline sends a
+              person to the database for the work they just paid for. */}
+          {output && (
+            <>
+              <Heading className="mt-5">What it produced</Heading>
+              {output.disposition && (
+                <div className="mb-2">
+                  <Pill tone={DISPOSITION_TONE[output.disposition] ?? "gray"}>
+                    {DISPOSITION_LABEL[output.disposition] ?? output.disposition}
+                  </Pill>
+                </div>
+              )}
+              {output.summary && <p className="text-[13.5px] leading-relaxed">{output.summary}</p>}
+
+              {output.proposed_action && (
+                <>
+                  <Heading className="mt-4">What it proposes</Heading>
+                  <p className="border border-line bg-surface-2 px-3 py-2.5 text-[13.5px] leading-relaxed">
+                    {output.proposed_action}
+                  </p>
+                  <p className="mt-1 font-accent text-[12px] text-ink-dim">
+                    A proposal. Nothing an agent can call approves, posts or pays anything.
+                  </p>
+                </>
+              )}
+
+              {(output.exceptions?.length ?? 0) > 0 && (
+                <>
+                  <Heading className="mt-4">What did not hold</Heading>
+                  {output.exceptions?.map((exception) => (
+                    <div key={exception.code + exception.detail} className="border border-line bg-surface-2 px-3 py-2 mb-1.5">
+                      <div className="font-mono text-[12px] text-red-800">{exception.code}</div>
+                      <div className="mt-0.5 text-[13px] leading-snug">{exception.detail}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {(output.citations?.length ?? 0) > 0 && (
+                <>
+                  <Heading className="mt-4">What it rests on</Heading>
+                  {output.citations?.map((citation, index) => (
+                    <div key={index} className="border-b border-line py-1.5 text-[13px] last:border-0">
+                      <span className="font-mono text-[12px] text-ink-dim">{citation.role}</span>{" "}
+                      <span className="font-mono text-[12px]">{citation.record_key || citation.source_id}</span>
+                      {citation.line ? <span className="font-num text-[12px] text-ink-dim"> · line {citation.line}</span> : null}
+                      {citation.note && <div className="mt-0.5 leading-snug text-ink-dim">{citation.note}</div>}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {(output.open_questions?.length ?? 0) > 0 && (
+                <>
+                  <Heading className="mt-4">What it could not settle</Heading>
+                  {output.open_questions?.map((question) => (
+                    <div key={question} className="border-b border-line py-1.5 text-[13px] leading-snug last:border-0">
+                      {question}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {(output.memory_checks?.length ?? 0) > 0 && (
+                <>
+                  <Heading className="mt-4">Earlier decisions it re-checked</Heading>
+                  {output.memory_checks?.map((check) => (
+                    <div key={check.precedent_id} className="border-b border-line py-1.5 text-[13px] leading-snug last:border-0">
+                      <b className="font-mono text-[12px]">{check.precedent_id}</b>{" "}
+                      <span className={check.applied ? "text-green-800" : "text-ink-dim"}>
+                        {check.applied ? "applied" : "declined"}
+                      </span>
+                      <div className="text-ink-dim">{check.reason}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
+          {review && (
+            <>
+              <Heading className="mt-5">Independent review</Heading>
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone={VERDICT_TONE[review.verdict] ?? "gray"}>{VERDICT_LABEL[review.verdict] ?? review.verdict}</Pill>
+                <span className="text-[13px] text-ink-dim">by {review.reviewer_name ?? review.reviewer}</span>
+              </div>
+              {review.summary && <p className="mt-2 text-[13.5px] leading-relaxed">{review.summary}</p>}
+              {review.rationale && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-dim">{review.rationale}</p>}
+              <p className="mt-1 font-accent text-[12px] text-ink-dim">
+                A reviewer accepting the work is not a person approving it.
+              </p>
             </>
           )}
 

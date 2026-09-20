@@ -344,7 +344,7 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
     activity.finish(
         task_id, state="needs_you" if reasons else "done",
         summary=result.summary, confidence=confidence, decision_id=decision_id,
-        escalated=bool(reasons), reasons=reasons,
+        escalated=bool(reasons), reasons=reasons, result=result.model_dump(),
         cost_cents=meter.by_agent.get(spec.id, 0) - spent_before[2],
         tool_calls=meter.tools_by_agent.get(spec.id, 0) - spent_before[0],
         model_calls=meter.calls_by_agent.get(spec.id, 0) - spent_before[1])

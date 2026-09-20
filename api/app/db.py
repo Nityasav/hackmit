@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -83,6 +83,13 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     escalated INTEGER NOT NULL DEFAULT 0,
     escalation_reasons TEXT NOT NULL DEFAULT '[]',
     summary TEXT NOT NULL DEFAULT '', error TEXT,
+    -- Everything the agent returned, exactly as it returned it: disposition,
+    -- rationale, citations, exceptions, what it proposes and what it could not
+    -- settle. The decision trail keeps the summary and the evidence; this keeps the
+    -- whole output, so a finished card can show the work rather than a headline.
+    result TEXT NOT NULL DEFAULT '{}',
+    -- What the independent reviewer made of it, once one has looked.
+    review TEXT,
     created_at TEXT NOT NULL, started_at TEXT, updated_at TEXT NOT NULL, finished_at TEXT
 );
 CREATE TABLE IF NOT EXISTS agent_requests (
@@ -247,6 +254,8 @@ ADDED_COLUMNS = (
     # rather than in a side table: it is part of the reasoning that produced
     # that decision, and a reviewer reading the row should see it there.
     ("agent_decisions", "memory_checks", "TEXT NOT NULL DEFAULT '[]'"),
+    ("agent_tasks", "result", "TEXT NOT NULL DEFAULT '{}'"),
+    ("agent_tasks", "review", "TEXT"),
 )
 
 

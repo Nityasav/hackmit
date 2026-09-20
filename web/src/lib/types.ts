@@ -71,6 +71,30 @@ export interface TaskStep {
   at?: string | null;
 }
 
+/** What an agent returned, exactly as it returned it. */
+export interface AgentOutput {
+  summary?: string;
+  disposition?: "clear" | "exception" | "insufficient_evidence";
+  rationale?: string;
+  proposed_action?: string;
+  open_questions?: string[];
+  citations?: { role: string; record_key?: string; source_id?: string; line?: number | null; note?: string }[];
+  exceptions?: { code: string; detail: string }[];
+  memory_checks?: { precedent_id: string; applied: boolean; reason: string }[];
+  may_pay?: boolean;
+  matched_po?: string;
+  matched_receipt?: string;
+}
+
+export interface AgentReview {
+  reviewer: string;
+  reviewer_name?: string;
+  verdict: "accepted" | "rejected" | "needs_evidence" | "not_reviewed";
+  summary?: string;
+  rationale?: string;
+  decision_id?: string;
+}
+
 /** Everything else the run recorded about one task, shown in the drawer. */
 export interface TaskDetail {
   agent_name: string;
@@ -94,6 +118,8 @@ export interface TaskDetail {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+  result?: AgentOutput | null;
+  review?: AgentReview | null;
 }
 
 export interface Task {

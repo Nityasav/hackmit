@@ -40,6 +40,13 @@ def _steps(row) -> list[dict]:
         return []
 
 
+def _json(value, fallback):
+    try:
+        return json.loads(value) if value else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
 def _parsed(value: str) -> datetime | None:
     try:
         moment = datetime.fromisoformat(value)
@@ -138,7 +145,7 @@ def finish(task_id: str | None, *, state: str, summary: str = "", confidence: in
            decision_id: str | None = None, escalated: bool = False,
            reasons: tuple[str, ...] = (), cost_cents: int = 0,
            tool_calls: int | None = None, model_calls: int | None = None,
-           error: str | None = None) -> None:
+           error: str | None = None, result: dict | None = None) -> None:
     """Close the task with what it actually produced."""
     if not task_id:
         return
@@ -153,14 +160,14 @@ def finish(task_id: str | None, *, state: str, summary: str = "", confidence: in
             connection.execute(
                 "UPDATE agent_tasks SET state=?, summary=?, confidence=?, decision_id=?,"
                 " escalated=?, escalation_reasons=?, cost_cents=?, tool_calls=?,"
-                " model_calls=?, error=?, updated_at=?, finished_at=? WHERE id=?",
+                " model_calls=?, error=?, result=?, updated_at=?, finished_at=? WHERE id=?",
                 (state, summary[:600], confidence, decision_id, int(escalated),
                  db.encode(list(reasons)), cost_cents,
                  # The meter is authoritative when the run hands it over: it counted
                  # every charge, including the ones that raised before a step was written.
                  row["tool_calls"] if tool_calls is None else max(tool_calls, row["tool_calls"]),
                  row["model_calls"] if model_calls is None else max(model_calls, row["model_calls"]),
-                 error, now, now, task_id))
+                 error, db.encode(result or {}), now, now, task_id))
     except Exception:  # noqa: BLE001
         return
 
@@ -173,6 +180,18 @@ def mark(task_id: str | None, state: str) -> None:
         with db.connect() as connection:
             connection.execute("UPDATE agent_tasks SET state=?, updated_at=? WHERE id=?",
                                (state, db.now(), task_id))
+    except Exception:  # noqa: BLE001
+        return
+
+
+def attach_review(task_id: str | None, review: dict) -> None:
+    """Record what the independent reviewer concluded about this task."""
+    if not task_id:
+        return
+    try:
+        with db.connect() as connection:
+            connection.execute("UPDATE agent_tasks SET review=?, updated_at=? WHERE id=?",
+                               (db.encode(review), db.now(), task_id))
     except Exception:  # noqa: BLE001
         return
 
@@ -292,6 +311,10 @@ def card(row, now: datetime | None = None) -> dict:
             "started_at": row["started_at"],
             "finished_at": row["finished_at"],
             "updated_at": row["updated_at"],
+            # The output itself, whole. A card in Done that shows only a headline
+            # sends a person to the database for the work they just paid for.
+            "result": _json(row["result"], {}),
+            "review": _json(row["review"], None),
         },
     }
 

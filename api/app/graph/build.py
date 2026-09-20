@@ -147,17 +147,23 @@ async def _review(state: RunState, run, spec, runtime_config) -> dict | None:
             client=runtime_config.get("client"))
     except (AgentFailed, BudgetExceeded, ScopeError) as exc:
         activity.mark(run.task_id, "needs_you" if run.escalated else "done")
-        return {"reviewer": reviewer_id, "verdict": "not_reviewed", "reason": str(exc)}
+        skipped = {"reviewer": reviewer_id, "reviewer_name": reviewer.name,
+                   "verdict": "not_reviewed", "summary": str(exc)}
+        activity.attach_review(run.task_id, skipped)
+        return skipped
 
     verdict = runtime.VERDICT.get(
         verdict_run.result.disposition if verdict_run.result else "", "needs_evidence")
     runtime.attach_review(state["ws"], run.decision_id, reviewer_id, verdict)
-    activity.mark(run.task_id, "needs_you" if run.escalated else "done")
-    return {
+    review = {
         "reviewer": reviewer_id, "reviewer_name": reviewer.name, "verdict": verdict,
         "summary": verdict_run.result.summary if verdict_run.result else "",
+        "rationale": verdict_run.result.rationale if verdict_run.result else "",
         "decision_id": verdict_run.decision_id,
     }
+    activity.attach_review(run.task_id, review)
+    activity.mark(run.task_id, "needs_you" if run.escalated else "done")
+    return review
 
 
 def _decision_node(agent_id: str):
