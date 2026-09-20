@@ -4,6 +4,7 @@ import { useData } from "@/lib/data";
 import { AGENT_NAME, AgentAvatar, Card, CardTitle, PageHeader, Pill, PlaybookStatusPill } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
 import { Component as LearningBento } from "@/components/ui/features-card";
+import { DocumentLab } from "@/components/DocumentLab";
 
 const LOOP = [
   { n: "1", title: "Notice a pattern", body: "An agent sees the same case twice across findings" },
@@ -17,6 +18,7 @@ export default function LearningPage() {
   const { bundle } = useData();
   const { playbooks, ablation } = bundle;
   const active = playbooks.filter((p) => p.status === "active").length;
+  if (bundle.workspace.intake) return <DocumentLab />;
 
   return (
     <TabGate tab="learning">

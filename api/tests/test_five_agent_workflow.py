@@ -153,7 +153,6 @@ def test_api_default_factory_runs_committed_workspace(tmp_path, monkeypatch, mod
     monkeypatch.delattr(app.state, "cfo_runtime", raising=False)
     monkeypatch.delenv("CFO_ADAPTER_FACTORY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-sent")
-    monkeypatch.setenv("CFO_DB_PATH", str(tmp_path / "runs.db"))
     monkeypatch.setenv("SCHOOLTRACE_DATA_DIR", str(tmp_path / "intake"))
     monkeypatch.setattr(StructuredCFOModel, "from_env", lambda: Planner())
     with TestClient(app, headers=HEADERS) as client:

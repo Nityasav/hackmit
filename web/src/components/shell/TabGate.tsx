@@ -14,10 +14,10 @@ export function TabGate({ tab, children }: { tab: TabId; children: React.ReactNo
       <div className="font-semibold">Not available for {bundle.workspace.name}</div>
       <p className="max-w-sm text-[14px] text-ink-dim">
         {bundle.workspace.intake
-          ? "Standalone reviews are in the Command center. The connected five-agent investigation has its own run page. Approvals and learning remain unavailable."
+          ? "Records, connected investigations and human follow-up are available in the guided review. Automatic learning and model training are not enabled. No playbook silently changes future conclusions."
           : "This is a read-only public report. There are no transactions to run workflows on, approve, or learn from."}
       </p>
-      {bundle.workspace.intake && <Link href="/cfo" className="text-sm text-teal-700 underline">Open five-agent workflow</Link>}
+      {bundle.workspace.intake && <Link href="/scan" className="text-sm text-teal-700 underline">Open the guided review</Link>}
       <button
         type="button"
         onClick={() => setWs("sandbox")}

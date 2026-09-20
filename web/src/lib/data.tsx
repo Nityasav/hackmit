@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import sandboxFixture from "../../../contracts/fixtures/sandbox.json";
-import mitFixture from "../../../contracts/fixtures/mit.json";
+import sandboxFixture from "../fixtures/sandbox.json";
+import mitFixture from "../fixtures/mit.json";
 import type { ApprovalStatus, Bundle, IntakeWorkspace } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -10,7 +10,7 @@ const FIXTURES: Record<string, Bundle> = {
   sandbox: sandboxFixture as unknown as Bundle, mit: mitFixture as unknown as Bundle,
 };
 export async function intakeApi<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(API_URL + path, { ...init, cache: "no-store", headers: {
+  const response = await fetch(API_URL + path, { ...init, credentials: "include", cache: "no-store", headers: {
     ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     "X-SchoolTrace-Reviewer": "local-reviewer", ...init.headers,
   } });
@@ -25,7 +25,11 @@ export async function intakeApi<T>(path: string, init: RequestInit = {}): Promis
 function empty(ws: string, info?: IntakeWorkspace): Bundle {
   return { workspace: { id: ws, name: info?.name || "Your institution", kind: info?.kind || "synthetic",
     period: info ? `${info.start} — ${info.end}` : "Loading", mode: "not_started",
-    snapshot_id: "No records loaded", disabled_tabs: ["workflows", "approvals", "learning"],
+    // Mirrors projection._disabled_tabs: a public-documents workspace holds no
+    // transactions, everything else only waits on the Learning workstream. A
+    // placeholder that disables more than the API does flickers tabs off then on.
+    snapshot_id: "No records loaded",
+    disabled_tabs: info?.kind === "public" ? ["workflows", "approvals", "learning"] : ["learning"],
     model: "Not configured", run_budget: { used: 0, total: 0 }, intake: true },
     agents: [], briefing: { generated_at: "—", text: "Upload records to get started. No investigation has run.", actions: [] },
     kpis: [], workflows: [], tasks: [], findings: [], approvals: [], decisions: [], playbooks: [], ablation: null,

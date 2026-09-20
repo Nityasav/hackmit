@@ -47,7 +47,7 @@ def test_full_upload_commit_persistence_and_provenance(client):
     ws = create(client)
     b = upload(client, ws)
     assert b["status"] == "ready_to_commit", b["issues"]
-    assert b["counts"]["new_records"] == 10
+    assert b["counts"]["new_records"] == 13
     saved = commit(client, ws, b)
     assert saved["snapshot_id"]
     cov = client.get(f"/api/workspaces/{ws}/coverage").json()
@@ -86,7 +86,7 @@ def test_duplicate_and_renamed_reordered_reimport_no_second_effect(client):
         files.append({**f, "name": "renamed-" + f["name"], "content": content})
     second = upload(client, ws, files)
     assert second["counts"]["new_records"] == 0
-    assert second["counts"]["duplicate_records"] == 10
+    assert second["counts"]["duplicate_records"] == 13
     assert commit(client, ws, second)["snapshot_id"] == first["snapshot_id"]
 
 

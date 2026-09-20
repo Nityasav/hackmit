@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
 import type { Approval } from "@/lib/types";
 import { AgentAvatar, Button, Card, CardTitle, EmptyState, PageHeader, Pill, Toast } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 export default function ApprovalsPage() {
   const { bundle, decideApproval } = useData();
@@ -23,6 +25,7 @@ export default function ApprovalsPage() {
   const pending = bundle.approvals.filter((a) => a.status === "pending");
   const decided = bundle.approvals.filter((a) => a.status !== "pending");
   const selected = bundle.approvals.find((a) => a.id === selectedId) ?? pending[0] ?? bundle.approvals[0];
+  if (bundle.workspace.intake) return <ReviewWorkspace section="actions" />;
 
   return (
     <TabGate tab="approvals">
@@ -60,6 +63,22 @@ export default function ApprovalsPage() {
               )}
             </CardTitle>
             <p className="mb-2 text-ink-dim">{selected.summary}</p>
+
+            {/* You may still approve this. The point is that nobody re-checked it first. */}
+            {!selected.verified && selected.status === "pending" && (
+              <div className="mb-2 border border-line bg-surface-2 px-2.5 py-2 text-[13px]">
+                <b>Not independently reviewed.</b> The Internal Auditor has not re-read the sources or redone the
+                math behind this proposal. Approving it is your judgement alone.
+              </div>
+            )}
+
+            {selected.finding_id && (
+              <div className="mb-2 text-[13px]">
+                <Link href="/findings" className="text-ink underline">
+                  Resolves {selected.finding_id} →
+                </Link>
+              </div>
+            )}
 
             {selected.journal && (
               <table className="w-full border-collapse">
@@ -102,7 +121,13 @@ export default function ApprovalsPage() {
             {selected.status === "pending" ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button primary onClick={() => decide(selected.id, "approved")}>
-                  {selected.kind === "payment" ? "Release (simulated)" : selected.kind === "evidence" ? "Mark provided" : "Approve"}
+                  {selected.kind === "payment"
+                    ? "Release (simulated)"
+                    : selected.kind === "evidence"
+                      ? "Mark provided"
+                      : selected.kind === "decision"
+                        ? "Record my decision"
+                        : "Approve"}
                 </Button>
                 <Button onClick={() => decide(selected.id, "rejected")}>Reject</Button>
                 <Button disabled title="Wired to the orchestrator in the live build">✦ Ask the agent</Button>

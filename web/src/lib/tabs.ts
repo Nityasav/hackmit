@@ -9,7 +9,7 @@ export interface TabDef {
 }
 
 export const TABS: TabDef[] = [
-  { id: "command", label: "Command center", href: "/", group: "Office of the CFO" },
+  { id: "command", label: "Records & overview", href: "/command", group: "Office of the CFO" },
   { id: "board", label: "Agent board", href: "/board", group: "Office of the CFO" },
   { id: "workflows", label: "Workflows", href: "/workflows", group: "Office of the CFO" },
   { id: "findings", label: "Findings", href: "/findings", group: "Work product" },

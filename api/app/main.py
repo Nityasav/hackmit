@@ -1,4 +1,4 @@
-"""SchoolTrace API.
+"""Sherlock API.
 
 Run: uv run uvicorn app.main:app --reload --port 8000
 Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -19,35 +19,53 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import store, ingestion
+from . import approvals, ingestion, projection, store
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
+from .reviews import router as review_router
+from . import security
+from .extraction import router as extraction_router
+from .updates import router as updates_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .extraction import interrupt_jobs
+    interrupt_jobs()
     yield
     if hasattr(app.state, "cfo_runtime"):
         await app.state.cfo_runtime.close()
 
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
+app.include_router(review_router)
+app.include_router(security.router)
+app.include_router(extraction_router)
+app.include_router(updates_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
-    if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/workspaces"):
+    try:
+        await security.guard(request)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    # /api/approvals is a write path into intake data too, now that a decision on an
+    # intake workspace is recorded rather than refused.
+    guarded = ("/api/workspaces", "/api/approvals")
+    if request.method in {"POST", "PATCH"} and request.url.path.startswith(guarded):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
     length = request.headers.get("content-length")
@@ -58,7 +76,10 @@ async def intake_write_guard(request: Request, call_next):
             oversized = True
         if oversized:
             return JSONResponse(status_code=413, content={"detail": {"code": "batch_limit", "message": "Request exceeds 51 MB including upload metadata"}})
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/api/health")
@@ -70,39 +91,30 @@ def health() -> dict[str, str]:
 def get_bundle(ws: WorkspaceId) -> Bundle:
     """Everything the dashboard renders, in one payload. The web app polls this."""
     try:
-        return store.get_bundle(ws) if ws in {"sandbox", "mit"} else Bundle.model_validate(ingestion.bundle(ws))
+        return projection.bundle(ws)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"unknown workspace {ws}")
 
 
 @app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
 def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. The only path that may apply a change to a scenario."""
-    if body.workspace not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Intake workspaces do not have an agent approval runtime yet")
-    try:
-        return store.decide_approval(body.workspace, approval_id, body.decision)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    """Human approval. The only path that may apply a change to a scenario.
 
-
-@app.post("/api/demo/{action}", response_model=Bundle)
-def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month.
-
-    TODO(workflows): drive these from app/workflows/scenarios.py.
+    Agents propose; nothing they can call reaches this endpoint.
     """
-    if ws not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Reset is only available for demo workspaces")
-    if action == "reset":
-        store.reset(ws)
-        return store.get_bundle(ws)
-    raise HTTPException(status_code=501, detail=f"demo action '{action}' not implemented yet")
+    if body.workspace in projection.RECORDED:
+        try:
+            return store.decide_approval(body.workspace, approval_id, body.decision)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    approvals.decide(body.workspace, approval_id, body.decision)
+    return projection.bundle(body.workspace)
 
 
 @app.get("/api/workspaces")
-def workspaces():
-    return ingestion.list_workspaces()
+def workspaces(request: Request):
+    user = request.state.user
+    return [ws for ws in ingestion.list_workspaces() if user["role"] == "admin" or ws["id"] in user["workspaces"]]
 
 
 @app.post("/api/workspaces", status_code=201)
