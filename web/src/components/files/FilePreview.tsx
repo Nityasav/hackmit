@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 import { Pill } from "@/components/ui";
 import { API_URL, intakeApi } from "@/lib/data";
@@ -46,11 +47,27 @@ export function FilePreview({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [detail, setDetail] = useState<{ id: string; source: SourceDetail | null; error: string } | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     const node = ref.current;
     if (node && !node.open) node.showModal();
   }, []);
+
+  /**
+   * Plays the exit before unmounting.
+   *
+   * The parent drops this component the moment it closes, so an exit animation
+   * has to finish first: `leaving` runs it, and onClose is called after. The
+   * timeout matches the transition below, and prefers-reduced-motion collapses
+   * the transition to nothing, so the wait is the only part left — short enough
+   * not to read as lag.
+   */
+  const requestClose = useCallback(() => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(onClose, 160);
+  }, [leaving, onClose]);
 
   // Documents are not parsed into lines, so only a committed source is read.
   useEffect(() => {
@@ -74,11 +91,20 @@ export function FilePreview({
   return (
     <dialog
       ref={ref}
-      onCancel={onClose}
-      onClick={(e) => { if (e.target === ref.current) onClose(); }}
+      onCancel={(e) => { e.preventDefault(); requestClose(); }}
+      onClick={(e) => { if (e.target === ref.current) requestClose(); }}
       aria-label={file.name}
-      className="m-auto max-h-[86vh] w-[min(940px,95vw)] overflow-auto border border-line bg-surface p-6 shadow-xl backdrop:bg-ink/30"
+      // The dialog is only the layer: it carries the backdrop and centres the
+      // panel, so the panel itself is free to move without fighting the
+      // element's own top-layer placement.
+      className="fixed inset-0 m-0 h-full max-h-none w-full max-w-none bg-transparent p-4 backdrop:animate-fade-in backdrop:bg-ink/30"
     >
+      <motion.div
+        initial={{ opacity: 0, y: -10, scale: 0.97 }}
+        animate={leaving ? { opacity: 0, y: -6, scale: 0.98 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: leaving ? 0.16 : 0.2, ease: "easeOut" }}
+        className="mx-auto max-h-[86vh] w-[min(940px,95vw)] overflow-auto border border-line bg-surface p-6 shadow-xl"
+      >
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="truncate text-[19px] font-semibold">{file.name}</h2>
@@ -98,7 +124,7 @@ export function FilePreview({
           >
             Download
           </a>
-          <button type="button" onClick={onClose} className="border border-line px-3 py-2 text-[13px] hover:bg-surface-2">
+          <button type="button" onClick={requestClose} className="border border-line px-3 py-2 text-[13px] hover:bg-surface-2">
             Close
           </button>
         </div>
@@ -166,6 +192,7 @@ export function FilePreview({
           </ul>
         </section>
       )}
+      </motion.div>
     </dialog>
   );
 }
