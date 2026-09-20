@@ -52,6 +52,20 @@ def figures(text: str) -> set[Decimal]:
     return found
 
 
+def money_amounts(text: str) -> set[int]:
+    """Every money-shaped amount in `text`, in integer cents.
+
+    Deliberately not `figures`. That one keeps only values distinctive enough that a
+    coincidental match is implausible, which is right when scanning free prose for a
+    leaked number but wrong here: a rubric criterion says "USD 150.00", and dropping
+    it for being small and round would report a blocked criterion as an ordinary
+    miss. Two decimal places is the money signal, and it also keeps dates out --
+    2026-09-11 has no such group.
+    """
+    return {int(Decimal(raw.replace(",", "")) * 100)
+            for raw in re.findall(r"\d[\d,]*\.\d{2}\b", text)}
+
+
 def proper_names(text: str) -> set[str]:
     r"""Multi-word proper nouns only.
 
@@ -150,9 +164,11 @@ def reachable_amounts(ws: str) -> set[int]:
             if page["next_offset"] is None:
                 break
             offset = page["next_offset"]
-    try:
-        toolbox.compute_ledger_totals()
-    except Exception:
-        # A pack with no ledger role has no import-control total to reach.
-        pass
+    for calculation in (toolbox.compute_ledger_totals, toolbox.compute_money_in_checks):
+        try:
+            calculation()
+        except Exception:
+            # A pack carrying none of a calculation's roles, or on another accounting
+            # profile, simply has no amounts to reach through it.
+            pass
     return {int(a) for a in toolbox.allowed_amounts}

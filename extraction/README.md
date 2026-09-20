@@ -7,33 +7,63 @@ calculate financial results, approve changes, or convert an extraction into
 an audit conclusion (spec.md §5) — that stays deterministic backend code and
 human review, same as everywhere else in this project.
 
-**Nothing in this directory has been executed against the real model.** Every
-other agent in this repo was proven against a live API call before being
-called done; this one couldn't be, for a concrete, verified reason below —
-not a guess. Treat this as scaffolding to pick up on a machine that clears
-the hardware/software bar, not as tested code.
+## Status
 
-## What was actually verified, and where it stopped
+The model has been run, benchmarked, and wired into the running application.
+`serve.py` holds it behind the loopback HTTP contract `api/app/extraction.py`
+calls, so uploading a PDF in the Document lab fills the review form instead of
+leaving it blank.
 
-Checked live, on an Apple M5 / 24GB / macOS sandbox, 2026-09-19:
+### Measured results
 
-- `torch` 2.8.0 with the MPS backend works (`torch.backends.mps.is_available() == True`).
-- `numind/NuExtract3` (the base model — see "Model" below) is **not gated**, Apache 2.0,
-  ~9.34GB total (mostly one 9.08GB `model.safetensors`). Downloads fine.
-- **Blocker:** its architecture (`qwen3_5`) is not recognized by any stable
-  `transformers` release — 4.57.6 (latest on PyPI) fails with
-  `KeyError: 'qwen3_5'`, and there is no newer pre-release wheel either.
-- The only place `qwen3_5` support exists is the `transformers` GitHub main
-  branch — which now requires **Python >=3.10**. The sandbox this was
-  attempted in only had system Python 3.9.6 available, with no Homebrew,
-  pyenv, or `uv` to install a newer one, so loading the model itself could not
-  be attempted.
+Base model, no fine-tuning. Scored by `scripts/evaluate.py` with the current
+normalizers; re-derivable for free from the saved predictions, because the
+benchmark writes raw model output to `--out` and scoring is pure Python.
 
-**Concrete requirement for whoever runs this next: Python 3.10+ (3.11/3.12
-recommended), then `pip install git+https://github.com/huggingface/transformers.git`**
-— a stable-release install will not recognize the architecture. Re-check this
-before assuming it's still true; `transformers` ships fast and `qwen3_5`
-support may land in a stable release by the time you read this.
+| Set | Docs | Precision | Recall | F1 |
+|---|---|---|---|---|
+| Northwind invoices (invoice-sandbox-benchmark) | 70 | 1.0 | 1.0 | 1.0 |
+| APEX contract attorneys (hand-labeled) | 21 | 1.0 | 0.889 | 0.941 |
+| Synthetic grant agreements | 9 | 1.0 | 1.0 | 1.0 |
+| Synthetic service records | 8 | 1.0 | 1.0 | 1.0 |
+| **Combined** | **108** | **1.0** | **0.970** | **0.985** |
+
+Across all 108 documents: `citation_accuracy` 1.0, `unsupported_extraction_rate`
+0.0, `abstention_quality` 1.0 — it never returned a value it could not cite,
+and never invented one for an absent field. Latency 30–40s per document on
+Apple M5 / MPS.
+
+The APEX recall gap is a labeling convention, not a model error. All 21 misses
+are `purchase_order_reference` on documents that print a matter number and no
+PO. Scored against `manifest_apex_po_absent` (a matter number is not a PO) the
+same predictions give F1 1.0 with 63 correct abstentions; against
+`manifest_apex_po_matter` they give 0.941. The model abstained either way.
+Refusing to promote a matter number into a purchase-order reference is the
+answer an AP reviewer wants.
+
+These numbers were measured on the **image** pipeline (`benchmark_base_model.py`
+renders pages to PNG). `serve.py` runs the model on **text**, because the API's
+payload carries page text only. That path is verified to work and to cite
+correctly, but it has not been benchmarked at this scale — do not quote the
+table above as evidence for it.
+
+### Environment
+
+Python 3.14, `torch` 2.14.0 + `torchvision` (the processor pulls in a video
+processor that requires it), and `transformers` from git — 5.18.0.dev0 resolves
+`qwen3_5`; older stable releases fail with `KeyError: 'qwen3_5'`. Model weights
+are ~9.3GB, Apache 2.0, not gated.
+
+    python3.14 -m venv .venv
+    .venv/bin/pip install torch torchvision fastapi uvicorn httpx pillow pypdfium2 accelerate
+    .venv/bin/pip install git+https://github.com/huggingface/transformers.git
+    .venv/bin/python serve.py --port 8765
+
+Then register it with the API — see the header of `serve.py` and
+`SCHOOLTRACE_EXTRACTORS` in `api/app/extraction.py::model_config`. Registering
+makes the model selectable per document; it does **not** make it the active
+default, which requires passing the promotion gate in `POLICY` (≥20 documents,
+≥3 groups, ≥100 labeled fields, paired against a baseline).
 
 ## Model
 
