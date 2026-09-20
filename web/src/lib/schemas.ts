@@ -127,8 +127,20 @@ const decisionSchema = z.object({
   how: z.array(z.object({ tool: z.string(), input: z.string(), output: z.string() })),
   why: z.string(),
   outcome: z.string(),
+  memory_checks: z.array(z.object({ text: z.string(), ok: z.boolean() })),
 });
 
+const playbookSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  source: z.string(),
+  proposed_by: agentIdSchema,
+  // Sent as a string by the projection; kept a string rather than coerced, so
+  // a shape change surfaces here instead of rendering as NaN.
+  uses: z.string(),
+  status: z.enum(["active", "retired"]),
+  status_note: z.string(),
+});
 
 export const bundleSchema = z.object({
   contract_version: z.number().optional(),
@@ -138,6 +150,7 @@ export const bundleSchema = z.object({
   tasks: z.array(taskSchema),
   findings: z.array(findingSchema),
   decisions: z.array(decisionSchema),
+  playbooks: z.array(playbookSchema),
 });
 
 export const starterPackSchema = z.object({

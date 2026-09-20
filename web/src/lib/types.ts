@@ -112,6 +112,28 @@ export interface Decision {
   how: { tool: string; input: string; output: string }[];
   why: string;
   outcome: string;
+  /** Precedent this run weighed before deciding. `ok: false` is a precedent
+   *  the agent looked at and declined — the evidence that memory is re-checked
+   *  rather than replayed, so it is shown, not filtered out. */
+  memory_checks: { text: string; ok: boolean }[];
+}
+
+/**
+ * One piece of reviewed precedent: a decision a person made, written down so
+ * the next run has to reckon with it.
+ *
+ * Only `approvals.decide()` creates these. An agent can read precedent and
+ * cannot write it, which is what stops a run promoting its own conclusion
+ * into guidance for the next one.
+ */
+export interface Playbook {
+  id: string;
+  title: string;
+  source: string;
+  proposed_by: AgentId;
+  uses: string;
+  status: "active" | "retired";
+  status_note: string;
 }
 
 export interface Bundle {
@@ -122,6 +144,7 @@ export interface Bundle {
   tasks: Task[];
   findings: Finding[];
   decisions: Decision[];
+  playbooks: Playbook[];
 }
 
 export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice"
