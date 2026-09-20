@@ -56,7 +56,7 @@ def reviewed_workspace(client):
     return ws
 
 
-def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 service 2026-09-01 currency USD", role="invoice"):
+def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 dated 2026-09-01 due 2026-10-01 currency USD", role="invoice"):
     response = client.post(path(ws) + "/documents", files={"file": ("invoice.txt", text.encode(), "text/plain")}, data={"role": role})
     assert response.status_code == 201, response.text
     return response.json()
@@ -65,7 +65,8 @@ def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 service 202
 def output(doc):
     record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None} for key in ex.schema(doc["role"])}
     text = doc["pages"][0]["text"]
-    for key, value in {"invoice_number": "A-101", "vendor_id": "V-1", "amount": "1200.00", "service_date": "2026-09-01", "currency": "USD"}.items():
+    for key, value in {"invoice_number": "A-101", "vendor_id": "V-1", "amount": "1200.00",
+                             "invoice_date": "2026-09-01", "due_date": "2026-10-01", "currency": "USD"}.items():
         if key in record and value in text:
             start = text.index(value)
             record[key] = {"status": "present", "value": value, "page": 1, "start": start, "end": start + len(value)}
@@ -171,7 +172,10 @@ def test_staging_requires_review_defaults_to_evidence_and_no_auto_commit(client)
     again = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).json()
     assert again["batch_id"] == staged["batch_id"]
     batch = ingestion.get_batch(ws, staged["batch_id"])
-    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "document"
+    # Staged under what the document IS, not the catch-all. An agent may read
+    # only roles it declared it needs, so everything landing in `document` meant
+    # a person checked every value and no agent could then read any of it.
+    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "invoice"
     assert client.get(f"/api/workspaces/{ws}/updates").json()["total_records"] == 0
     financial = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"], "include_records": True}).json()
     batch = ingestion.get_batch(ws, financial["batch_id"])
@@ -252,13 +256,20 @@ def test_failed_inference_and_wrong_artifact_are_persisted(client, monkeypatch):
 
 
 def test_score_penalizes_wrong_missing_and_extra_records():
-    doc = {"role": "invoice", "pages": [{"text": "A-101 V-1 1200.00 2026-09-01 USD"}]}
+    doc = {"role": "invoice", "pages": [{"text": "A-101 V-1 1200.00 2026-09-01 2026-10-01 USD"}]}
     gold = output(doc)
     predicted = copy.deepcopy(gold); predicted["records"].append(copy.deepcopy(gold["records"][0]))
+    # Derived, not written down: the count is however many fields the fixture text
+    # actually supplies, so widening the invoice schema does not fail this test for a
+    # reason that has nothing to do with scoring.
+    present = sum(1 for o in gold["records"][0].values() if o["status"] == "present")
+    assert present, "the fixture must extract something for this to measure"
+
     counts = ex.score(gold, predicted)
-    assert counts["tp"] == 5 and counts["fp"] == 5
+    # The duplicate record is entirely false positives; the original is entirely true.
+    assert counts["tp"] == present and counts["fp"] == present
     counts = ex.score(gold, None)
-    assert counts["fn"] == 5 and counts["abstained"] == 0
+    assert counts["fn"] == present and counts["abstained"] == 0
 
 
 def test_actual_png_ocr_and_pdf_render(client):
@@ -300,10 +311,13 @@ def test_viewer_cannot_review_and_cross_workspace_denied(client, monkeypatch):
 def test_incremental_updates_preserve_previous_records(client):
     ws = reviewed_workspace(client)
     before = client.get(f"/api/workspaces/{ws}/updates").json()
-    assert before["total_records"] == 13
+    # What matters is that a later upload *adds* to what is there, not the size of the
+    # starting pack, which moves whenever the sample records change.
+    assert before["total_records"] > 0
     commit_files(client, ws, [withheld_service_record()])
     after = client.get(f"/api/workspaces/{ws}/updates").json()
-    assert after["total_records"] == 14 and len(after["added_or_revised"]) == 1
+    assert after["total_records"] == before["total_records"] + 1
+    assert len(after["added_or_revised"]) == 1
     assert not after["rules_scan_current"]
     assert client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": before["snapshot_id"]}).status_code == 409
     scanned = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": after["snapshot_id"]})
@@ -326,7 +340,7 @@ def test_document_revision_supersedes_evidence_not_history(client):
     staged = client.post(path(ws) + "/stage", json={"correction_id": label["id"]}).json()
     batch = ingestion.get_batch(ws, staged["batch_id"])
     ingestion.commit(ws, batch["id"], ingestion.CommitRequest(expected_version=batch["version"], idempotency_key="v1"))
-    response = client.post(path(ws) + "/documents", files={"file": ("revised.txt", b"Revised A-101 V-1 1200.00 2026-09-01 USD")}, data={"role": "invoice", "replaces_id": first["id"]})
+    response = client.post(path(ws) + "/documents", files={"file": ("revised.txt", b"Revised A-101 V-1 1200.00 2026-09-01 2026-10-01 USD")}, data={"role": "invoice", "replaces_id": first["id"]})
     assert response.status_code == 201
     second = response.json(); assert second["version"] == 2 and second["lineage_id"] == first["lineage_id"]
     revised = correction(client, ws, second)
@@ -360,8 +374,8 @@ def test_benchmark_job_persistence_and_restart(client, monkeypatch):
     ("amount", "$1,200.50", "USD", "1200.50"),
     ("amount", "$1,200.50", None, "$1,200.50"),
     ("amount", "1,20.50", "USD", "1,20.50"),
-    ("service_date", "September 1, 2026", None, "2026-09-01"),
-    ("service_date", "09/01/26", None, "09/01/26"),
+    ("invoice_date", "September 1, 2026", None, "2026-09-01"),
+    ("invoice_date", "09/01/26", None, "09/01/26"),
 ])
 def test_conservative_normalization(key, value, currency, expected):
     assert ex.normalize_for_intake(key, value, currency) == expected
@@ -390,22 +404,47 @@ def test_analyst_cannot_approve_or_export_labels(client, monkeypatch):
     assert client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).status_code == 403
 
 
-def test_incremental_five_agent_scan_is_explicit_and_idempotent(client, monkeypatch):
-    from types import SimpleNamespace
+def test_a_live_rescan_is_explicit_and_reuses_a_run_on_the_same_snapshot(client, monkeypatch):
+    """A paid rescan happens because someone asked, and only once per snapshot.
+
+    The evidence has not changed between two clicks, so neither would the answer;
+    repeating the run would only spend money to reprint it.
+    """
     from app import updates
     ws = reviewed_workspace(client)
     snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
-    requests = []
-    def start(request):
-        requests.append(request)
-        return SimpleNamespace(id="synthetic-five-agent-test")
-    fake = SimpleNamespace(start=start, repository=SimpleNamespace(get=lambda ident: SimpleNamespace(status="working")))
-    monkeypatch.setattr(updates, "runtime", lambda request: fake)
-    first = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    second = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    assert first.status_code == 200 and second.json()["reused"]
-    assert len(requests) == 1 and requests[0].workflow == "five_agent" and requests[0].mode == "live"
-    assert snapshot in requests[0].objective
+
+    started = []
+
+    async def fake_run(workspace, objective, **kwargs):
+        started.append((workspace, objective))
+        return {"thread_id": "thread-test", "status": "completed",
+                "spend": {"spent_cents": 0, "cap_cents": 1000, "remaining_cents": 1000}}
+
+    import app.graph as graph_module
+    monkeypatch.setattr(graph_module, "run_investigation", fake_run)
+
+    first = client.post(f"/api/workspaces/{ws}/updates/scan",
+                        json={"snapshot_id": snapshot, "live": True})
+    second = client.post(f"/api/workspaces/{ws}/updates/scan",
+                         json={"snapshot_id": snapshot, "live": True})
+
+    assert first.status_code == 200, first.text
+    assert second.json()["reused"] is True
+    assert len(started) == 1, "a second click must not start a second paid run"
+    assert snapshot in started[0][1]
+
+
+def test_a_rules_only_rescan_costs_nothing_and_starts_no_agent(client):
+    ws = reviewed_workspace(client)
+    snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
+
+    response = client.post(f"/api/workspaces/{ws}/updates/scan",
+                           json={"snapshot_id": snapshot, "live": False})
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] is None
+    assert response.json()["scan_id"]
 
 
 def test_local_runner_fingerprints_actual_artifacts(tmp_path, monkeypatch):
@@ -434,3 +473,194 @@ def test_local_runner_rejects_browser_and_wrong_identity():
             "fields": ex.schema("invoice"), "pages": [{"page": 1, "text": "test", "method": "native", "warnings": []}],
             "output_schema": {}, "instruction": "untrusted"}
     assert client.post("/extract", json=body).status_code == 409
+
+
+def test_each_document_kind_is_staged_under_a_role_an_agent_can_read():
+    """A document staged under a role no agent reads is preserved, hashed and
+    citable by a person, and invisible to every agent — so extracting it and
+    checking its values buys nothing, silently. Everything used to land in
+    `document`, which nothing reads.
+    """
+    from app import roles
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    readable = {role for agent in AGENTS.values() for role in agent.roles}
+
+    for kind, staged_as in EVIDENCE_ROLE.items():
+        assert staged_as in roles.DOCUMENT_ROLES, (
+            f"{kind!r} stages as {staged_as!r}, which cannot hold a document at all")
+        if staged_as == "document":
+            continue  # the catch-all; the Document lab says nobody reads it
+        readers = sorted(a.id for a in AGENTS.values() if staged_as in a.roles)
+        assert readers, f"{kind!r} stages as {staged_as!r}, which no agent reads"
+
+
+def test_an_invoice_document_reaches_the_agent_whose_charter_covers_it():
+    """The mapping is only worth anything if it lands somewhere specific."""
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert "invoice" in AGENTS["A1"].roles, "Accounts Payable must read invoice documents"
+    assert "invoice" in AGENTS["D1"].roles, "Audit traces a payment to its source document"
+    assert EVIDENCE_ROLE["invoice"] == "invoice"
+    # And it does not leak to agents whose charter does not cover it.
+    assert "invoice" not in AGENTS["C1"].roles, "Budgeting has no business reading invoices"
+
+
+def test_a_grant_agreement_is_staged_as_the_contract_it_is():
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert EVIDENCE_ROLE["grants"] == "contract"
+    assert "contract" in AGENTS["B2"].roles, "Accruals reads the terms behind a commitment"
+
+
+def _invoice(client, ws, number, amount):
+    """One checked invoice document, ready to stage."""
+    text = (f"Invoice {number} vendor V-1 amount {amount} dated 2026-09-01 "
+            "due 2026-10-01 currency USD")
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": (f"{number}.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": number, "vendor_id": "V-1", "amount": amount,
+                       "invoice_date": "2026-09-01", "due_date": "2026-10-01",
+                       "currency": "USD"}.items():
+        if key in record and value in page:
+            start = page.index(value)
+            record[key] = {"status": "present", "value": value, "page": 1,
+                           "start": start, "end": start + len(value)}
+    return client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "vendor-template-a", "training_authorized": True,
+        "authorization_note": "Synthetic fixture owned by test",
+        "note": "Compared against original", "text_sha256": doc["text_sha256"]}).json()
+
+
+def test_several_invoices_combine_into_one_register(client):
+    """Staging one at a time produced one import per document, so twenty
+    invoices meant twenty batches holding a single row each. They belong in one
+    spreadsheet a person reviews and commits once."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"),
+                   _invoice(client, ws, "A-102", "850.00"),
+                   _invoice(client, ws, "A-103", "430.00")]
+
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True})
+    assert staged.status_code == 201, staged.text
+    assert staged.json()["combined"] == 3 and staged.json()["rows"] == 3
+
+    batch = ingestion.get_batch(ws, staged.json()["batch_id"])
+    csvs = [f for f in batch["files"] if f["name"].endswith(".csv")]
+    assert len(csvs) == 1, "three invoices must produce one register, not three"
+    assert csvs[0]["row_count"] == 3
+    # Every document still contributes its own evidence, because the page
+    # citations belong to the PDF they came from.
+    assert len([f for f in batch["files"] if f["name"].endswith(".txt")]) == 3
+
+
+def test_combined_rows_keep_a_distinct_identity_per_document(client):
+    """Rows gathered from several documents must not collide on record_id, or
+    the register silently holds fewer invoices than were uploaded."""
+    ws = workspace(client)
+    corrections = [_invoice(client, ws, "A-101", "1200.00"), _invoice(client, ws, "A-102", "850.00")]
+    staged = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [c["id"] for c in corrections], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    keys = [row["key"] for row in register["preview"]]
+    assert len(set(keys)) == len(keys) == 2, keys
+
+
+def test_a_set_mixing_document_kinds_is_refused(client):
+    """Each kind extracts different columns, so one register cannot hold two of
+    them without inventing values for the fields the other lacks."""
+    ws = workspace(client)
+    invoice = _invoice(client, ws, "A-101", "1200.00")
+    policy_doc = upload(client, ws, text="Expenses over 500.00 need a second approver.", role="policy")
+    policy_correction = correction(client, ws, policy_doc)
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [invoice["id"], policy_correction["id"]], "include_records": True})
+
+    assert response.status_code == 422
+    assert "one kind of document at a time" in response.json()["detail"]
+
+
+def test_a_superseded_correction_cannot_be_combined(client):
+    """The same guard the single path applies: values nobody checked against
+    the text they now describe must not reach an import."""
+    ws = workspace(client)
+    first = _invoice(client, ws, "A-101", "1200.00")
+    doc_id = first["document_id"]
+    current = next(d for d in client.get(path(ws)).json()["documents"] if d["id"] == doc_id)
+    client.post(path(ws) + f"/documents/{doc_id}/transcription", json={
+        "expected_text_sha256": current["text_sha256"],
+        "pages": ["Invoice A-101 vendor V-1 amount 9999.00 dated 2026-09-01"],
+        "note": "Re-read the original"})
+
+    response = client.post(path(ws) + "/stage-set", json={
+        "correction_ids": [first["id"]], "include_records": True})
+
+    assert response.status_code == 409
+
+
+def test_a_field_set_mismatch_names_the_fields(client):
+    """"Unknown fields are forbidden" gave no way to tell a record saved under
+    an older vocabulary from a typo in the raw JSON. The commonest cause is the
+    former: a document type's field set changes and stored predictions keep the
+    shape they were made with."""
+    ws = workspace(client)
+    doc = upload(client, ws)
+    out = output(doc)
+    out["records"][0].pop(next(iter(out["records"][0])))      # a field that went away
+    out["records"][0]["student_ref"] = {"status": "missing", "value": None,
+                                        "page": None, "start": None, "end": None}
+
+    response = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": out, "group": "g", "training_authorized": False,
+        "authorization_note": "synthetic", "note": "n", "text_sha256": doc["text_sha256"]})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "student_ref" in detail, detail
+    assert "missing:" in detail and "older field set" in detail
+
+
+def test_a_dollar_amount_normalises_against_the_workspace_currency(client):
+    """An invoice that prints "$3,200.00" and names no currency is the ordinary
+    case. Stripping the symbol only when the extraction happened to capture a
+    currency field sent the amount to intake unparsed, and held the whole
+    import for review over a dollar sign in a workspace that keeps its books
+    in dollars."""
+    ws = workspace(client)
+    text = "Invoice A-900 vendor V-1 amount $3,200.00 dated 2026-09-01 due 2026-10-01"
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": ("a900.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": "A-900", "vendor_id": "V-1",
+                       "amount": "$3,200.00", "invoice_date": "2026-09-01",
+                       "due_date": "2026-10-01"}.items():
+        start = page.index(value)
+        record[key] = {"status": "present", "value": value, "page": 1,
+                       "start": start, "end": start + len(value)}
+    correction = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "g", "training_authorized": False, "authorization_note": "synthetic",
+        "note": "n", "text_sha256": doc["text_sha256"]}).json()
+
+    staged = client.post(path(ws) + "/stage",
+                         json={"correction_id": correction["id"], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    assert register["preview"][0]["payload"]["amount_cents"] == 320000
+    assert not [i for i in batch["issues"] if i["code"] == "invalid_value"], batch["issues"]

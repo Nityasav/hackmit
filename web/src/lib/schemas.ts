@@ -22,7 +22,16 @@ function optional<T extends z.ZodTypeAny>(schema: T) {
   return schema.nullish().transform((v) => v ?? undefined);
 }
 
-const agentIdSchema = z.enum(["cfo", "ap", "py", "gr", "au"]);
+// Mirrors `AgentId` in api/app/models.py. A bundle naming an agent this does not
+// list fails to parse and the dashboard renders an error, so the two move together.
+const agentIdSchema = z.enum([
+  "orchestrator",
+  "A", "B", "C", "D",
+  "A1", "A2", "A3", "A4",
+  "B1", "B2", "B3", "B4",
+  "C1", "C2", "C3", "C4", "C5",
+  "D1", "D2", "D3", "D4",
+]);
 
 // As wide as TabId in api/app/models.py. See the note on TabId in types.ts:
 // narrowing this below what the API emits makes whole bundles fail to parse.
@@ -151,6 +160,25 @@ const playbookSchema = z.object({
   status_note: z.string(),
 });
 
+const approvalSchema = z.object({
+  id: z.string(),
+  agent: agentIdSchema,
+  kind: z.enum(["journal", "payment", "playbook", "evidence", "decision"]),
+  title: z.string(),
+  summary: z.string(),
+  verified: z.boolean(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  journal: z.array(z.object({
+    account: z.string(), fund: z.string(),
+    debit_cents: z.number(), credit_cents: z.number(),
+  })).nullable(),
+  effects: z.array(z.object({
+    label: z.string(), value: z.string(),
+    tone: optional(z.enum(["good", "neutral"])),
+  })).nullable(),
+  finding_id: optional(z.string()),
+});
+
 export const bundleSchema = z.object({
   contract_version: z.number().optional(),
   workspace: workspaceSchema,
@@ -160,6 +188,9 @@ export const bundleSchema = z.object({
   findings: z.array(findingSchema),
   decisions: z.array(decisionSchema),
   playbooks: z.array(playbookSchema),
+  // Dropped from this schema, the whole approvals list was silently stripped
+  // and nothing in the UI could offer a person the decision an agent escalated.
+  approvals: z.array(approvalSchema),
 });
 
 /**

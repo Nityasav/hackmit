@@ -20,10 +20,9 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import approvals, ingestion, projection
-from .agents import cfo
+from . import approvals, ingestion, projection, registers, roles
+from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
-from .cfo.api import router as cfo_router
 from .reviews import router as review_router
 from . import security
 from .extraction import router as extraction_router
@@ -40,16 +39,14 @@ async def lifespan(app: FastAPI):
     from .extraction import interrupt_jobs
     interrupt_jobs()
     yield
-    if hasattr(app.state, "cfo_runtime"):
-        await app.state.cfo_runtime.close()
 
 
 app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
-app.include_router(cfo_router)
 app.include_router(review_router)
 app.include_router(security.router)
 app.include_router(extraction_router)
 app.include_router(updates_router)
+app.include_router(agents_api.router)
 
 # A hosted web app is a different origin from a hosted API, so the browser blocks every call
 # until that origin is named here. Local development keeps working with no configuration.
@@ -174,6 +171,17 @@ def import_detail(ws: str, bid: str):
     return ingestion.get_batch(ws, bid)
 
 
+@app.post("/api/workspaces/{ws}/imports/{bid}/values")
+def supply_values(ws: str, bid: str, body: ingestion.ValueSupply):
+    """Fill cells a source left empty, before the import is committed.
+
+    Only a blank is filled. A cell the source already states is refused rather
+    than overwritten: supplying what a document omitted and rewriting what it
+    says are different acts, and only the first belongs in a review screen.
+    """
+    return ingestion.supply_values(ws, bid, body)
+
+
 @app.patch("/api/workspaces/{ws}/imports/{bid}/mapping")
 def mapping(ws: str, bid: str, body: ingestion.MappingUpdate):
     return ingestion.update_mapping(ws, bid, body)
@@ -184,9 +192,96 @@ def commit(ws: str, bid: str, body: ingestion.CommitRequest):
     return ingestion.commit(ws, bid, body)
 
 
+@app.post("/api/workspaces/{ws}/sources/detect")
+def detect_saved_sources(ws: str):
+    """Find committed documents that are really structured records, and stage them."""
+    return ingestion.detect_saved_sources(ws)
+
+
+@app.get("/api/roles")
+def record_roles():
+    """The record vocabulary, so the browser can detect a file's type before upload.
+
+    Served rather than restated in TypeScript: the frontend detector used to carry its
+    own copy of every role's columns, which meant adding a role silently stopped it
+    being detected. One definition, `app/roles.py`, and both sides read it.
+    """
+    return {
+        "roles": [{"id": role, "label": roles.LABELS[role], "required": fields,
+                   "key": list(roles.KEY_FIELDS[role])}
+                  for role, fields in roles.FIELDS.items()],
+        "documents": [{"id": role, "label": roles.LABELS[role]}
+                      for role in sorted(roles.DOCUMENT_ROLES)],
+        "optional": roles.OPTIONAL_FIELDS,
+    }
+
+
 @app.get("/api/workspaces/{ws}/coverage")
 def coverage(ws: str):
     return ingestion.coverage(ws)
+
+
+@app.get("/api/workspaces/{ws}/requirements")
+def workspace_requirements(ws: str):
+    """What the agents need from this workspace, and what is still missing.
+
+    Books renders this list directly, so an agent can never depend on data nobody
+    was asked to supply.
+    """
+    return ingestion.coverage(ws)
+
+
+@app.patch("/api/workspaces/{ws}/settings")
+def settings(ws: str, body: ingestion.SettingsUpdate):
+    """Answer the requirements that are a single value rather than a file."""
+    return ingestion.update_settings(ws, body)
+
+
+@app.get("/api/workspaces/{ws}/record-dates")
+def record_dates(ws: str):
+    """Which dates each role carries, and which one is used unless you say.
+
+    Needed before a register can be asked for: a role carrying several dates
+    refuses to guess, so the caller has to be able to offer the choice rather
+    than discover it from an error.
+    """
+    ingestion.workspace_config(ws)
+    return {role: {"dates": registers.date_fields(role),
+                   "default": registers.PRIMARY_DATE.get(role)}
+            for role in roles.FIELDS if registers.date_fields(role)}
+
+
+@app.get("/api/workspaces/{ws}/records")
+def records(ws: str, role: str, field: str | None = None,
+            start: str | None = None, end: str | None = None,
+            limit: int = Query(default=200, ge=1, le=1000)):
+    """Committed records of one role, narrowed to a date range.
+
+    `field` names which date to filter on. Most roles carry more than one and
+    they mean different things — invoiced, due and paid are three different
+    questions — so the answer always reports the field it used rather than
+    leaving the reader to assume.
+    """
+    supplied = ingestion.financial_records(ws)["records"]
+    try:
+        view = registers.select(supplied, role, field=field, start=start, end=end)
+    except ValueError as exc:
+        ingestion.fail("invalid_filter", str(exc), 422)
+    return {**view, "records": view["records"][:limit], "truncated": view["count"] > limit}
+
+
+@app.get("/api/workspaces/{ws}/records.csv")
+def records_csv(ws: str, role: str, field: str | None = None,
+                start: str | None = None, end: str | None = None):
+    """The same register as a spreadsheet, stating on its face what it holds."""
+    supplied = ingestion.financial_records(ws)["records"]
+    try:
+        view = registers.select(supplied, role, field=field, start=start, end=end)
+    except ValueError as exc:
+        ingestion.fail("invalid_filter", str(exc), 422)
+    return Response(
+        registers.to_csv(view), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{registers.filename(view)}"'})
 
 
 @app.get("/api/workspaces/{ws}/sources/{sid}")
@@ -222,14 +317,3 @@ def evidence_request(ws: str, body: ingestion.EvidenceCreate):
 @app.post("/api/workspaces/{ws}/evidence-requests/{rid}/responses")
 def evidence_response(ws: str, rid: str, body: ingestion.EvidenceResponse):
     return ingestion.respond(ws, rid, body)
-
-
-@app.get("/api/workspaces/{ws}/agent-runs")
-def agent_runs(ws: str):
-    return cfo.list_runs(ws)
-
-
-@app.post("/api/workspaces/{ws}/agent-runs", status_code=201)
-async def run_snapshot_agent(ws: str, body: cfo.RunRequest):
-    """Run an allowlisted read-only agent against the current immutable snapshot."""
-    return await run_in_threadpool(cfo.run, ws, body)

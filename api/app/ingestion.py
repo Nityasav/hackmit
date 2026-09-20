@@ -17,39 +17,20 @@ from typing import Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 
-from . import db
+from . import db, requirements, roles
 from .accounting.money import parse_minor_units as money
+from .roles import (COUNT_FIELDS, DATE_FIELDS, DOCUMENT_ROLES, FIELDS, MONEY_FIELDS,
+                    OPTIONAL_FIELDS, Role)
 
 MAX_FILE = 10 * 1024 * 1024
 MAX_BATCH = 50 * 1024 * 1024
-MAX_FILES = 20
+# The vocabulary has 21 structured roles and 3 document roles, so a complete period is
+# 24 files at most. A cap below that would make "upload this period" impossible in one
+# batch and force people to split an import for no reason. The byte limits, not this
+# one, are what actually bound the work.
+MAX_FILES = 30
 MAX_ROWS = 50_000
-PROFILE = "US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
-Role = Literal["chart", "opening", "ledger", "payroll", "grants", "budget", "invoice", "fees", "collections", "deposits", "sponsorships", "service", "policy", "document"]
-DOCUMENT_ROLES = {"service", "policy", "document"}
-# Money coming in: what a family or sponsor owes, what was received, and where it landed.
-MONEY_IN_ROLES = {"fees", "collections", "deposits", "sponsorships"}
-# Banking lags the till: cash taken on the last days of a period reaches the bank after it closes. A banking
-# week is this intake's stated convention for how long that lag may run, not a rule of law or a policy finding.
-DEPOSIT_GRACE_DAYS = 7
-FIELDS = {
-    "chart": ["account", "name", "type", "report_mapping", "effective_from"],
-    "opening": ["record_id", "account", "balance_date", "debit", "credit"],
-    "ledger": ["entry_id", "line_id", "date", "account", "debit", "credit"],
-    "payroll": ["record_id", "employee_id", "service_start", "service_end", "pay_date", "gross", "deductions", "net", "employer_cost", "award_id", "award_amount"],
-    "grants": ["award_id", "name", "ceiling", "valid_from", "valid_to"],
-    "budget": ["record_id", "account", "amount", "approval_reference"],
-    "invoice": ["record_id", "vendor_id", "invoice_number", "service_date", "amount"],
-    "fees": ["record_id", "student_ref", "fee_type", "charge_date", "amount"],
-    "collections": ["record_id", "collected_by", "collection_date", "method", "amount"],
-    "deposits": ["record_id", "deposit_date", "bank_reference", "amount"],
-    "sponsorships": ["record_id", "sponsor_id", "program", "pledge_date", "due_date", "amount"],
-}
-MONEY_FIELDS = {"debit", "credit", "gross", "deductions", "net", "employer_cost", "award_amount", "ceiling", "amount"}
-DATE_FIELDS = {"date", "balance_date", "service_start", "service_end", "pay_date", "valid_from", "valid_to", "effective_from", "effective_to", "service_date",
-               "charge_date", "collection_date", "deposit_date", "pledge_date", "due_date"}
-OPTIONAL_FIELDS = ["currency", "school", "fund", "department", "award_id", "ledger_entry_id", "ledger_line_id", "effective_to", "po_id", "receipt_id",
-                   "student_ref", "fee_record_id", "deposit_reference", "collection_reference", "program", "waiver_reference", "due_date"]
+PROFILE = "SAAS_ACCRUAL_V1"
 
 
 def fail(code: str, message: str, status: int = 422, **details):
@@ -59,12 +40,15 @@ def fail(code: str, message: str, status: int = 422, **details):
 class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["synthetic", "public"] = "synthetic"
-    entity_type: Literal["school", "district", "board", "university"] = "school"
+    entity_type: Literal["company", "subsidiary", "group"] = "company"
     jurisdiction: str = Field(default="Unspecified", min_length=1, max_length=100)
     currency: Literal["USD", "CAD", "EUR", "GBP"] = "USD"
     start: date
     end: date
     scope: str = Field(min_length=1, max_length=500)
+    #: Answers to the setting-kind requirements. Captured here when known at creation
+    #: and editable afterwards; Books asks for whatever is still blank.
+    settings: dict[str, str | int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def valid_scope(self):
@@ -73,7 +57,10 @@ class WorkspaceCreate(BaseModel):
         if self.start > self.end:
             raise ValueError("Period start must not be after its end")
         if self.kind == "synthetic" and self.currency != "USD":
-            raise ValueError("The current management accounting profile supports USD only; other currencies are public-document mode")
+            raise ValueError("The accrual profile supports USD only; other currencies are public-document mode")
+        unknown = set(self.settings) - {r.setting for r in requirements.settings_schema()}
+        if unknown:
+            raise ValueError("Unknown setting(s): " + ", ".join(sorted(unknown)))
         return self
 
 
@@ -104,6 +91,21 @@ class FileOptions(BaseModel):
 class MappingUpdate(BaseModel):
     expected_version: int = Field(ge=1)
     files: dict[str, FileOptions]
+
+
+class SuppliedValue(BaseModel):
+    #: The source line a reader sees. The header is line 1, so rows start at 2.
+    locator: int = Field(ge=2)
+    field: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=500)
+
+
+class ValueSupply(BaseModel):
+    expected_version: int = Field(ge=1)
+    source_id: str
+    edits: list[SuppliedValue] = Field(min_length=1, max_length=200)
+    #: Why this value is being supplied, since the document did not state it.
+    note: str = Field(min_length=1, max_length=500)
 
 
 class CommitRequest(BaseModel):
@@ -159,8 +161,11 @@ def iso_date(raw: str) -> str:
     return date.fromisoformat(raw).isoformat()
 
 
-def deposit_cutoff(period_end: str) -> str:
-    return (date.fromisoformat(period_end) + timedelta(days=DEPOSIT_GRACE_DAYS)).isoformat()
+def whole_number(raw: str) -> int:
+    """Counts, terms and basis points. Not money, so no cents; not a float, ever."""
+    if not re.fullmatch(r"-?\d{1,9}", raw):
+        raise ValueError("Use a whole number without separators or decimals")
+    return int(raw)
 
 
 def issue(code, message, source_id, locator=None, field=None):
@@ -214,6 +219,8 @@ def parse_source(source, config):
                             payload[f + "_cents"] = money(value, options.amount_unit)
                             if payload[f + "_cents"] < 0:
                                 raise ValueError("Use nonnegative debit/credit sides and positive source amounts; reversals need explicit ledger lines")
+                        elif f in COUNT_FIELDS and value:
+                            payload[f] = whole_number(value)
                         elif f in DATE_FIELDS and value:
                             payload[f] = iso_date(value)
                     except ValueError as exc:
@@ -223,48 +230,18 @@ def parse_source(source, config):
                     row_errors.append(issue("currency_mismatch", "Currency differs from this workspace", sid, locator, "currency"))
                 payload["currency"] = currency
                 if options.role in {"opening", "ledger"} and not row_errors:
-                    d, c = payload["debit_cents"], payload["credit_cents"]
-                    result["totals"]["debit_cents"] += d
-                    result["totals"]["credit_cents"] += c
-                    if (d == 0) == (c == 0):
-                        row_errors.append(issue("journal_side", "Exactly one of debit or credit must be positive", sid, locator))
-                if options.role == "ledger" and not row_errors:
-                    if not config["start"] <= payload["date"] <= config["end"]:
-                        row_errors.append(issue("period_mismatch", "Accounting date falls outside the selected period", sid, locator, "date"))
-                if options.role == "opening" and not row_errors:
-                    if payload["balance_date"] != config["start"]:
-                        row_errors.append(issue("opening_date", "Opening balance date must equal the start of the period (before activity)", sid, locator))
-                if options.role == "chart" and payload.get("type") not in {"asset", "liability", "equity", "revenue", "expense"}:
-                    row_errors.append(issue("account_type", "Use asset, liability, equity, revenue or expense", sid, locator, "type"))
-                for start, end in [("valid_from", "valid_to"), ("effective_from", "effective_to"), ("service_start", "service_end"), ("pledge_date", "due_date")]:
-                    if payload.get(start) and payload.get(end) and payload[start] > payload[end]:
-                        row_errors.append(issue("date_order", f"{start} must not be after {end}", sid, locator))
-                if options.role == "payroll" and not row_errors:
-                    if payload["gross_cents"] - payload["deductions_cents"] != payload["net_cents"]:
-                        row_errors.append(issue("payroll_tie", "Gross minus deductions must equal net", sid, locator))
-                    if payload["award_amount_cents"] > payload["gross_cents"] + payload["employer_cost_cents"]:
-                        row_errors.append(issue("allocation_exceeds_cost", "Award allocation exceeds total payroll cost", sid, locator))
-                    if payload["service_end"] < config["start"] or payload["service_start"] > config["end"]:
-                        row_errors.append(issue("period_mismatch", "Payroll service period does not overlap workspace period", sid, locator))
-                if options.role in MONEY_IN_ROLES and not row_errors:
-                    if payload["amount_cents"] <= 0:
-                        row_errors.append(issue("nonpositive_amount", "A charge, receipt, deposit or pledge of zero is a data error, not a record", sid, locator, "amount"))
-                    # Cash movement is what the period bounds. A fee may be charged long before the review
-                    # window opens and still be settled inside it, so charge_date stays unconstrained.
-                    if payload.get("collection_date") and not config["start"] <= payload["collection_date"] <= config["end"]:
-                        row_errors.append(issue("period_mismatch", "Cash movement date falls outside the selected period", sid, locator, "collection_date"))
-                    # Refusing a deposit banked just after period end would withhold the record that answers an
-                    # undeposited-cash difference, so the check reports a gap it created. Before the period opens
-                    # is still an error: no deposit banks money that had not yet been received.
-                    if payload.get("deposit_date") and not config["start"] <= payload["deposit_date"] <= deposit_cutoff(config["end"]):
-                        row_errors.append(issue("period_mismatch", f"Deposit date falls outside the selected period and the {DEPOSIT_GRACE_DAYS}-day banking window supplied after it", sid, locator, "deposit_date"))
+                    result["totals"]["debit_cents"] += payload["debit_cents"]
+                    result["totals"]["credit_cents"] += payload["credit_cents"]
+                # Everything role-specific lives in roles.row_issues, so adding a record
+                # type never means editing this loop.
+                if not row_errors:
+                    row_errors.extend(issue(code, message, sid, locator, field)
+                                      for code, message, field in roles.row_issues(options.role, payload, config))
                 result["issues"].extend(row_errors)
                 if row_errors:
                     continue
-                key = (payload["account"] if options.role == "chart" else payload["award_id"] if options.role == "grants"
-                       else db.encode([payload["entry_id"], payload["line_id"]]) if options.role == "ledger"
-                       else payload["record_id"])
-                result["rows"].append({"key": key, "payload": payload, "locator": locator})
+                result["rows"].append({"key": roles.key_of(options.role, payload),
+                                       "payload": payload, "locator": locator})
             if not result["row_count"]:
                 raise ValueError("CSV has headers but no records")
             if options.expected_rows is not None and options.expected_rows != result["row_count"]:
@@ -347,7 +324,10 @@ def ledger_issues(records, config):
     opening = [r for r in records if r["role"] == "opening"]
     for r in records:
         p = r["payload"]
-        if r["role"] not in {"opening", "ledger", "budget"}:
+        # Every role that names a GL account is checked against the chart. Plans are
+        # included: a budget against an account that does not exist cannot be compared
+        # with anything, and finding that out at variance time is too late.
+        if r["role"] not in {"opening", "ledger", "budgets", "forecasts"}:
             continue
         account = accounts.get(p["account"])
         effective = p.get("date") or p.get("balance_date") or config["start"]
@@ -400,7 +380,7 @@ def stage(ws, uploads: list[tuple[str, bytes, FileOptions]]):
 
 def stage_in_transaction(connection, ws, uploads):
     if not 1 <= len(uploads) <= MAX_FILES or sum(len(b) for _, b, _ in uploads) > MAX_BATCH:
-        fail("batch_limit", "Upload 1–20 files with a combined size of at most 50 MB", 413)
+        fail("batch_limit", f"Upload 1–{MAX_FILES} files with a combined size of at most 50 MB", 413)
     config = workspace(connection, ws)
     bid = db.uid("import")
     connection.execute("INSERT INTO batches(id,ws,status,base_revision,created_at) VALUES(?,?,?,?,?)",
@@ -448,6 +428,76 @@ def list_batches(ws):
         return [dict(r) for r in connection.execute(
             "SELECT id,status,version,created_at,snapshot_id FROM batches WHERE ws=? ORDER BY rowid DESC LIMIT 100", (ws,)
         )]
+
+
+def supply_values(ws, bid, body):
+    """Fill values the source never stated, in a staged import, before commit.
+
+    An extracted register can be missing a field the document simply does not
+    contain: an invoice names a vendor but carries no vendor id, and a register
+    that requires one cannot be committed. The id exists — it is just not on
+    the page — so somebody has to supply it.
+
+    This only ever fills a blank. A cell that already holds a value is refused
+    rather than overwritten, because those two acts are not the same thing:
+    supplying what a document omitted is bookkeeping, and rewriting what it
+    states is altering evidence. The first belongs in a review screen; the
+    second must never be reachable from one.
+
+    Each filled cell is recorded against the person who supplied it, so the
+    trail distinguishes a value read off a page from a value a human asserted.
+    """
+    with db.connect() as connection:
+        batch = load_batch(connection, ws, bid)
+        if batch["status"] == "committed":
+            fail("already_committed", "This import is committed; correct it with a new revision", 409)
+        if batch["version"] != body.expected_version:
+            fail("stale_preview", "This preview changed; refresh it before supplying values", 409)
+
+        source = connection.execute("SELECT * FROM sources WHERE ws=? AND id=? AND batch_id=?",
+                                    (ws, body.source_id, bid)).fetchone()
+        if not source:
+            fail("source_not_found", "Source does not belong to this import", 404)
+        if not source["name"].lower().endswith(".csv"):
+            fail("not_tabular", "Only a tabular source has cells to fill", 422)
+
+        text = bytes(source["original"]).decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
+        headers = reader.fieldnames or []
+        rows = list(reader)
+        supplied = []
+        for edit in body.edits:
+            # `locator` is the source line a reader sees, and the header is line 1.
+            index = edit.locator - 2
+            if not 0 <= index < len(rows):
+                fail("unknown_line", f"Line {edit.locator} is not a row of this source", 422)
+            if edit.field not in headers:
+                fail("unknown_field", f"{edit.field!r} is not a column of this source", 422)
+            if (rows[index].get(edit.field) or "").strip():
+                fail("value_present",
+                     f"Line {edit.locator} already states a {edit.field}. A value a source "
+                     "supplied is evidence and is never overwritten here; correct it at source "
+                     "and upload a new revision instead.", 409)
+            if not edit.value.strip():
+                fail("empty_value", "Supply a value, or leave the cell empty", 422)
+            rows[index][edit.field] = edit.value.strip()
+            supplied.append({"line": edit.locator, "field": edit.field, "value": edit.value.strip()})
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+        content = buffer.getvalue().encode()
+
+        connection.execute("UPDATE sources SET original=?, sha256=? WHERE id=?",
+                           (content, hashlib.sha256(content).hexdigest(), source["id"]))
+        connection.execute("UPDATE batches SET version=version+1 WHERE id=?", (bid,))
+        revalidate(connection, ws, bid)
+        db.event(connection, ws, "values_supplied",
+                 {"batch_id": bid, "source_id": source["id"], "supplied": supplied,
+                  "note": body.note,
+                  "meaning": "Filled cells the source left empty. No stated value was changed."})
+    return get_batch(ws, bid)
 
 
 def update_mapping(ws, bid, body: MappingUpdate):
@@ -502,6 +552,11 @@ def commit(ws, bid, body: CommitRequest):
         for f in files:
             if not json.loads(f["options"])["excluded"]:
                 connection.execute("UPDATE sources SET committed=1 WHERE id=?", (f["id"],))
+        # Invariant 1: the economic events these records describe get their identity
+        # here, inside the same transaction that commits them, so an event exists
+        # exactly when the records constituting it do.
+        from . import events
+        saved["events"] = events.materialize(connection, ws, config["start"])
         # Duplicate-only imports preserve financial revision and snapshot.
         latest = connection.execute("SELECT id FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
         snapshot_id = latest["id"] if latest else None
@@ -563,43 +618,65 @@ def source_bytes(ws, sid):
         return source["name"], bytes(source["original"])
 
 
+def detect_saved_sources(ws):
+    """Recover structured records from files that were saved as plain documents.
+
+    Ported across the SaaS rework unchanged, because it was written against
+    `roles.FIELDS` rather than against a list of role names: it detects the new
+    twenty-one roles with no edit, which is what reading the vocabulary rather than
+    restating it buys.
+
+    Prepare a normal validated import; never relabel evidence as accounting.
+
+    Historical originals remain intact. A committed structured copy with the
+    same bytes prevents repeat recovery, including after later supersession.
+    """
+    with db.connect() as connection:
+        config = workspace(connection, ws)
+        if config["kind"] == "public":
+            return {"batch": None, "detected": 0}
+        active_ids = {r["source_id"] for r in active_records(connection, ws)}
+        sources = list(connection.execute("SELECT * FROM sources WHERE ws=? AND committed=1 ORDER BY rowid", (ws,)))
+        represented = {s["sha256"] for s in sources if json.loads(s["options"])["role"] in FIELDS}
+        uploads = []
+        for source in sources:
+            options = FileOptions.model_validate_json(source["options"])
+            if source["id"] not in active_ids or options.role != "document" or source["sha256"] in represented:
+                continue
+            if PurePath(source["name"]).suffix.lower() != ".csv":
+                continue
+            content = bytes(source["original"])
+            try:
+                columns = next(csv.reader(io.StringIO(content.decode("utf-8-sig")), strict=True))
+            except (UnicodeError, csv.Error, StopIteration):
+                continue
+            normalized = [re.sub(r"[ -]+", "_", c.strip().lower()) for c in columns]
+            if len(set(normalized)) != len(columns):
+                continue
+            matches = [role for role, fields in FIELDS.items() if set(fields) <= set(normalized)]
+            if len(matches) != 1:
+                continue
+            options.role = matches[0]
+            allowed = set(FIELDS[options.role]) | set(OPTIONAL_FIELDS)
+            options.mapping = {key: value for key, value in zip(normalized, columns) if key in allowed}
+            uploads.append((source["name"], content, options))
+            represented.add(source["sha256"])
+        if not uploads:
+            return {"batch": None, "detected": 0}
+        # Apply standard limits and all row/accounting validation, atomically.
+        batch = stage_in_transaction(connection, ws, uploads)
+        return {"batch": batch, "detected": len(uploads)}
+
 def coverage(ws):
     with db.connect() as connection:
         config = workspace(connection, ws)
         records = active_records(connection, ws)
-        roles = {r["role"] for r in records}
-        counts = {role: sum(r["role"] == role for r in records) for role in FIELDS | dict.fromkeys(DOCUMENT_ROLES)}
-        docs = roles & DOCUMENT_ROLES
-        capabilities = []
-        for key, label, required in [
-            ("document_explanation", "Document evidence available", set()),
-            ("transaction_investigation", "Ledger available for investigation", {"chart", "opening", "ledger"}),
-            ("payroll_allocation_confirmation", "Payroll / grant evidence", {"payroll", "grants", "policy", "service"}),
-            ("management_statements", "Management statements", {"chart", "opening", "ledger"}),
-            ("budget_variance", "Budget versus actual", {"chart", "opening", "ledger", "budget"}),
-            ("collections_reconciliation", "Collections reconciled to deposits", {"collections", "deposits"}),
-        ]:
-            missing = sorted(required - roles)
-            if key == "document_explanation":
-                missing = [] if docs else ["document"]
-            status = "missing" if missing else "ready_for_scope"
-            note = "Available for a bounded investigation; completeness of the full institution is unverified."
-            if key in {"management_statements", "budget_variance"}:
-                status = "missing" if missing else "needs_review"
-                note = "Input presence is not statement readiness. Full coverage review and report calculation are not implemented."
-            if key == "payroll_allocation_confirmation" and not missing:
-                status = "needs_review"
-                note = "Documents are supplied, not independently verified. Auditor review and allocation calculation are still required."
-            if key == "collections_reconciliation" and not missing:
-                status = "needs_review"
-                note = "Receipts and deposits are supplied records, not a verified complete set. A difference between them is unreconciled, not evidence of loss."
-            if config["kind"] == "public" and key != "document_explanation":
-                status, note = "unsupported", "Public-document workspace; no transaction accounting."
-            # `requires` is the same set the status is computed from. It is published
-            # so a client can draw what a check depends on without re-declaring the
-            # requirements and drifting from them.
-            capabilities.append({"id": key, "label": label, "status": status, "missing": missing,
-                                 "note": note, "requires": sorted(required)})
+        present = {r["role"] for r in records}
+        counts = {role: sum(r["role"] == role for r in records)
+                  for role in list(FIELDS) + sorted(DOCUMENT_ROLES)}
+        # What Books asks for, and which agents each missing input is holding up.
+        # One registry decides this, so an agent cannot depend on data nobody requested.
+        coverage_requirements = requirements.status(config, present)
         sources = []
         active_ids = {r["source_id"] for r in records}
         for f in connection.execute("SELECT id,name,sha256,options,committed FROM sources WHERE ws=? AND committed=1 ORDER BY rowid DESC", (ws,)):
@@ -608,8 +685,17 @@ def coverage(ws):
         requests = [dict(r) for r in connection.execute("SELECT * FROM evidence_requests WHERE ws=? ORDER BY rowid DESC", (ws,))]
         latest = connection.execute("SELECT id,revision,created_at FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
         return {"workspace": config, "snapshot": dict(latest) if latest else None, "counts": counts,
-                "capabilities": capabilities, "sources": sources, "requests": requests,
+                **coverage_requirements, "sources": sources, "requests": requests,
                 "coverage_verified": False, "note": "Coverage is limited to supplied records; no audit opinion or full-population completeness is implied."}
+
+
+def workspace_config(ws):
+    """One workspace's configuration, including the settings Books collected.
+
+    A read-only accessor so callers outside this module never hold the connection.
+    """
+    with db.connect() as connection:
+        return workspace(connection, ws)
 
 
 def financial_records(ws):
@@ -627,6 +713,51 @@ def financial_records(ws):
                          "source_id": r["source_id"], "locator": r["locator"]} for r in records],
             "roles": sorted({r["role"] for r in records}),
         }
+
+
+class SettingsUpdate(BaseModel):
+    """Answers to the setting-kind requirements Books asks for.
+
+    Values are strings or whole numbers only. A money setting is integer cents, in
+    keeping with every other amount in the system; a rate would be basis points. No
+    setting is ever a float.
+    """
+
+    settings: dict[str, str | int]
+
+    @model_validator(mode="after")
+    def known_settings(self):
+        schema = {r.setting: r for r in requirements.settings_schema()}
+        unknown = set(self.settings) - set(schema)
+        if unknown:
+            raise ValueError("Unknown setting(s): " + ", ".join(sorted(unknown)))
+        for key, value in self.settings.items():
+            control = schema[key].control
+            if control in {"money", "integer"} and not isinstance(value, int):
+                raise ValueError(f"{key} must be a whole number")
+            if control == "money" and isinstance(value, int) and value < 0:
+                raise ValueError(f"{key} must not be negative")
+            if isinstance(value, str) and len(value) > 200:
+                raise ValueError(f"{key} is too long")
+        return self
+
+
+def update_settings(ws, body: SettingsUpdate):
+    """Merge answers into the workspace config. Blank clears an answer rather than
+    storing an empty one, so a cleared setting reads as unanswered in Books."""
+    with db.connect() as connection:
+        config = workspace(connection, ws)
+        current = dict(config.get(requirements.SETTINGS_KEY) or {})
+        for key, value in body.settings.items():
+            if isinstance(value, str) and not value.strip():
+                current.pop(key, None)
+            else:
+                current[key] = value.strip() if isinstance(value, str) else value
+        stored = {k: v for k, v in config.items() if k not in {"id", "revision"}}
+        stored[requirements.SETTINGS_KEY] = current
+        connection.execute("UPDATE workspaces SET config=? WHERE id=?", (db.encode(stored), ws))
+        db.event(connection, ws, "settings_updated", {"keys": sorted(body.settings)})
+    return coverage(ws)
 
 
 def create_evidence_request(ws, body: EvidenceCreate):

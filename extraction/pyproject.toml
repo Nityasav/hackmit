@@ -5,13 +5,15 @@ description = "Local document-extraction model: training, benchmarking, evaluati
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.4",
-    # No stable release recognizes NuExtract3's `qwen3_5` architecture yet
-    # (verified against transformers 4.57.6, 2026-09-19) — install from git
-    # main instead, which itself requires Python >=3.10:
-    #   pip install git+https://github.com/huggingface/transformers.git
-    # Re-check before assuming this is still true; pin to a stable release
-    # the day qwen3_5 lands in one.
-    "transformers",
+    # NuExtract3's `qwen3_5` architecture needed a git install of transformers
+    # until it landed in a stable release. It has: 5.17.0 carries `qwen3_5`, so
+    # the git dependency is gone. Do not relax this floor — an older release
+    # fails at load with `KeyError: 'qwen3_5'`.
+    "transformers>=5.17",
+    # Loading the processor pulls in Qwen3VLVideoProcessor, which requires
+    # torchvision at import time even though nothing here processes video.
+    # Omitting it fails only when the model is actually loaded, not at install.
+    "torchvision>=0.19",
     "accelerate>=0.34",
     "peft>=0.13",
     "trl>=0.11",
@@ -19,7 +21,21 @@ dependencies = [
     "pymupdf>=1.24",
     "pydantic>=2.9",
     "jsonschema>=4.23",
+    # serve.py: the loopback inference service the API calls.
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "httpx>=0.28",
+    "huggingface-hub>=0.26",
 ]
+
+# This directory is a flat layout with several top-level packages, so
+# setuptools refuses to guess: `pip install -e .` fails outright with
+# "Multiple top-level packages discovered in a flat-layout". Naming them is the
+# documented fix, and it also keeps `data/` — which holds test PDFs, not
+# importable code — out of any built distribution.
+[tool.setuptools]
+packages = ["schemas", "scripts"]
+py-modules = []
 
 [dependency-groups]
 dev = ["pytest>=8.3"]

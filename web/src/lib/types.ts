@@ -1,7 +1,16 @@
 // Mirror of the bundle contract in /README.md. api/app/models.py mirrors the same shapes.
 // Change all three together.
 
-export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
+/** Mirrors `AgentId` in api/app/models.py, which mirrors the registry in
+ *  api/app/agents/registry.py. Change this, models.py and contracts/README.md in
+ *  one commit: a bundle that fails to parse renders an error, not a workspace. */
+export type AgentId =
+  | "orchestrator"
+  | "A" | "B" | "C" | "D"
+  | "A1" | "A2" | "A3" | "A4"
+  | "B1" | "B2" | "B3" | "B4"
+  | "C1" | "C2" | "C3" | "C4" | "C5"
+  | "D1" | "D2" | "D3" | "D4";
 export type WorkspaceId = string;
 
 /**
@@ -148,6 +157,28 @@ export interface Playbook {
   status_note: string;
 }
 
+/**
+ * Something an agent decided needs a person, waiting for one.
+ *
+ * Mirrors `Approval` in api/app/models.py. `decide()` is the only way out of
+ * `pending`, and the only thing that writes precedent — so this is the row a
+ * human acts on to teach the next run.
+ */
+export interface Approval {
+  id: string;
+  agent: AgentId;
+  kind: "journal" | "payment" | "playbook" | "evidence" | "decision";
+  title: string;
+  summary: string;
+  verified: boolean;
+  status: "pending" | "approved" | "rejected";
+  /** A journal moves money, so only an independently reviewed claim proposes one. */
+  journal: { account: string; fund: string; debit_cents: number; credit_cents: number }[] | null;
+  effects: { label: string; value: string; tone?: "good" | "neutral" | null }[] | null;
+  /** The conclusion this would resolve, when it came from one. */
+  finding_id?: string | null;
+}
+
 export interface Bundle {
   contract_version?: number;
   workspace: Workspace;
@@ -157,14 +188,24 @@ export interface Bundle {
   findings: Finding[];
   decisions: Decision[];
   playbooks: Playbook[];
+  approvals: Approval[];
 }
 
-export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice"
-  | "fees" | "collections" | "deposits" | "sponsorships"
-  | "service" | "policy" | "document";
+/** Mirrors `api/app/roles.py`. Change both together, and `contracts/` with them. */
+export type SourceRole =
+  | "chart" | "opening" | "ledger"
+  | "vendors" | "purchase_orders" | "goods_receipts" | "vendor_invoices" | "payments"
+  | "customers" | "customer_invoices" | "remittances"
+  | "bank_transactions" | "processor_payouts"
+  | "payroll" | "expenses"
+  | "budgets" | "forecasts" | "headcount"
+  | "approvals" | "period_locks" | "tax_registrations"
+  | "contract" | "policy" | "document" | "invoice" | "service" | "budget";
 export interface IntakeWorkspace {
   id: string; name: string; kind: "synthetic" | "public";
-  entity_type: "school" | "district" | "board" | "university";
+  entity_type: "company" | "subsidiary" | "group";
+  /** Answers to the setting-kind requirements Books collects. */
+  settings?: Record<string, string | number>;
   jurisdiction: string; currency: "USD" | "CAD" | "EUR" | "GBP";
   start: string; end: string; scope: string; profile: string; revision: number;
 }
@@ -195,10 +236,32 @@ export interface EvidenceRequest {
   id: string; title: string; role: SourceRole; task_id: string | null;
   status: string; source_id: string | null; snapshot_id: string | null; version: number;
 }
+export interface DataRequirement {
+  id: string; label: string;
+  /** A csv or document is uploaded; a setting is answered in a form. */
+  kind: "csv" | "document" | "setting";
+  role: SourceRole | null; setting: string | null;
+  control: "text" | "money" | "integer" | "date" | "month_day" | null;
+  optional: boolean; satisfied: boolean;
+  /** One line: what supplying this makes possible. */
+  unlocks: string;
+  /** Registry ids of the agents waiting on it. */
+  needed_by: string[];
+  /** Requirement ids worth supplying first. Ordering only, never enforcement. */
+  after: string[];
+  value: string | number | null;
+}
+
 export interface Coverage {
   workspace: IntakeWorkspace; snapshot: { id: string; revision: number; created_at: string } | null;
   counts: Record<string, number>;
-  capabilities: { id: string; label: string; status: string; missing: string[]; note: string }[];
+  /** What the agents need from this workspace. Mirrors `api/app/requirements.py`,
+   *  which is the only place that decides it, so Books cannot ask for something no
+   *  agent reads or stay silent about something an agent depends on. */
+  requirements: DataRequirement[];
+  /** Agent id -> the requirement ids still blocking it. */
+  blocked_agents: Record<string, string[]>;
+  satisfied_count: number; required_count: number;
   sources: { id: string; name: string; sha256: string; role: SourceRole; active: boolean }[];
   requests: EvidenceRequest[]; coverage_verified: boolean; note: string;
 }
@@ -213,24 +276,45 @@ export interface SourceDetail {
   } | null;
 }
 export interface AgentCitation { source_id: string; line: number; quote: string }
-export interface AgentRun {
-  id: string; workspace_id: string; agent: "cfo" | "grants_compliance" | "internal_auditor"; snapshot_id: string;
-  current_snapshot: boolean;
-  review_targets_current?: boolean | null;
-  status: "running" | "completed" | "failed"; model: string; focus: string;
-  created_at: string; completed_at: string | null; error: string | null;
-  result: {
-    analysis?: {
-      executive_briefing: string; scope_assessed: string; limitations: string[];
-      findings: { title: string; status: "hypothesized" | "needs_evidence" | "cleared";
-        summary: string; citations: AgentCitation[]; limitations: string[] }[];
-      evidence_requests: { title: string; role: SourceRole; reason: string }[];
-      next_tasks: { specialist: string; title: string; objective: string }[];
-      reviews?: { finding_id: string; verdict: "accept" | "reject" | "needs_evidence";
-        rationale: string; citations: AgentCitation[]; required_action: string }[];
-    };
-    review_scope?: { candidate_count: number; reviewed_count: number; unreviewed_finding_ids: string[] };
-    tool_calls?: { tool: string; input_hash: string; output_ref: string; latency_ms: number; status: string }[];
-    usage?: { input_tokens: number; output_tokens: number; total_tokens: number };
+/** Mirrors `api/app/agents/registry.py` and `api/app/agents/api.py`.
+ *  The standalone triage agent it replaced is gone; a run is now one registry agent
+ *  against a bounded task, and it always reports what it cost. */
+export interface AgentNode {
+  id: string; name: string; tier: "orchestrator" | "worker" | "subagent";
+  parent: string | null; charter: string; model: string;
+  /** False when the work is deterministic and the model only judges exceptions. */
+  uses_model_in_hot_path: boolean;
+  reads: SourceRole[]; reviewer: string | null;
+  /** Requirement labels still missing. Empty means ready. */
+  blocked_by: string[]; ready: boolean;
+  budget: { model_calls: number; tool_calls: number; usd_cents: number };
+  escalates_when: {
+    confidence_below: number; amount_above_cents: number | null; conditions: string[];
   };
+  children: string[];
+}
+
+export interface AgentOrganization {
+  agents: AgentNode[];
+  spend: { today_cents: number; day_cap_cents: number; run_cap_cents: number };
+  note: string;
+}
+
+export interface AgentRunResult {
+  thread_id: string; agent_id: string; agent_name: string;
+  result: {
+    summary: string;
+    disposition: "clear" | "exception" | "insufficient_evidence";
+    rationale: string;
+    citations: { role: string; record_key: string; source_id: string; line: number | null; note: string }[];
+    exceptions: { code: string; detail: string }[];
+    proposed_action: string; open_questions: string[];
+  } | null;
+  /** Computed from the match rubric, never asserted by the model. Null when no
+   *  deterministic calculation ran, which is reported rather than defaulted. */
+  confidence: number | null;
+  escalated: boolean; escalation_reasons: string[];
+  decision_id: string; cost_cents: number;
+  model_calls: number; tool_calls: number;
+  spend: { spent_cents: number; cap_cents: number; remaining_cents: number };
 }

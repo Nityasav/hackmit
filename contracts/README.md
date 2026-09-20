@@ -64,7 +64,7 @@ The dashboard renders **one JSON payload per persisted workspace**:
 Bundle
 ├─ workspace      id, name, kind (synthetic|public), period, mode (live|not_started),
 │                 snapshot_id, disabled_tabs[], model, run_budget
-├─ agents[]       cfo | ap | py | gr | au — name, role, status, "doing" (drives the live strip)
+├─ agents[]       orchestrator | A-D | A1-D4 — name, role, status, "doing" (drives the live strip)
 ├─ briefing       CFO Agent text (**bold** marks highlights) + action buttons
 ├─ kpis[]         label, value, note, tone
 ├─ workflows[]    id, name, owner, progress, stages[] (done|running|human|todo)
@@ -101,7 +101,7 @@ Bundle
 ## Snapshot agent run contract
 
 `POST /api/workspaces/{ws}/agent-runs` requires the local reviewer header and JSON
-`{snapshot_id, request_id, focus?, agent?}`. `agent` is `cfo` (default), `grants_compliance` or `internal_auditor`.
+`{objective, record_keys?, event_ids?, cap_cents?}` to `/api/workspaces/{ws}/agents/{agent_id}/runs`. `agent_id` is any id in the registry.
 The snapshot must be the latest committed snapshot. A request ID
 is unique within its workspace; replaying identical inputs returns the saved run, while changing its
 inputs returns 409. The endpoint waits for the bounded run; polling `GET` on the same path lists the
@@ -115,7 +115,7 @@ Findings carry source ID, line and exact quotation. Tool history and cumulative 
 without raw model reasoning. Error messages omit provider response bodies and credentials.
 
 The bundle projects the latest completed output per agent for the current snapshot into candidate
-findings, queued follow-up proposals and the reasoning log (`cfo` and `gr` dashboard IDs). The CFO briefing
+findings, queued follow-up proposals and the reasoning log (registry agent IDs). The orchestrator briefing
 is retained when present; otherwise the Grants briefing is shown. `Finding.status` additionally supports
 `hypothesized`. Proposed clearances remain unreviewed hypotheses in that projection. No proposed task
 is automatically executed and no accounting correction is applied. Live provenance describes a real

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { DocumentIntake } from "@/components/DocumentIntake";
+import { RecordsBrowser } from "@/components/RecordsBrowser";
 import { GuidedWorkflow } from "@/components/GuidedWorkflow";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { useData } from "@/lib/data";
@@ -34,19 +35,37 @@ export default function BooksPage() {
         </p>
       </header>
 
-      {/* What to do next, and where that sits in the whole job. */}
+      {/* This page is long, and the instructions that send someone between its
+          parts said things like "scroll up to the import", which is not a
+          place. These are. */}
+      <nav aria-label="Sections of this page" className="flex flex-wrap gap-4 border-y border-line py-3 text-[13px]">
+        <a className="underline" href="#source-records">Add records</a>
+        <a className="underline" href="#source-import">Review &amp; commit an import</a>
+        <a className="underline" href="#source-documents">Documents</a>
+        <a className="underline" href="#source-registers">Search the records</a>
+      </nav>
+
       <GuidedWorkflow bundle={bundle} intake={intake} />
 
-      {/* Keyed so switching schools resets the upload draft rather than carrying
-          another institution's staged files across. */}
+      {/* Keyed so switching workspaces resets the upload draft rather than carrying
+          another company's staged files across. */}
       <SourcesPanel key={ws} onProgressChange={setIntake} />
 
       <section id="source-documents" className="scroll-mt-4">
-        <h2 className="text-base font-semibold">Documents &amp; scans</h2>
+        <h2 className="text-base font-semibold">Documents</h2>
         <p className="mb-3 mt-1 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-          Upload a PDF or image and review the extracted values before importing them.
+          Upload a PDF and check every extracted value against the page it came from before it
+          is imported.
         </p>
         <DocumentIntake key={ws} />
+      </section>
+
+      <section id="source-registers-section" className="scroll-mt-4">
+        <h2 className="text-base font-semibold">Search the records</h2>
+        <p className="mb-3 mt-1 max-w-prose text-[13px] leading-relaxed text-ink-dim">
+          Find transactions by date, and take a period away as a spreadsheet.
+        </p>
+        <RecordsBrowser key={ws} />
       </section>
 
       <footer className="border-t border-line pt-5 text-sm text-ink-dim">

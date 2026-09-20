@@ -9,7 +9,18 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-AgentId = Literal["cfo", "ap", "py", "gr", "au"]
+AgentId = Literal[
+    # The registry in app/agents/registry.py is the source of truth for this set.
+    # It is restated here rather than imported because the bundle contract is
+    # mirrored in web/src/lib/types.ts and contracts/README.md, and all three have
+    # to be edited together; an import would hide that obligation.
+    "orchestrator",
+    "A", "B", "C", "D",
+    "A1", "A2", "A3", "A4",
+    "B1", "B2", "B3", "B4",
+    "C1", "C2", "C3", "C4", "C5",
+    "D1", "D2", "D3", "D4",
+]
 WorkspaceId = str
 TabId = Literal[
     "command", "board", "workflows", "findings", "approvals", "reports", "reasoning", "learning"

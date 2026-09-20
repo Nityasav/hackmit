@@ -5,7 +5,6 @@ import axios, { AxiosError, type AxiosInstance } from "axios";
  * substitute them into the browser bundle at build time.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-export const CFO_API_URL = process.env.NEXT_PUBLIC_CFO_API_URL || API_URL;
 
 /**
  * Clients are built once at module load rather than per request, so each one
@@ -30,7 +29,6 @@ function createApiClient(baseURL: string): AxiosInstance {
 }
 
 export const api = createApiClient(API_URL);
-export const cfoApi = createApiClient(CFO_API_URL);
 
 /** FastAPI reports problems in `detail`, as a string, a list of errors, or an object. */
 function readDetail(detail: unknown): string | null {
@@ -87,6 +85,16 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Override the client's default deadline, in milliseconds.
+   *
+   * The default is short on purpose, so an unresponsive service surfaces as an
+   * error instead of a spinner nobody ever cancels. A few routes legitimately
+   * outlast it: running a document through the local extraction model takes
+   * roughly half a minute on this hardware. Those requests say so here rather
+   * than the whole client waiting longer for everything.
+   */
+  timeout?: number;
 }
 
 async function request<T>(client: AxiosInstance, path: string, options: RequestOptions): Promise<T> {
@@ -102,6 +110,7 @@ async function request<T>(client: AxiosInstance, path: string, options: RequestO
       data: options.body,
       headers,
       signal: options.signal,
+      ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
     });
     return response.data;
   } catch (error) {
@@ -116,17 +125,17 @@ export function intakeApi<T>(path: string, options: RequestOptions = {}): Promis
   return request<T>(api, path, options);
 }
 
-/** Response body from the CFO investigation API. */
-export function cfoRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  return request<T>(cfoApi, path, options);
-}
 
-/** Like cfoRequest, but a 404 means "nothing yet" rather than an error. */
-export async function cfoRequestOptional<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
-  try {
-    return await request<T>(cfoApi, path, options);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return null;
-    throw error;
-  }
+/**
+ * The record vocabulary, so the browser can work out a file's type before upload.
+ *
+ * Fetched rather than restated in TypeScript: `api/app/roles.py` is the one definition,
+ * and a second copy here would mean adding a record type silently stopped it being
+ * detected. Cached for the page's lifetime; it only changes when the API is redeployed.
+ */
+let vocabularyCache: Promise<unknown> | null = null;
+
+export function recordVocabulary<T>(): Promise<T> {
+  vocabularyCache ??= intakeApi<T>("/api/roles");
+  return vocabularyCache as Promise<T>;
 }
