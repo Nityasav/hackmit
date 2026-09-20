@@ -8,17 +8,19 @@ import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { SourceDetail } from "@/lib/types";
 
 type FollowUp = { version: number; owner: string; status: string; note: string; actor: string };
-type Finding = { id: string; title: string; role: string; status: string; explanation: string; amount_cents: number | null;
+type Finding = { id: string; title: string; role: string; role_label: string; status: string; explanation: string; amount_cents: number | null;
   action: string; origin: string; review: string; evidence: { source_id: string; line: number }[];
-  snapshot_id: string; stale: boolean; follow_up: FollowUp | null };
+  confidence?: number | null; snapshot_id: string; stale: boolean; follow_up: FollowUp | null };
+// Counted from the decisions the agents wrote, never from a run's status: a conclusion
+// outlives the run that reached it, and "the last run finished" says nothing about the books.
+type Live = { decisions: number; escalated: number; spend_cents: number; agents: string[]; reviewed: number; note: string };
 type View = { workspace: { name: string; start: string; end: string }; snapshot_id: string | null;
   scan: { id: string; snapshot_id: string; record_count: number; created_at: string } | null;
   findings: Finding[]; changes: { id: string; title: string; before: string; after: string }[];
-  live: { id: string; status: string; briefing: string; report_markdown: string; unresolved: string[];
-    tasks: { spec: { id: string; role: string }; status: string }[] } | null; live_stale: boolean;
+  live: Live | null; live_stale: boolean;
   history: { id: string; created_at: string; actor: string; kind: string; payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
-const roles: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", rc: "Revenue & Collections" };
+const originLabel = (origin: string) => origin === "agent" ? "Agent conclusion" : "Rules-based check";
 const currency = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const control = "border border-line bg-white px-3 py-2 text-sm disabled:opacity-40";
 const primary = "bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-40";
@@ -65,9 +67,10 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
   if (!uploaded) return <div className="border border-line p-6"><h1 className="text-2xl font-semibold">No company is selected yet.</h1>
     <p className="my-3 max-w-2xl text-ink-dim">Create an institution and commit its records to prepare a briefing.</p>
     <Link href="/" className={primary + " inline-block"}>Add a company&rsquo;s records →</Link></div>;
-  // Money-in checks are sorted last so the heading in the list marks one contiguous group.
-  const filtered = (view?.findings.filter(f => filter === "all" || (filter === "attention" ? f.status !== "pass" : filter === "rc" ? f.role === "rc" : f.status === filter)) || [])
-    .sort((a, b) => Number(a.role === "rc") - Number(b.role === "rc"));
+  // Agent conclusions sort last so the heading above them marks one contiguous group.
+  // They are a different kind of statement from a control test and are not mixed in with it.
+  const filtered = (view?.findings.filter(f => filter === "all" || (filter === "attention" ? f.status !== "pass" : filter === "agent" ? f.origin === "agent" : f.status === filter)) || [])
+    .sort((a, b) => Number(a.origin === "agent") - Number(b.origin === "agent"));
   const current = filtered.find(f => f.id === selected) || filtered[0];
   const stale = !!view?.scan && view.scan.snapshot_id !== view.snapshot_id;
   return <div className="mx-auto max-w-6xl space-y-5">
@@ -83,20 +86,22 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     {view && <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["Records in last scan", view.scan?.record_count || 0], ["Needs attention", view.findings.filter(f => !f.stale && f.status === "attention").length], ["Evidence gaps", view.findings.filter(f => !f.stale && f.status === "gap").length], ["Narrow checks passed", view.findings.filter(f => !f.stale && f.status === "pass").length]].map(([label, n]) => <div key={label} className="border border-line p-4"><b className="block font-num text-3xl">{n}</b><span className="text-sm text-ink-dim">{label}</span></div>)}</div>
       <p className="text-xs text-ink-dim">Snapshot: {view.snapshot_id || "No committed sources"}. Counts describe supplied records, not the whole institution. Amounts overlap and are not a savings total. Decisions apply only to their original snapshot; earlier follow-up remains in the history below.</p>
-      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">Live five-agent review · {view.live.status}{view.live_stale ? " · outdated snapshot" : ""}</h2><p className="mt-2">{view.live.briefing}</p>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs">{view.live.tasks.map(t => <span key={t.spec.id}>{roles[t.spec.role]}: {t.status}</span>)}</div>
-        <details className="mt-3"><summary>Unresolved agent questions ({view.live.unresolved.length})</summary><ul className="mt-2 list-disc space-y-1 pl-5">{view.live.unresolved.map((s, i) => <li key={i}>{s}</li>)}</ul></details></section>}
+      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">What the agents have concluded</h2>
+        <p className="mt-2 text-sm">{view.live.decisions} conclusion{view.live.decisions === 1 ? "" : "s"} recorded · {view.live.escalated} waiting on you · {view.live.reviewed} independently reviewed · {currency(view.live.spend_cents)} of model spend on this company.</p>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-dim">{view.live.agents.map(a => <span key={a}>{a}</span>)}</div>
+        <p className="mt-3 text-xs text-ink-dim">{view.live.note}</p></section>}
       {view.changes.length > 0 && <section className="border border-green-300 bg-green-50 p-4"><h2 className="font-semibold">What changed after the latest scan?</h2>{view.changes.map(c => <div className="mt-3" key={c.id}><b>{c.title}</b><p className="text-sm">Before: {c.before}</p><p className="text-sm">Now: {c.after}</p></div>)}<p className="mt-3 text-xs">Adding evidence does not automatically approve its contents or resolve a finding.</p></section>}
       {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
-        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="rc">Money coming in</option></select></label></div>
+        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="agent">Agent conclusions</option></select></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
-          {f.role === "rc" && filtered[i - 1]?.role !== "rc" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Money coming in · fees, collections, deposits, pledges</h3>}
+          {f.origin === "agent" && filtered[i - 1]?.origin !== "agent" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Agent conclusions · candidates until a person decides them</h3>}
           <button onClick={() => { setSelected(f.id); setSource(null); }} aria-pressed={current?.id === f.id} className={`w-full border p-4 text-left ${current?.id === f.id ? "border-ink bg-surface-2" : "border-line"}`}>
-          <span className="text-xs uppercase tracking-wide text-ink-dim">{roles[f.role]} · {f.origin === "live_agent" ? "Auditor-accepted claim" : f.origin === "standalone_candidate" ? "Standalone candidate" : "Rules-based check"}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
+          <span className="text-xs uppercase tracking-wide text-ink-dim">{f.role_label} · {originLabel(f.origin)}{f.stale ? " · historical" : ""}</span><b className="my-2 block">{f.title}</b>
           <span className={f.status === "attention" ? "text-red-700" : f.status === "gap" ? "text-amber-800" : "text-green-800"}>{f.status === "pass" ? "Passed within stated scope" : f.status === "gap" ? "Evidence needed" : "Investigate"}</span>{f.amount_cents !== null && <span className="ml-3 font-num">{currency(f.amount_cents)}</span>}
           {f.follow_up && <small className="mt-2 block">Follow-up: {displayLabel(f.follow_up.status)} · {f.follow_up.owner || "Unassigned"}</small>}</button></Fragment>)}</div>
-          {current && <article className="self-start border border-line p-5"><h2 className="text-xl font-semibold">{current.title}</h2><p className="my-3 leading-relaxed">{current.explanation}</p><p className="text-sm text-ink-dim">{current.review}</p><h3 className="mt-5 font-semibold">Suggested next step</h3><p className="mt-1 text-sm">{current.action}</p>
+          {current && <article className="self-start border border-line p-5"><h2 className="text-xl font-semibold">{current.title}</h2><p className="my-3 leading-relaxed">{current.explanation}</p><p className="text-sm text-ink-dim">{current.review}</p>
+            {typeof current.confidence === "number" && <p className="mt-2 text-sm">Match confidence {current.confidence} of 100, computed from the recorded features by the matching rules. It is not the agent&rsquo;s opinion of its own certainty.</p>}<h3 className="mt-5 font-semibold">Suggested next step</h3><p className="mt-1 text-sm">{current.action}</p>
             <h3 className="mt-5 font-semibold">Inspect original evidence</h3><div className="my-3 flex flex-wrap gap-2">{current.evidence.map((e, i) => <button className={control} key={`${e.source_id}-${e.line}`} onClick={() => void readSource(e.source_id, Math.max(1, e.line - 1))}>Source {i + 1} · line {e.line}</button>)}{!current.evidence.length && <p className="text-sm text-ink-dim">This is a missing-input check; no source has been fabricated.</p>}</div>
             {source && <section aria-label="Original source" className="my-4 border border-line bg-surface-2 p-3"><b>{source.name}</b>
               {source.extraction_origin && <div className="my-2 text-sm"><p>This is text someone read out of a document and checked, not the document itself.</p>
@@ -134,5 +139,9 @@ function briefing(v: View) {
     f.amount_cents === null ? "Amount: not established" : `Check amount: ${currency(f.amount_cents)} (not savings; may overlap other checks)`,
     `Next step: ${f.action}`, `Evidence: ${f.evidence.map(e => `${e.source_id}, line ${e.line}`).join("; ") || "missing input"}`,
     `Human follow-up: ${f.follow_up ? `${f.follow_up.status}; owner ${f.follow_up.owner || "unassigned"}; ${f.follow_up.note}` : "not recorded"}`, ""]),
-    "## Live CFO report", v.live ? `${v.live_stale ? "HISTORICAL SNAPSHOT — RERUN REQUIRED\n" : ""}${v.live.report_markdown || v.live.briefing}` : "No live model review has run.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
+    "## Agent conclusions", v.live
+      ? [`${v.live.decisions} conclusion(s) from ${v.live.agents.length} agent(s); ${v.live.escalated} waiting on a person; ${v.live.reviewed} independently reviewed.`,
+         `Model spend on this company: ${currency(v.live.spend_cents)}.`,
+         ...v.live.agents.map(a => `- ${a}`), v.live.note].join("\n")
+      : "No agent has run against this company.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
 }

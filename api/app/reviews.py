@@ -8,9 +8,26 @@ from pydantic import BaseModel, Field
 
 from . import db, ingestion
 from .accounting.controls import checks
+from .agents.registry import AGENTS
 
 router = APIRouter(prefix="/api", tags=["Director review"])
 ACTIVE = {"queued", "planning", "running"}
+#: Labels for the deterministic control tests, which are grouped by the function that
+#: would act on an exception rather than by the agent that happens to read them.
+CONTROL_LABELS = {"ap": "Payables & purchasing", "py": "Ledger & close",
+                  "rc": "Revenue & collections", "tr": "Treasury"}
+
+
+def role_label(role: str) -> str:
+    """What to call the owner of a finding on a screen.
+
+    Sent from here rather than mapped in the browser. The frontend once kept its own
+    table of five role codes; when the agents were rebuilt it silently rendered blanks,
+    because a missing key in a lookup looks exactly like a role with no name.
+    """
+    if role in AGENTS:
+        return f"{role} {AGENTS[role].name}"
+    return CONTROL_LABELS.get(role, role or "Unattributed")
 LIMITATIONS = [
     "Supplied records only; no assurance of completeness, fraud determination or audit opinion.",
     "USD accrual profile for a single operating entity; not a statutory or consolidated adapter.",
@@ -62,6 +79,7 @@ def review(ws: str, request: Request):
     findings = []
     if scans:
         findings.extend(dict(item, snapshot_id=scans[0]["snapshot_id"],
+                             role_label=role_label(item["role"]),
                              stale=scans[0]["snapshot_id"] != snapshot)
                         for item in scans[0]["checks"])
     # What the agents concluded, read from the decision trail they wrote as they worked.
@@ -71,6 +89,7 @@ def review(ws: str, request: Request):
         reviewed = decision["reviewer"]
         findings.append(dict(
             id=decision["id"], title=decision["action"], role=decision["agent"],
+            role_label=role_label(decision["agent"]),
             status="attention" if decision["escalated"] else "pass",
             explanation=decision["summary"], amount_cents=None,
             action=decision["why"] or "Review the cited evidence.",
@@ -83,9 +102,18 @@ def review(ws: str, request: Request):
                       for e in json.loads(decision["evidence"] or "[]")],
             confidence=decision["confidence"],
             snapshot_id=snapshot, stale=False))
-    live = {"decisions": len(decisions),
-            "escalated": sum(1 for d in decisions if d["escalated"]),
-            "spend_cents": sum(d["cost_cents"] for d in decisions)} if decisions else None
+    # What the agents have done in this workspace, counted from the decisions they
+    # wrote. Deliberately not a run status: a conclusion outlives the run that reached
+    # it, and "the last run finished" is not a statement about the books.
+    live = {
+        "decisions": len(decisions),
+        "escalated": sum(1 for d in decisions if d["escalated"]),
+        "spend_cents": sum(d["cost_cents"] or 0 for d in decisions),
+        "agents": sorted({role_label(d["agent"]) for d in decisions}),
+        "reviewed": sum(1 for d in decisions if d["reviewer"]),
+        "note": "Agent conclusions are candidates until a person decides them. "
+                "Independent review is recorded per conclusion, not assumed.",
+    } if decisions else None
     for item in findings:
         item["follow_up"] = next((a for a in actions if a["finding_id"] == item["id"] and a["snapshot_id"] == item["snapshot_id"]), None)
     prior = {i["id"]: i for i in scans[1]["checks"]} if len(scans) > 1 else {}
@@ -116,9 +144,14 @@ def markdown(view):
         action = f["follow_up"]
         lines += ["Human follow-up: " + (plain(f"{action['status']}; {action['owner']}; {action['note']}") if action else "Not recorded for this snapshot")]
     if view["live"]:
-        lines += ["", "## Live investigation", "Status: " + view["live"]["status"],
-                  "HISTORICAL SNAPSHOT" if view["live_stale"] else "Current snapshot", plain(view["live"]["briefing"]),
-                  *["- Unresolved: " + plain(x) for x in view["live"]["unresolved"]]]
+        live = view["live"]
+        lines += ["", "## Agent conclusions",
+                  f"{live['decisions']} conclusion(s) from {len(live['agents'])} agent(s); "
+                  f"{live['escalated']} waiting on a person; {live['reviewed']} independently reviewed.",
+                  f"Model spend on this workspace: USD {live['spend_cents'] // 100:,}."
+                  f"{live['spend_cents'] % 100:02d}.",
+                  *["- " + plain(a) for a in live["agents"]],
+                  plain(live["note"])]
     lines += ["", "## Follow-up history (last hundred events)"]
     for e in view["history"]:
         lines.append(plain(f"- {e['created_at']} · {e['actor']} · {e['kind']} · {e['payload'].get('status', '')} · {e['payload'].get('note', '')}"))
