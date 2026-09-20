@@ -40,7 +40,10 @@ MAX_TURNS = 100
 
 class Message(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
-    #: Continue an existing exchange. A new one starts its own thread.
+    #: Continue an existing exchange. This groups the conversation; it is *not* the run.
+    #: Every message starts its own investigation, because a new question is new work —
+    #: reusing one graph thread across a conversation resumed the previous run's
+    #: checkpoint and doubled its findings on every turn.
     thread_id: str = Field(default="", max_length=100)
     #: Lower the run cap for this turn. It can never raise it.
     cap_cents: int | None = Field(default=None, ge=1)
@@ -48,10 +51,10 @@ class Message(BaseModel):
 
 def _record(connection, ws: str, turn: dict) -> None:
     connection.execute(
-        "INSERT INTO conversations (id, ws, thread_id, role, body, status, created_at)"
-        " VALUES (?,?,?,?,?,?,?)",
-        (turn["id"], ws, turn["thread_id"], turn["role"], db.encode(turn["body"]),
-         turn["status"], turn["created_at"]))
+        "INSERT INTO conversations (id, ws, thread_id, run_id, role, body, status,"
+        " created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (turn["id"], ws, turn["thread_id"], turn.get("run_id", ""), turn["role"],
+         db.encode(turn["body"]), turn["status"], turn["created_at"]))
 
 
 def _finish(connection, ws: str, turn_id: str, body: dict, status: str) -> None:
@@ -113,7 +116,9 @@ def reply_for(run: dict, document: dict | None = None) -> dict:
         "unresolved": unresolved,
         "status": run.get("status"),
         "spend": run.get("spend"),
-        "thread_id": run.get("thread_id"),
+        # The run this reply came from. A decision is addressed to *this*, never to the
+        # conversation, because only one investigation is paused on the question.
+        "run_id": run.get("thread_id"),
         # Absent unless one was asked for. A person asking about their books has not
         # asked for a document, and producing one anyway fills the screen with artifacts
         # nobody wanted and buries the ones they did.
@@ -138,8 +143,9 @@ def history(ws: str, thread_id: str = "", limit: int = MAX_TURNS):
                 "SELECT * FROM conversations WHERE ws=? ORDER BY rowid LIMIT ?",
                 (ws, min(limit, MAX_TURNS))).fetchall()
     return {
-        "turns": [{"id": r["id"], "thread_id": r["thread_id"], "role": r["role"],
-                   "status": r["status"], "created_at": r["created_at"],
+        "turns": [{"id": r["id"], "thread_id": r["thread_id"], "run_id": r["run_id"],
+                   "role": r["role"], "status": r["status"],
+                   "created_at": r["created_at"],
                    "body": json.loads(r["body"] or "{}")} for r in rows],
         "note": "Turns are recorded as they happen. A turn that stopped or failed stays "
                 "on the record rather than disappearing.",
@@ -153,10 +159,14 @@ async def talk(ws: str, body: Message):
 
     ingestion.workspace_config(ws)
     thread_id = body.thread_id or db.uid("thread")
+    # A new question is new work, so it gets its own run. The conversation carries on;
+    # the investigation does not.
+    run_id = db.uid("run")
     now = db.now()
 
-    asked = {"id": db.uid("turn"), "thread_id": thread_id, "role": "person",
-             "body": {"text": body.message}, "status": "sent", "created_at": now}
+    asked = {"id": db.uid("turn"), "thread_id": thread_id, "run_id": run_id,
+             "role": "person", "body": {"text": body.message}, "status": "sent",
+             "created_at": now}
     answer_id = db.uid("turn")
     with db.connect() as connection:
         _record(connection, ws, asked)
@@ -164,12 +174,13 @@ async def talk(ws: str, body: Message):
         # leave the question visible; a turn that only appears once it succeeds makes a
         # failure look like something the person never asked.
         _record(connection, ws, {
-            "id": answer_id, "thread_id": thread_id, "role": "orchestrator",
-            "body": {"text": "Working on it."}, "status": "running", "created_at": now})
+            "id": answer_id, "thread_id": thread_id, "run_id": run_id,
+            "role": "orchestrator", "body": {"text": "Working on it."},
+            "status": "running", "created_at": now})
 
     meter = Meter(run_cap_cents=min(body.cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
     try:
-        run = await run_investigation(ws, body.message, thread_id=thread_id,
+        run = await run_investigation(ws, body.message, thread_id=run_id,
                                       cap_cents=meter.run_cap_cents)
     except BudgetExceeded as exc:
         return _failed(ws, answer_id, thread_id, str(exc), 402, "budget_exceeded")
@@ -185,7 +196,7 @@ async def talk(ws: str, body: Message):
     if wanted:
         try:
             document = deliverables.create(ws, wanted, requested_by=body.message,
-                                           thread_id=thread_id)
+                                           thread_id=run_id)
         except HTTPException as exc:
             # The investigation still happened. Losing its result because the document
             # could not be built would throw away the part that cost money.
@@ -197,7 +208,8 @@ async def talk(ws: str, body: Message):
     with db.connect() as connection:
         _finish(connection, ws, answer_id, reply,
                 "waiting_on_you" if reply["escalations"] else "done")
-    return {"thread_id": thread_id, "turn_id": answer_id, "reply": reply, "run": run}
+    return {"thread_id": thread_id, "run_id": run_id, "turn_id": answer_id,
+            "reply": reply, "run": run}
 
 
 def _failed(ws: str, turn_id: str, thread_id: str, message: str, status: int, code: str):

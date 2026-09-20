@@ -90,13 +90,14 @@ export function Orchestrator({ ws }: { ws: string }) {
     }
   }
 
-  async function decide(threadId: string, approvalId: string, decision: "approved" | "rejected") {
+  // `runId`, not the conversation: the paused investigation is what resumes.
+  async function decide(runId: string, approvalId: string, decision: "approved" | "rejected") {
     setDeciding(approvalId);
     setError("");
     try {
       await intakeApi(`/api/workspaces/${ws}/agents/escalations/decide`, {
         method: "POST",
-        body: { thread_id: threadId, approval_id: approvalId, decision },
+        body: { thread_id: runId, approval_id: approvalId, decision },
       });
     } catch (e) {
       setError(reason(e, "The decision was not recorded"));
@@ -134,7 +135,8 @@ export function Orchestrator({ ws }: { ws: string }) {
               turn={turn}
               open={open}
               deciding={deciding}
-              onDecide={(approvalId, decision) => void decide(turn.thread_id, approvalId, decision)}
+              onDecide={(approvalId, decision) =>
+                void decide(turn.run_id || turn.thread_id, approvalId, decision)}
             />
           ),
         )}
@@ -208,7 +210,7 @@ function Reply({
       {findings.length > 0 && (
         <ul className="mt-3 space-y-2">
           {findings.map((finding) => (
-            <li key={finding.decision_id ?? finding.agent_id} className="border-l-2 border-line pl-3">
+            <li key={`${turn.id}-${finding.decision_id ?? finding.agent_id}`} className="border-l-2 border-line pl-3">
               <p className="text-[13px] font-semibold">
                 {finding.agent_name}
                 {finding.confidence !== null && finding.confidence !== undefined && (

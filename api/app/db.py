@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -179,9 +179,15 @@ CREATE INDEX IF NOT EXISTS workspace_deliverables ON deliverables(ws, created_at
 -- its run starts and updated when it ends, so a run that crashed or is still going leaves
 -- the question on the record: a turn that only appears once it succeeds makes a failure
 -- look like something nobody ever asked.
+-- `thread_id` groups the exchange; `run_id` names the one investigation a turn started.
+-- These were the same value, so every message in a conversation resumed the previous
+-- run's checkpoint instead of starting its own, and the findings list doubled on each
+-- turn: three conclusions, then the same three twice, then four times. A conversation
+-- and a run are not the same thing, and one column cannot be both.
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
-    thread_id TEXT NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL,
+    thread_id TEXT NOT NULL, run_id TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL, body TEXT NOT NULL,
     status TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS workspace_conversations ON conversations(ws, thread_id);
@@ -208,6 +214,7 @@ CREATE INDEX IF NOT EXISTS thread_decisions ON agent_decisions(ws, thread_id);
 #: column to a table that already exists, so an older database would silently keep the
 #: old shape and fail on first write. Each entry is idempotent and additive.
 ADDED_COLUMNS = (
+    ("conversations", "run_id", "TEXT NOT NULL DEFAULT ''"),
     ("records", "event_id", "TEXT"),
     ("sources", "event_hint", "TEXT"),
     # What a run did with the precedent it was offered. Stored on the decision

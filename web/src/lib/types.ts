@@ -345,7 +345,11 @@ export interface AgentRunResult {
  */
 export interface ChatTurn {
   id: string;
+  /** Groups the exchange. Continuing a conversation passes this. */
   thread_id: string;
+  /** The one investigation this turn started. A decision is addressed to this, never
+   *  to the conversation: only one run is paused on the question. */
+  run_id: string;
   role: "person" | "orchestrator";
   status: "sent" | "running" | "done" | "waiting_on_you" | "failed";
   created_at: string;
@@ -368,6 +372,7 @@ export interface ChatReply {
   deliverable?: { id: string; kind: string; title: string } | null;
   unresolved?: string[];
   status?: string;
+  run_id?: string;
   spend?: { spent_cents: number; cap_cents: number; remaining_cents: number };
   note?: string;
 }

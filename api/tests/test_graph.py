@@ -451,3 +451,35 @@ def test_a_run_shares_one_budget_across_every_agent_in_it(ws):
 
     assert final["spend"]["cap_cents"] == 20
     assert final["spend"]["spent_cents"] <= 20
+
+
+def test_a_replayed_thread_does_not_multiply_its_findings(ws):
+    """A checkpointed graph replays, and `operator.add` concatenated what the checkpoint
+    already held. Three conclusions became the same three twice, then four times, and
+    every count built on them inflated with them — "3 conclusions recorded" said six.
+
+    Resuming an interrupt replays the same way, so this is not only about a thread being
+    invoked twice; it is what makes the state safe to check point at all.
+    """
+    from collections import Counter
+
+    model = _clear_model()
+    thread = None
+    for _ in range(3):
+        final = asyncio.run(run_investigation(
+            ws, "Review payables and cash.", client=model, thread_id=thread))
+        thread = final["thread_id"]
+
+    ids = [f["decision_id"] for f in final["findings"]]
+    assert ids, "the run must have concluded something for this to measure"
+    assert not [i for i, n in Counter(ids).items() if n > 1], Counter(ids)
+
+
+def test_a_replayed_branch_does_not_report_the_same_gap_twice(ws):
+    """The same sentence twice on a screen reads as two problems."""
+    model = _clear_model()
+    first = asyncio.run(run_investigation(ws, "Review payables and cash.", client=model))
+    again = asyncio.run(run_investigation(
+        ws, "Review payables and cash.", client=model, thread_id=first["thread_id"]))
+
+    assert len(again["unresolved"]) == len(set(again["unresolved"]))
