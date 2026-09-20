@@ -409,3 +409,12 @@ def live(ws: str) -> dict:
         "note": "Every field here is what the run did. Nothing is estimated, and a task "
                 "that stopped reporting is shown as stopped rather than as running.",
     }
+
+"""Persist observable execution events, never private reasoning or raw prompts."""
+from .. import db
+
+
+def emit(ws, thread_id, agent, status, detail=""):
+    with db.connect() as connection:
+        db.event(connection, ws, "agent.activity",
+                 {"thread_id": thread_id, "agent": agent, "status": status, "detail": detail})

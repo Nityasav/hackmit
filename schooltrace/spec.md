@@ -1,142 +1,181 @@
-# Sherlock — current product and implementation specification
+# Sherlock — implementation specification
 
-Updated: 2026-09-20. This is the canonical specification for the merged implementation. Read this before changing the product. Repository-root `SPEC.md` points here; `PROJECT_TRACKER.md` records status and the next handoff. Code is the evidence for implementation claims. Historical plans are design context, not proof that a feature exists.
+Updated 2026-09-20 after integrating main commit `55e1daf` into `max`, adding receivables tools and preserving the coverage layout patch. This is the canonical implementation overview; root `SPEC.md` points here. Code and tests take precedence over historical plans.
 
-## 1. Product and user intent
+## 1. Product and boundaries
 
-Frontend integration checkpoint after the `f102b0c` backend rewrite: Books consumes the live `requirements` contract (not the older six capability cards). Requirements are collapsed by default into required, optional and supplied groups; editable settings still save through the workspace settings endpoint. Do not restore the removed Running the agents or File updates panels. Investigation retains record checks and agent execution. CSV intake keeps current role mappings, reviewer-supplied values, validation and commit; PDF extraction, correction and combined staging stay connected. Upload actions use explicit black buttons with hidden native file inputs. Institution fields use component-level 34px heights, 6px label gaps and inset focus outlines. Source history and evidence requests remain accessible in collapsed sections. Earlier architecture descriptions below predate the backend rewrite; use current code/contracts for roles and endpoints rather than restoring removed backend modules.
+Sherlock reviews a company's supplied financial records and supporting documents. The current domain is SaaS-company accrual accounting, not the former school-board five-agent prototype. Some UI labels still say institution and persisted identifiers retain SchoolTrace names. Do not restore removed school/grant/payroll-agent modules from historical documentation.
 
-Intake file detection: `web/src/lib/source-detection.ts` matches full CSV header schemas for all eleven structured roles and maps case/space/hyphen variants to canonical columns. TXT/Markdown policy and service roles use conservative content cues and remain suggestions. Detection reads at most 64 KiB locally, makes no model call, permits manual overrides, and leaves ambiguous files as Other document with a review message. Public workspaces always retain document mode. Backend validation and explicit commit remain required; coverage reflects committed role assignments, not suggestions. Refresh sources calls `POST /api/workspaces/{ws}/sources/detect` to prepare a validated recovery import for active CSVs previously committed as Other document. It matches unique complete schemas using backend FIELDS, preserves original metadata and bytes, and requires confirmation before publishing a new snapshot. Historical document records remain intact; already recovered content hashes are skipped. Ambiguous files remain unchanged, invalid rows block commit, and public workspaces cannot be promoted to accounting. No paid model calls or automatic investigations occur. Tests: `bun test src/lib/source-detection.test.ts` and `api/tests/test_source_recovery.py`.
+A user creates a workspace, uploads and validates records, commits them, starts an investigation, reviews evidence and makes decisions. There are no preloaded institutions, demo runs or seeded findings. Test fixtures must be deliberately imported and kept separate from real records.
 
-Sherlock helps education finance teams review supplied financial records with five cooperating agents. A director creates an institution, uploads records, commits a validated snapshot, asks an investigation question, examines cited findings, records decisions, and exports a briefing. Institutions are user-created; no specific school is the target.
+The accounting profile is `SAAS_ACCRUAL_V1`. Synthetic workspaces support USD; public-document workspaces also support CAD, EUR and GBP but do not unlock USD accounting simply by supplying a document. No statutory audit opinion, full-population completeness or real-world financial posting is implied.
 
-The interface must remain compact, professional, and understandable without a demonstration. Preserve the existing monochrome palette, typography, magnifying-glass identity, and three main destinations. Do not reintroduce preset institutions, starter packs, recorded findings, scripted investigations, or automatic paid runs. Test data stays in isolated test environments.
+## 2. Frontend and workflow
 
-Capitalization uses sentence case for labels and statuses: School, District, Board, University, Needs evidence. Preserve acronyms such as CFO, AP, PDF, CSV and ID. Display labels must not change API enum values, CSV headers, filenames, institution names, or source quotations. Nested full-width form controls have a separate row and label clearance through `web/src/app/globals.css`.
-
-Product copy should name the task and next action directly. Prefer short headings such as Review scope, Agent team, Findings and Source evidence. Avoid hackathon slogans, repeated claims about AI, conversational filler and long explanations of implementation details. Keep source quotations and user-authored content unchanged. Preserve necessary information about review scope, paid calls, data transmission and irreversible actions. Shorter copy should fit existing containers without fixed heights or forced line lengths.
-
-## 2. Current navigation and workflow
-
-| Screen | Route | Implementation | User action |
-| --- | --- | --- | --- |
-| Books | `/` | `GuidedWorkflow`, `SourcesPanel`, `DocumentIntake` | Institution dashboard and intake guidance; upload, map, validate and commit records; add later revisions |
-| Investigation | `/investigation` | `components/investigation/` | Set objective; start five-agent review; inspect progress, sources, findings and precedent |
-| Briefing | `/briefing` | `ReviewWorkspace` with `section="reports"` | Review snapshot findings, limitations and saved follow-up; export Markdown or print |
-| Access | `/access` | Access page and local API access routes | Inspect local access, sign in when configured, delete a workspace |
-| Login | `/login` | Supabase auth and `src/proxy.ts` | Authenticate to the web application |
-
-`web/src/lib/tabs.ts` owns primary navigation. Historical `/command`, `/board`, `/findings`, `/reports`, `/learning`, and `/cfo` page references are not current destinations. Some legacy tab identifiers remain in bundle contracts; do not confuse them with public routes. Current `disabled_tabs` is empty to avoid returning removed navigation identifiers to the frontend schema.
-
-The normal sequence is create → upload → preview/map → commit → investigate → review/export. Committing data does not call a model. Starting a live investigation does. Books retains its institution dashboard, creation guidance, workflow progress and coverage cards. Only the standalone Open Investigation agent panel, File Updates panel and missing-evidence request form were removed from intake. Agent execution and record checks remain on Investigation. Evidence-request and update APIs remain available; removing their intake panels does not delete stored evidence or disable revision imports. Native file selectors have contrasting buttons. Labels have a small gap and focus outlines are inset; institution fields are compact (34px), not globally enlarged.
-
-## 3. Architecture and ownership
-
-| Layer | Files | Responsibility |
+| Destination | Route | Purpose |
 | --- | --- | --- |
-| Web | `web/src/app/`, `web/src/components/` | Next.js 16 App Router, React 19, TypeScript, Tailwind 4 |
-| Client state | `web/src/lib/store.ts`, `data.tsx`, `schemas.ts`, `types.ts` | Zustand selection, workspace loading, polling, Zod validation and typed responses |
-| HTTP clients | `web/src/lib/api.ts` | Axios, API URL selection, reviewer header, cookies, 20-second request timeout, error mapping |
-| API routing | `api/app/main.py` | FastAPI routes and shared middleware |
-| Persistence | `api/app/db.py` | SQLite schema and transactional storage of originals, records, snapshots and run history |
-| Intake | `api/app/ingestion.py` | CSV/text validation, provenance, source revisions, atomic snapshot commits and coverage |
-| Accounting | `api/app/accounting/` | Exact integer-cent payroll, AP, grants and review checks |
-| Coordinator | `api/app/cfo/` | Bounded planning, dispatch, review cycles, execution events and report persistence |
-| Agent adapters | `api/app/agents/`, `api/app/integrations/` | Scoped source tools, specialist/reviewer roles and model adapters |
-| Dashboard projection | `api/app/projection.py` | Sole dashboard Bundle builder from persisted evidence and runs |
-| Decisions | `api/app/approvals.py`, `reviews.py` | Approval proposals, reviewed precedent, deterministic scans and human follow-up |
-| Extraction | `document_processing.py`, `extraction.py`, `extractor_server.py` | PDF/image/text preprocessing, local inference interface, corrections, evaluation and model releases |
-| Updates | `api/app/updates.py` | Snapshot differences and explicitly requested rescans |
-| Web identity | `web/src/lib/supabase/`, `web/src/proxy.ts` | Supabase session validation; separate from API authorization |
+| Books | `/` | Workspace dashboard, CSV import, coverage, documents, record search/export |
+| Investigation | `/investigation` | Objective, agent execution, conversation, progress, decisions and record checks |
+| Briefing | `/briefing` | Findings, review follow-up and report export |
+| Access / Login | `/access`, `/login` | Access management and web authentication |
 
-The runtime uses a custom Python coordinator, not LangGraph. LangGraph was previously proposed; it is not an installed orchestration dependency. Keep the existing structure compact and avoid creating parallel stores or alternative bundle builders.
+Normal sequence: create → upload → preview/map → commit → investigate → review/export. Neither selecting files nor committing an import starts a paid run.
 
-The latest main integration adds `AgentBoard` and `TaskDrawer` within Investigation, plus `RecordChecks` for deterministic results. `accounting/collections.py` supplies money-in checks over fees, collections, deposits and sponsorships. Default coordinator limits are 24 tool calls per actor/task and 150 per run, with 12 coordinator model calls. These are execution limits, not benchmark results.
+Preserve the monochrome design and magnifying-glass identity. Copy should describe an action or limitation briefly, not repeat marketing claims. Preserve quoted evidence and user content. Do not restore the removed standalone Running the agents/Open investigation or File updates panels on Books.
 
-## 4. Documents, financial records and updates
+Books retains workspace creation and progress. Coverage requirements start collapsed, grouped into required, optional and supplied. Cards use equal-height grid rows, consistent gaps and bottom-aligned settings/actions; mobile becomes one column. Native file inputs are hidden behind explicit black chooser buttons. Institution inputs remain compact with label clearance and inset focus outlines. Do not fix overlap by making controls excessively tall.
 
-Workspace IDs are `ws-` plus 16 hexadecimal characters. Workspace creation records name, entity type, jurisdiction, currency, period and scope. Current data-origin values are `synthetic` and `public`; authorized confidential institutional mode is not implemented by merely changing these labels.
+`DataRequirements` handles a missing or malformed `requirements` array as an API compatibility warning, not an empty all-clear. `SourcesPanel` retains mapping, reviewer-supplied values, exclusions, saved imports, source history and evidence-request support. Removing a panel must not remove its backend capability.
 
-The accounting profile is `US_DISTRICT_MANAGEMENT_ACCRUAL_V1`, with USD integer cents. Other supported currencies are available for public-document exploration. This is a management accounting profile, not a statutory Canadian school-board or complete GASB adapter.
+## 3. Architecture
 
-Structured intake accepts CSV and UTF-8 TXT/Markdown: up to 20 files, 10 MB each and 50 MB per batch. File roles include chart, opening, ledger, payroll, grants, budget, invoice, fees, collections, deposits, sponsorships, policy, service and document. Required columns and validation live in `ingestion.py`; clients must not invent financial defaults to force an import through.
-
-An import progresses through `needs_mapping`, `needs_review`, `ready_to_commit`, and `committed`. Confirm mappings, exact amounts, dates and controls before commit. Invalid rows block publication unless explicitly excluded with a reason. Original bytes and source hashes remain available for evidence inspection. A balanced journal is an arithmetic control, not proof of completeness.
-
-Source identity combines workspace, role, source system, stable record ID and version. New versions supersede active records while preserving history. Duplicate-only imports must not double count. Commit uses expected preview versions and idempotency keys; stale writes return conflicts. Snapshots pin records and provenance for an investigation.
-
-PDF, PNG, JPEG, TXT and Markdown documents use the extraction path. Originals are preserved; preprocessing produces page text/images. Review extracted fields and citations before staging them through normal financial intake. Extraction approval alone does not commit ledger records. XLSX and live ERP/bank connectors are not implemented.
-
-Continuous uploads are supported. `GET /api/workspaces/{ws}/updates` compares the latest two snapshots. `POST .../updates/scan` runs deterministic checks and optionally starts a five-agent investigation with `live: true`. This requires explicit user action. It does not run silently on every upload and is not a dependency-aware selective recomputation engine. Results from older snapshots must remain visibly stale.
-
-## 5. Agents and orchestration
-
-| Role | Runtime ID | Job |
+| Layer | Source | Responsibility |
 | --- | --- | --- |
-| CFO Agent | `cfo` | Plans tasks, manages bounded follow-up and synthesizes the final briefing |
-| AP & Payments | `ap` | Reviews invoices, purchase/receipt references, duplicate candidates and payment support |
-| Payroll & Budget | `py` | Reviews payroll reconciliation, allocations and budget evidence |
-| Grants & Compliance | `gr` | Reviews award terms, eligibility periods and supplied charges |
-| Internal Auditor | `au` | Retrieves original evidence independently and reperforms calculations before accepting claims |
+| Frontend | `web/src/app`, `components`, `lib` | Next.js 16, React 19, TypeScript, Tailwind; API contracts, state and navigation |
+| HTTP API | `api/app/main.py` and routers | FastAPI endpoints, access and request limits |
+| Intake | `ingestion.py`, `roles.py`, `requirements.py` | Validation, versions, snapshots, coverage and editable settings |
+| Persistence | `db.py` | SQLite records, sources, imports, decisions and event history |
+| Agent contract | `agents/registry.py`, `schemas.py` | Hierarchy, dependencies, scope, tools, reviewers, budgets and outputs |
+| Execution | `graph/build.py`, `state.py`, `escalation.py` | LangGraph routing, worker graphs, interrupts and SQLite checkpoints |
+| Model runtime | `agents/runtime.py`, `tools.py`, `budget.py` | Tool loop, scoped reads, deterministic calculations, provenance and limits |
+| Accounting | `accounting/` | Matching, reconciliation, statements, close, accruals, planning, variance, controls, audit and reporting |
+| Conversation / memory | `agents/chat.py`, `memory.py`, `approvals.py` | Investigation conversation, human decisions and reviewed precedents |
+| Projection / review | `projection.py`, `reviews.py`, `updates.py` | Dashboard projection, deterministic scans, follow-up and snapshot differences |
+| Documents | `document_processing.py`, `extraction.py`, `extractor_server.py` | Original storage, preprocessing, extraction review and model lifecycle |
 
-The document extraction model is a separate input-processing component, not a sixth investigator. The partner's future fine-tuned local model plugs into this extraction interface.
+The current runtime **uses LangGraph**; descriptions of a custom five-agent coordinator are obsolete. Maintain one authoritative registry and one dashboard projection rather than duplicating state.
 
-The main UI posts `workflow: "five_agent"` to `/api/cfo/runs`. `cfo_factory.py` wires `IntakeDataSource`, three `SnapshotSpecialist` adapters and `SnapshotAuditor`. The coordinator validates the plan and evidence scope, schedules independent tasks within concurrency limits, requests independent review, permits bounded revisions and persists the report. Provider failures and budget exhaustion remain visible; there is no fixture fallback.
+## 4. Sources, validation and coverage
 
-Standalone routes `/api/workspaces/{ws}/agent-runs` support `cfo`, `grants_compliance`, and `internal_auditor`. These have a separate synchronous execution loop and persist to `agent_runs`; coordinator runs persist to `cfo_runs`. Both share the intake database and dashboard projection. Do not describe them as one unified execution loop. Standalone Auditor requires existing preparer findings and can leave targets unreviewed.
+Workspace configuration includes name, kind, entity type (`company`, `subsidiary`, `group`), jurisdiction, currency, period and scope. Settings include home tax jurisdiction, fiscal year end, materiality, approval limit and optional close target day. Setting keys and validation are defined in `requirements.py` and `SettingsUpdate`.
 
-Models interpret sources; accounting code supplies monetary results. A supported amount requires a published calculation and provenance. Auditor acceptance is a bounded claim review; human approval remains separate. Agents cannot post journals, release real payments or change payroll through their evidence tools. Uploaded instructions are untrusted document content.
+There are 21 structured CSV roles:
 
-## 6. Findings, decisions, reports and memory
+- Ledger: chart, opening, ledger.
+- Purchases: vendors, purchase_orders, goods_receipts, vendor_invoices, payments.
+- Sales: customers, customer_invoices, remittances.
+- Cash: bank_transactions, processor_payouts.
+- People/spend: payroll, expenses.
+- Planning: budgets, forecasts, headcount.
+- Controls: approvals, period_locks, tax_registrations.
 
-Coverage cards now expose explicit rules-based check actions using the existing `POST /api/workspaces/{ws}/review/scans` endpoint (one scan calculates all available checks; no model calls). Cards display per-area results with amounts, next actions and clickable source lines. `coverage` projects only the latest scan when its snapshot matches the current committed snapshot; new commits clear displayed results until rerun. Missing inputs remain visible even when partial checks run. Statuses distinguish ready_to_check, checks_passed, differences_found and evidence_gaps; none is an Auditor verdict. Public-document workspaces cannot run USD accounting checks. Management calculations in `accounting/review.py` now include opening-plus-activity closing account balances, a closing trial-balance difference and period revenue less expenses. Positive account balances are debits, negative credits; positive period result is surplus. These are supplied-record management summaries, not complete statutory statements. Budget checks retain their explicit assumption that the supplied approved budget covers the workspace period; collection checks retain their reference-matching and completeness limitations. Regression tests: `tests/test_coverage_checks.py` cover exact amounts, provenance, missing evidence, stale snapshots and public-mode refusal.
+Document roles are policy, contract, invoice, service, budget and document. A budget document is not a structured `budgets` table. A file labeled document does not satisfy arbitrary structured requirements.
 
-`projection.py` derives dashboard tasks, findings, decisions, approvals, reports and precedent from saved runs. It must never populate an empty workspace with unrelated results. `reviews.py` also exposes a snapshot review feed that combines deterministic checks, standalone candidates, coordinator claims and follow-up history; the Briefing screen currently consumes this feed.
+CSV intake permits 30 files per batch, 10 MB per file, 50 MB total and 50,000 rows per file. The frontend limit now matches the backend so a complete 21-role pack can be selected together. Exact current columns and units come from `roles.FIELDS` and `/api/roles`; monetary calculations use integer cents. Do not invent values to force validation.
 
-Keep candidate findings distinct from Auditor-accepted claims and human decisions. Preserve source identifiers, line/page locators, calculation references and snapshot IDs. Missing evidence remains an unresolved question. Do not sum overlapping exposure, reclassification and cash-impact amounts into a savings total.
+Auto-detection matches complete schemas, not filenames alone. The frontend suggests mappings; backend detection validates committed/recovered records. Ambiguous files remain unresolved. Refresh sources can stage a recovery import for CSVs previously stored as documents; recovery still requires review and commit. It must preserve original source bytes/history and avoid repeat imports.
 
-`approvals.py` saves human decisions and can derive approved-scenario effects from supported balanced proposals. `reviews.py` follow-up actions track owner, note and status. These are different records and APIs. Neither changes an external financial system. Reports can be exported as Markdown and printed; a complete statutory statement package is not implemented.
+Import states include needs_mapping, needs_review, ready_to_commit and committed. Invalid rows block publication unless explicitly excluded with a reason. Source versions, stable keys, hashes and idempotency checks preserve provenance and prevent double counting. New records create a new snapshot; stale review results must not appear current.
 
-Reviewed precedent exists today: human approval/rejection creates scoped precedent; later runs can record applicability checks. The UI projects precedent as playbooks and shows applied/declined checks. This does not mean agents train themselves, rewrite prompts, or implement the earlier proposed automatic playbook discovery and replay system.
+There are 31 coverage requirements: 21 CSV roles, five named document roles and five settings. Some are optional. Coverage reflects supplied inputs, not successful analysis, a clean audit or verified completeness. A CSV-only pack with all settings satisfies 26/31; policy/contract/invoice/service/budget evidence remains document-specific.
 
-## 7. Extraction model improvement
+Relevant APIs: workspace creation/settings; imports and commit; sources/detect; coverage and requirements; source download/spans; record date search and CSV export. Use current request models, not examples in old plans.
 
-The API supports original-document storage, model registration, predictions, human corrections, training consent, grouped frozen datasets, training export, paired evaluations, promotion, rollback and retirement. Most lifecycle operations are API-level features; Books primarily exposes upload, extraction, correction and staging.
+## 5. Agent hierarchy and execution
 
-Each extracted observation carries a status (`present`, `missing`, `ambiguous`, `unreadable`), value and page/character citation. Invalid or unsupported values cannot become accepted financial records. Dataset grouping prevents related institution/template documents from crossing train/evaluation boundaries. Model manifests record training hashes/groups, supported roles and artifact identity. Gold labels must not be sent to inference.
+Twenty-two registry entries means **one orchestrator + four workers + 17 specialists**, not 22 specialists.
 
-Current promotion policy in `extraction.py`: at least 20 held-out documents, 3 groups and 100 present fields; schema validity 100%, precision 99%, recall 95%, citation accuracy 98%, abstention accuracy 95%, critical exactness 99%, unsupported rate at most 1%. Candidate metrics cannot regress against baseline; each supported role needs at least three documents and no per-role regression. Promotion requires an admin, current evaluation policy, unchanged model identity and active-version consistency.
-
-These are configured gates, not achieved model scores. Training and supplying a fine-tuned artifact remain external work. The repository includes a local model serving adapter; availability and quality require an actual configured artifact and benchmark evidence.
-
-## 8. Running and deployment boundaries
-
-Start the web app in `web/` with `bun install` then `bun dev`; start the API in `api/` with `uv sync` then `uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`. The browser uses port 3000. Keep server API keys in ignored `api/.env`; never copy them into client code or docs.
-
-| Configuration | Purpose |
+| Worker | Specialists |
 | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web login configuration in `web/.env.local` |
-| `NEXT_PUBLIC_API_URL` | Browser records API; defaults to localhost:8000 |
-| `NEXT_PUBLIC_CFO_API_URL` | Optional coordinator URL override |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | Server model credentials and default selection |
-| `CFO_MODEL`, `SPECIALIST_MODEL`, `GRANTS_MODEL`, `AUDITOR_MODEL` | Role/runtime model overrides; verify the consuming adapter |
-| `CFO_PROVIDER`, `SPECIALIST_PROVIDER` | Model-provider selection for coordinator adapters |
-| `SCHOOLTRACE_DATA_DIR` | Intake database directory |
-| `SCHOOLTRACE_USERS` | Optional local API password accounts, roles and workspace access |
-| `SCHOOLTRACE_EXTRACTORS` | Registered local extraction endpoint/artifact configuration |
+| A — Treasurer | A1 Accounts Payable; A2 Accounts Receivable; A3 Bank Reconciliation; A4 Cash Management |
+| B — Controller | B1 Month-End Close; B2 Accruals & Adjustments; B3 Financial Reporting; B4 Close Review |
+| C — FP&A | C1 Budgeting; C2 Forecasting; C3 Variance Analysis; C4 Strategic Planning; C5 Board Reporting |
+| D — Audit & Controls | D1 Audit; D2 Controls Testing; D3 Audit Evidence; D4 Reporting & Filing |
 
-Supabase authenticates the web app, but FastAPI separately uses password accounts and workspace permissions. By default it accepts loopback traffic. Hosted access is opt-in through `SCHOOLTRACE_PUBLIC_HOSTS` and requires `SCHOOLTRACE_USERS`; unconfigured hosted access fails closed. `SCHOOLTRACE_ALLOWED_ORIGINS` and `SCHOOLTRACE_ALLOWED_ORIGIN_REGEX` configure allowed web origins. Hosted cookies use Secure and SameSite=None. A web login does not establish API tenant isolation. `api/Dockerfile`, `api/railway.json` and `DEPLOY.md` provide deployment support; this does not establish that a remote deployment is configured or healthy. Persistent storage and separate API sign-in are still required. The API loads ignored `.env.local` as well as `.env`.
+The orchestrator is Chief Financial Agent. `WIRED_WORKERS = ("A", "B", "C", "D")`; all four branches are connected. Requirements gate execution. A registry entry or wired branch alone is not evidence of live model accuracy.
 
-Compatibility names such as `SCHOOLTRACE_*`, the reviewer header, SQLite filename and schema identifiers remain where needed. Product branding is Sherlock. Do not rename persisted contracts casually.
+Substantive tools now cover:
 
-## 9. Validation and known gaps
+- A1: three-way matching, duplicate checks, policy checks.
+- A2: receivables aging and exact-reference cash allocation.
+- A3: bank reconciliation and processor-payout decomposition.
+- A4: cash projection.
+- B1: close checklist; delegation is graph-owned, not a generic model tool.
+- B2: balanced proposed accrual journals for unbilled deliveries.
+- B3/B4: statements and independent recomputation.
+- C1–C5: budget rollup, forecast comparison, variance drivers, explicit scenarios and management reporting.
+- D1–D4: sampling/tracing, control tests, persisted evidence packs and reporting.
 
-The last completed backend run before this documentation/capitalization update reported 339 passing tests and 9 skipped tests. These are offline unit/integration checks, not model accuracy scores. Opt-in provider evaluations can cost money and require separate reporting of model, dataset, denominators and failures. Lint/build validate frontend integration; browser verification is needed for layout and interaction changes.
+Receivables match customer, currency and a unique invoice reference. Partial balances age by due date. Repeated receipt references, duplicate invoice references, multi-invoice allocations without an allocation breakdown, and unreferenced receipts are not guessed. Excess stays unapplied; receipts after the as-of date are excluded. These are proposed allocations, not postings. Engine exceptions feed escalation instead of relying on model narration.
 
-Known gaps: hosted API/auth integration; trained extractor artifact and independently measured quality; XLSX/connectors; complete statutory financial statements; full structured three-way matching; automatic playbook generation/replay; full dependency-aware rescans; external financial posting. Current client requests have a 20-second timeout while standalone reviews can run longer, so long synchronous reviews warrant integration testing. Do not mark a gap complete from a screenshot or a successful HTTP response alone.
+Scopes derive from declared requirements. Source citations must point to records actually read. Tool calls and model use are metered; unsupported tools fail explicitly. Financial figures come from deterministic calculations; prose must not manufacture an amount or missing evidence.
 
-## 10. Context maintenance rules
+LangGraph persists checkpoints with AsyncSqliteSaver. Multiple human interrupts require an addressed decision; a paused run is not complete. Resume currently creates a fresh run meter while historical spend remains persisted. Review declarations and escalation are not a blanket guarantee of sequential independent review of every claim; validate the actual graph path before making that claim.
 
-Before work, inspect Git branch/status and preserve pending edits. Read `web/AGENTS.md` for frontend changes. Read only the modules relevant to the feature after this overview. Update this spec when routes, contracts, model roles, authorization boundaries or implemented capabilities change. Record verified outcomes and remaining work in `PROJECT_TRACKER.md`.
+Even specs marked `llm=False` can use the shared model runtime for narration/judgment. The flag describes deterministic work, not a promise of zero model calls. Model availability, valid server credentials, budgets and missing inputs can still block a run.
 
-Use `contracts/README.md` and current models for endpoint details. `INGESTION_PLAN.md` and `REWIRING_PLAN.md` retain historical design context and may contain outdated names or proposed work. Earlier references to deleted documents or prototypes are not dependencies and must not be used to reconstruct preset content.
+## 6. Reports, decisions and memory
+
+Keep deterministic checks, model proposals, reviewer verdicts and human approvals distinct. Preserve source/line/page references and calculation provenance. Avoid summing overlapping exposures into invented savings.
+
+Reports summarize supplied records. Statements, budget comparisons and cash flow tools are implemented, but they are management outputs, not a certified statutory filing. Journal proposals and human decisions do not post to an external ledger or release payments.
+
+D3 collects actual decisions, links and precedent checks. Empty decision history must remain empty until work occurs; fixture uploads must not fabricate an audit trail.
+
+Within-workspace approval precedent and cross-period memory are separate mechanisms. A new workspace may explicitly continue a prior period; reviewed precedent can then be checked for applicability. This is not automatic model training, unrestricted self-modification or approval bypass.
+
+Active records and coverage are loaded for runtime use; do not claim an investigation is isolated from concurrent commits without validating its snapshot behavior.
+
+## 7. Documents and extraction improvement
+
+The current Books document chooser accepts PDF. Review extracted values against their original pages, correct them, and stage through intake before commit. A successful upload alone does not create validated ledger rows. Public documents and CSV records are different evidence paths.
+
+Lower-level preprocessing and extraction modules retain additional format handling; supported UI inputs are narrower. Do not promise OCR availability from a library import alone: check installed dependencies and server configuration. XLSX and live ERP/bank connectors are not implemented by this workflow.
+
+The extraction lifecycle includes model registration, predictions, corrections, consent, grouped datasets, export, paired evaluation, promotion, rollback and retirement. Most administration remains API-level. Fine-tuning and supplying a usable model artifact remain external work.
+
+Promotion gates in `extraction.py` require held-out volume and groups, schema validity, precision/recall, citation/abstention accuracy, critical exactness, bounded unsupported values, and no baseline/per-role regression. These are policy thresholds, not achieved scores. Keep related templates/institutions grouped across splits; do not leak gold labels to inference.
+
+## 8. Development and deployment
+
+API: from `api/`, run `uv sync` and `uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`. Web: from `web/`, run `bun install` then `bun dev` (port 3000). A server started without reload must be restarted to use backend changes. Do not run a production build over a running development build directory.
+
+Keep credentials in ignored server environment files. Never put model keys in frontend code or fixtures. Important current settings:
+
+- `OPENAI_API_KEY`; model tiers `AGENT_MODEL_SOL`, `AGENT_MODEL_TERRA`, `AGENT_MODEL_LUNA`.
+- `AGENT_RUN_CAP_CENTS`, `AGENT_DAY_CAP_CENTS`; pricing configuration in `agents/budget.py`.
+- `SCHOOLTRACE_DATA_DIR`, local users, public-host and allowed-origin settings.
+- `NEXT_PUBLIC_API_URL`; Supabase web URL and publishable/anon key.
+- Extraction endpoints/artifact configuration as consumed by the extraction modules.
+
+Configured model identifiers and prices must match the deployed provider; defaults are not proof of availability. Old CFO/SPECIALIST model environment names are not substitutes for the registry's current tier configuration.
+
+Supabase web login and backend authorization are distinct. Hosted access requires backend credentials, correct origins, persistent storage and appropriate isolation; a Vercel frontend alone does not supply these. Retain compatibility environment/database names where needed.
+
+## 9. Verification and synthetic fixtures
+
+The latest regression run and implementation checks are recorded below. These are offline checks, not a 22-agent live benchmark or model accuracy score.
+
+`fixtures/generate_saas.py` creates deterministic fictional CSV books and separate event/defect truth. Seed 7, September 2026 produces 699 baseline records or 719 records with six planted control/matching defects and three benign lookalikes. Journals, opening balances, payroll and processor payout arithmetic are checked. Baseline does not mean no legitimate variance, unpaid invoice or evidence gap.
+
+`fixtures/validate_saas_pack.py` imports all 21 CSV roles through a temporary FastAPI database with auto-detection, commits, checks coverage and invokes substantive tools for all 17 specialists. It makes no paid model calls and creates no fake decisions. Its saved outputs are regression observations, not independent ground truth. CSV packs cannot supply policy or contract documents or prove extraction quality.
+
+Test human approvals/resume, conversation, evidence history, cross-period memory and actual provider responses separately. Expected answers must stay outside agent-readable upload folders.
+
+## 10. Maintenance rules and remaining limitations
+
+### September 20 demo workflow additions
+
+- Investigation exposes **Ask the CFO agent** and a confirmed **Run financial audit** action. The latter runs deterministic checks, then routes a request through all four worker domains. The 17 specialists retain input, scope and budget gates; blocked work is disclosed rather than marked successful. This is an automated supplied-record review, not a certified audit.
+- `agents/activity.py` records actual graph starts, tool calls, completions, failures and human-review stops. `/agents/activity?thread_id=...` feeds a polling domain grid and timestamped timeline. It does not expose chain-of-thought or invent agent interactions. Older runs have no activity events.
+- `agents/continuation.py` unifies the common approval path with durable graph resume and updates conversation state. Standalone conclusions are already finished: approving resolves their task, while **Revise instructions and rerun** explicitly starts new paid work. Original decisions remain in history. Approval does not create evidence, post entries or pay invoices.
+- Books allows withdrawing an active committed source through a confirmed, revision-checked DELETE request. `source_removal.py` deactivates its records and creates a new snapshot; original bytes and prior snapshots remain. This is removal from active books, not irreversible erasure. Reimporting identical versions does not restore withdrawn records automatically.
+- Briefing exports an authenticated, paginated ReportLab PDF with findings, evidence locators, status counts, follow-up, history and limitations. Markdown remains an API compatibility format. New agent decisions record snapshot provenance; older decisions use the most recent preceding snapshot as a historical approximation.
+- A2 and C3 expose deterministic receivables-aging and budget-variance graphics with source references, separate from model conclusions. The transaction list is collapsed and searchable; review history has aligned filters and expandable detail rows.
+- Offline verification includes source-removal scope/revision checks, PDF generation, graph continuation, and full-review routing. No paid provider run or live-model quality benchmark was performed for these additions.
+- Final checks: **397 backend tests passed**, with one dependency deprecation warning; frontend lint and TypeScript passed. The full-review regression exposed concurrent worker subgraphs returning shared scalar fields. `WorkerOutput` now limits their return schema to accumulated results, avoiding conflicting writes when all four domains execute together.
+- Task outputs: the runtime persists `agent.deliverable` events containing the original objective, snapshot, result and calculations used. All 17 specialists expose a task-specific text/PDF deliverable through `/agents/deliverables/{decision_id}` (and `/pdf`), opened from Agent tasks. No read/export starts another model or recalculates against newer books. Older tasks explicitly disclose missing original prompts/calculations. The roster's unrelated standalone chart buttons are removed; saved aging/variance charts appear only when that task ran the relevant calculation.
+- Audit approval cards support both legacy string agent identifiers and structured `{id, name}` identifiers; React render tests cover the previously crashing saved-run shape. Latest backend suite: **416 passed**; both UI rendering regression tests pass.
+
+Before changes inspect Git status/branch, preserve pending work and read applicable AGENTS.md. Keep this spec and root pointer consistent. Historical plans, tracker entries and READMEs can describe earlier phases; do not restore obsolete architecture from them.
+
+### Current CFO conversation and deliverable behavior
+
+- CFO chat uses a domain-restricted structured Responses call to answer accounting questions from workspace-local recent turns, saved task results and calculated evidence, or dispatch precisely named specialist IDs. Explicit FP&A requests cover C1–C5. Full financial reviews bypass conversational routing and request all four domains. Conversational explanations are advisory, not new verified findings.
+- Context is bounded and historical snapshots are labeled. No provider-side conversation is stored (`store=False`). Chat usage is persisted and included in daily spending; the conversation and dispatched graph share a run meter. Unknown specialist IDs or invented saved-result references fail closed.
+- New graph runs order dependent deliverables after their contributors. Scoped, attributed handoffs and historical pointers are shared within bounded context, without granting source access or bypassing citation checks. Legacy paused runs retain their original topology. Invalid citations get one bounded correction opportunity; unsupported evidence remains refused.
+- Every saved CFO response can export a request-specific PDF. Every specialist exposes its saved task deliverable in the roster immediately after running and in Agent tasks; errors stay beside its input. Previous decisions are collapsed into compact summaries with details on demand.
+- Full-review deliverables include only the recorded run's conclusions and exact saved scan, plus domain coverage, unresolved work and next steps. Legacy runs disclose unavailable scan provenance rather than borrowing a later scan. Findings are not an audit opinion or a completeness guarantee.
+- Verification: **430 backend tests**, **4 frontend rendering tests**, TypeScript and lint pass. Mocked-provider tests cover explicit FP&A dispatch, conversational follow-ups without reruns, export isolation and citation recovery. No paid live-provider benchmark was run; provider behavior and financial accuracy still require real-world validation.
+
+Known limits: no live-model benchmark established by the current offline run; provider/deployment configuration needs environment-specific verification; CSV-only evidence does not satisfy document requirements; no external posting, payment execution or statutory audit certification; extraction model quality requires its own held-out benchmark. Wiring and passing arithmetic tests are necessary, not sufficient, for production financial assurance.

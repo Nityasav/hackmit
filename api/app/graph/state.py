@@ -89,6 +89,10 @@ class RunState(TypedDict, total=False):
     # --- set once, at the start -------------------------------------------
     ws: str
     thread_id: str
+    collaboration_version: int
+    routing_objective: str
+    conversation_context: list[dict]
+    selected_agents: list[str]
     objective: str
     snapshot_id: Annotated[str, _keep_first]
     period: Annotated[str, _keep_first]
@@ -128,6 +132,18 @@ class RunState(TypedDict, total=False):
     escalated: Annotated[bool, operator.or_]
     status: str
     briefing: str
+
+
+class WorkerOutput(TypedDict, total=False):
+    """Workers return results, never the shared routing/scope scalars."""
+    findings: Annotated[list[Finding], operator.add]
+    events_touched: Annotated[list[str], operator.add]
+    unresolved: Annotated[list[str], operator.add]
+    results: Annotated[dict[str, dict], _merge_dicts]
+    spend_cents: Annotated[int, operator.add]
+    model_calls: Annotated[int, operator.add]
+    tool_calls: Annotated[int, operator.add]
+    escalated: Annotated[bool, operator.or_]
 
 
 def initial(ws: str, thread_id: str, objective: str, snapshot_id: str,

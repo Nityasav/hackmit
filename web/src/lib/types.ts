@@ -428,6 +428,7 @@ export interface ChatTurn {
 
 export interface ChatReply {
   text: string;
+  full_review?: boolean;
   plan?: string[];
   routed_to?: string[];
   findings?: {
@@ -450,9 +451,7 @@ export interface ChatReply {
 /** One question a run stopped on. Answered by id: several agents can pause at once. */
 export interface Escalation {
   approval_id: string;
-  /** The id to address and the name to show. A bare id renders as "B4" to a reader who
-   *  has no idea what B4 is, so both endpoints that carry an escalation send both. */
-  agent: { id: string; name: string };
+  agent: string | { id: string; name: string };
   title?: string;
   summary?: string;
   reasons?: string[];

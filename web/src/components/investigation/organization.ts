@@ -24,6 +24,7 @@ export interface Organization {
   spend: AgentOrganization["spend"] | null;
   loading: boolean;
   error: string | null;
+  runErrors: Record<string, string>;
   /** The agent currently running, if any. */
   running: string | null;
   /** Results this session, newest first. */
@@ -39,6 +40,7 @@ export function useOrganization(ws: string): Organization {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [results, setResults] = useState<AgentRunResult[]>([]);
+  const [runErrors, setRunErrors] = useState<Record<string, string>>({});
 
   // The fetch lives inside the effect, so no state update can be traced back into the
   // effect body; `reload` is how a caller asks for a fresh read after something moved.
@@ -74,21 +76,22 @@ export function useOrganization(ws: string): Organization {
   const run = useCallback(async (agentId: string, objective: string) => {
     setRunning(agentId);
     setError(null);
+    setRunErrors(current => ({ ...current, [agentId]: "" }));
     try {
       const result = await intakeApi<AgentRunResult>(
         `/api/workspaces/${encodeURIComponent(ws)}/agents/${encodeURIComponent(agentId)}/runs`,
-        { method: "POST", body: { objective } });
+        { method: "POST", body: { objective }, timeout: 600000 });
       setResults((current) => [result, ...current]);
       // Spend moved, and an agent's readiness can change once it writes a decision.
       setReload((n) => n + 1);
     } catch (e) {
-      setError(reason(e, "The agent could not be run."));
+      setRunErrors(current => ({ ...current, [agentId]: reason(e, "The agent could not be run.") }));
     } finally {
       setRunning(null);
     }
   }, [ws]);
 
-  return { agents, spend, loading, error, running, results, refresh, run };
+  return { agents, spend, loading, error, runErrors, running, results, refresh, run };
 }
 
 /** The workers, each with its subagents, in registry order. */

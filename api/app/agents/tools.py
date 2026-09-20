@@ -22,7 +22,7 @@ from typing import Any
 
 from .. import db, events, memory, roles
 from ..accounting import (accruals, audit, cash, close, controls, match, planning,
-                          reconcile, reporting, statements, variance)
+                          receivables, reconcile, reporting, statements, variance)
 from . import activity
 from .budget import BudgetExceeded, Meter
 
@@ -58,6 +58,7 @@ class Toolbox:
         self.read_keys: set[str] = set()
         self.read_sources: set[str] = set()
         self.calculations: dict[str, dict] = {}
+        self.track_activity = False
 
     # ----------------------------------------------------------------- scope --
     @property
@@ -82,6 +83,9 @@ class Toolbox:
         if tool not in self.spec.tools:
             raise ScopeError(f"{self.spec.id} does not hold the tool {tool!r}.")
         self.meter.charge_tool_call(self.spec.id, self.spec.budget)
+        if self.track_activity:
+            from .activity import emit
+            emit(self.ws, self.thread_id, self.spec.id, "tool", tool)
 
     # ------------------------------------------------------------------ reads --
     def read_records(self, role: str, limit: int = 50, offset: int = 0) -> dict:
@@ -217,6 +221,24 @@ class Toolbox:
         self.calculations["cash"] = result
         return result
 
+
+    def _receivables(self, name: str, as_of: str = "") -> dict:
+        self._charge(name)
+        calculate = receivables.age_receivables if name == "age_receivables" else receivables.match_remittances
+        result = calculate(self._records, self.config, as_of or None)
+        for bucket in ("applications", "unapplied", "invoices"):
+            for item in result[bucket]:
+                for citation in item["citations"]:
+                    self.read_keys.add(citation["record_key"])
+                    self.read_sources.add(citation["source_id"])
+        self.calculations[name] = result
+        return result
+
+    def age_receivables(self, as_of: str = "") -> dict:
+        return self._receivables("age_receivables", as_of)
+
+    def match_remittance(self, as_of: str = "") -> dict:
+        return self._receivables("match_remittance", as_of)
 
     def build_statements(self) -> dict:
         """Income statement, balance sheet and cash flow, from the ledger.
@@ -501,6 +523,8 @@ class Toolbox:
                  self.spec.parent, action, summary, why, confidence,
                  db.encode(evidence), reviewer, verdict, int(escalated), model, cost_cents,
                  db.encode(memory_checks or []), db.now()))
+            db.event(connection, self.ws, "agent.decision_snapshot",
+                     {"decision_id": decision_id, "snapshot_id": self.snapshot_id})
         return decision_id
 
     def record_link(self, *, from_type: str, from_id: str, to_type: str, to_id: str,
@@ -595,6 +619,8 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "reconcile_bank": toolbox.reconcile_bank,
         "decompose_payout": toolbox.decompose_payout,
         "project_cash": toolbox.project_cash,
+        "age_receivables": toolbox.age_receivables,
+        "match_remittance": toolbox.match_remittance,
         "build_statements": toolbox.build_statements,
         "close_checklist": toolbox.close_checklist,
         "propose_journal": toolbox.propose_journal,
@@ -633,6 +659,14 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
 def tool_definitions(spec) -> list[dict]:
     """JSON schemas for the tools one spec holds, for the provider's tool-calling API."""
     catalogue = {
+        "age_receivables": {
+            "description": "Age outstanding receivables after uniquely referenced cash allocations. Ambiguous receipts stay unapplied.",
+            "properties": {"as_of": {"type": "string", "description": "YYYY-MM-DD; omit for workspace end."}},
+            "required": []},
+        "match_remittance": {
+            "description": "Propose cash allocations using exact customer, currency and invoice references. No financial records are changed.",
+            "properties": {"as_of": {"type": "string", "description": "YYYY-MM-DD; omit for workspace end."}},
+            "required": []},
         "read_records": {
             "description": "Committed records of one role, inside this task's scope.",
             "properties": {"role": {"type": "string", "enum": sorted(spec.roles)},

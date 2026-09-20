@@ -23,9 +23,8 @@ Because the books are derived rather than authored, they tie by construction: ev
 journal balances as it is emitted, the subledgers are the same rows the journals came
 from, and `--check` re-proves it from the written files rather than from memory.
 
-Defect injection (phase 4) hangs off `--defects`, which currently plants nothing. The
-argument exists so the flag, the truth file and the clean baseline are in place before
-anything is deliberately broken.
+`--defects` plants controlled matching and control failures plus benign lookalikes.
+The separate truth file records expected classifications; never upload it as evidence.
 """
 
 from __future__ import annotations

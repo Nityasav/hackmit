@@ -192,7 +192,8 @@ TREASURER = (
         requires=("customers", "customer_invoices", "remittances"),essential=("customer_invoices",),
         
         llm=True, reviewer="D2",
-        escalate_when=EscalationRule(confidence_below=80, on=("ambiguous_remittance", "partial_payment")),
+        escalate_when=EscalationRule(confidence_below=80, on=("ambiguous_remittance", "partial_payment",
+                                                           "overpayment", "unreferenced_remittance")),
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=40)),
     AgentSpec(
         id="A3", name="Bank Reconciliation", tier="subagent", parent="A",

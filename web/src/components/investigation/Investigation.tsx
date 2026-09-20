@@ -12,6 +12,7 @@ import { Orchestrator } from "./Orchestrator";
 import { Precedent } from "./Precedent";
 import { RecordChecks } from "./RecordChecks";
 import { Timeline } from "./Timeline";
+import { TaskDeliverable } from "./TaskDeliverable";
 
 /**
  * Investigation: the finance organization, and what it has concluded.
@@ -21,6 +22,10 @@ import { Timeline } from "./Timeline";
  * upload would unblock it rather than producing an empty result.
  */
 export function Investigation({ ws }: { ws: string }) {
+  return <InvestigationWorkspace key={ws} ws={ws} />;
+}
+
+function InvestigationWorkspace({ ws }: { ws: string }) {
   const state = useOrganization(ws);
   const workers = byWorker(state.agents);
   const blocked = state.agents.filter((a) => a.tier === "subagent" && !a.ready).length;
@@ -52,16 +57,17 @@ export function Investigation({ ws }: { ws: string }) {
       {/* The conversation comes first: it is how the organization is actually driven,
           and everything below it is the detail behind what it reports. */}
       <Section title="Ask">
-        <Orchestrator ws={ws} />
+        <Orchestrator key={ws} ws={ws} />
       </Section>
 
       <Section title="Record checks">
         <RecordChecks ws={ws} />
       </Section>
 
-      <Section title="Every transaction in the period">
-        <Timeline ws={ws} />
-      </Section>
+      <details className="my-6 border border-line bg-surface p-5">
+        <summary className="cursor-pointer text-[15px] font-semibold">Browse transactions <span className="ml-2 text-xs font-normal text-ink-dim">Source records and linked evidence</span></summary>
+        <div className="mt-4 max-h-[32rem] overflow-y-auto"><Timeline ws={ws} /></div>
+      </details>
 
       <Section title="The organization">
         {state.error && (
@@ -74,7 +80,7 @@ export function Investigation({ ws }: { ws: string }) {
         ) : (
           <div className="space-y-6">
             {workers.map(({ worker, children }) => (
-              <Worker key={worker.id} worker={worker} subagents={children} state={state} />
+              <Worker key={worker.id} worker={worker} subagents={children} state={state} ws={ws} />
             ))}
           </div>
         )}
@@ -112,11 +118,12 @@ export function Investigation({ ws }: { ws: string }) {
 }
 
 function Worker({
-  worker, subagents, state,
+  worker, subagents, state, ws,
 }: {
   worker: AgentNode;
   subagents: AgentNode[];
   state: ReturnType<typeof useOrganization>;
+  ws: string;
 }) {
   return (
     <div className="border border-line bg-surface p-5">
@@ -128,22 +135,24 @@ function Worker({
 
       <ul className="mt-4">
         {subagents.map((agent) => (
-          <Subagent key={agent.id} agent={agent} state={state} />
+            <Subagent key={agent.id} agent={agent} state={state} ws={ws} />
         ))}
       </ul>
     </div>
   );
 }
 
-function Subagent({
-  agent, state,
+export function Subagent({
+  agent, state, ws,
 }: {
   agent: AgentNode;
   state: ReturnType<typeof useOrganization>;
+  ws: string;
 }) {
   const [objective, setObjective] = useState("");
   const busy = state.running === agent.id;
   const anyRunning = state.running !== null;
+  const latest = state.results.find(result => result.agent_id === agent.id);
 
   return (
     <li className="border-t border-line py-3.5">
@@ -191,6 +200,13 @@ function Subagent({
           Waiting on {agent.blocked_by.join(", ")}. Supply it on Books.
         </p>
       )}
+      {busy && <p role="status" className="mt-3 border-l-2 border-ink bg-surface-2 p-3 text-sm">Reading evidence and preparing your deliverable… Your result will appear here.</p>}
+      {state.runErrors[agent.id] && <p role="alert" className="mt-3 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{state.runErrors[agent.id]}</p>}
+      {!busy && latest && <div aria-live="polite" className="mt-3 border border-line bg-surface-2 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide">{latest.escalated ? "Result ready · needs your review" : "Result ready"}</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{latest.result?.summary || "The task completed. Open its recorded deliverable below."}</p>
+        <details key={latest.decision_id} className="mt-3"><summary className="cursor-pointer text-sm font-semibold underline">View deliverable & download PDF</summary><div className="mt-4"><TaskDeliverable ws={ws} decision={latest.decision_id} /></div></details>
+      </div>}
     </li>
   );
 }

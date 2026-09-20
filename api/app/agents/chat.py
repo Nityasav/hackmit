@@ -1,28 +1,15 @@
-"""The conversation that drives the organization.
+"""Persisted CFO conversation and specialist dispatch.
 
-One box. A person says what they want looked at, the orchestrator routes it to the domains
-it touches, and what comes back is the run — the plan, what each agent concluded, what it
-cost, and anything that stopped for a person.
-
-## Why the conversation is stored, and what is stored
-
-Every turn is written to `conversations` before the run starts and updated when it ends, so
-a run that crashes, times out or is still going leaves a question on the record rather than
-disappearing. The reply is assembled from the run's own state rather than written by a
-model: there is no model in this module at all. The orchestrator's model budget goes on
-routing and synthesis inside the graph, and putting a second one here would mean a person
-reads prose that nothing checked.
-
-## What a turn is not
-
-It is not a chat with a model that has opinions about your books. Every sentence in a reply
-is either a count of something in the run or a line the agents themselves recorded, and a
-turn that produced no findings says so instead of filling the space.
+The accounting-only conversational layer answers from bounded saved context or requests
+specialist analysis. New analysis returns the graph's actual recorded conclusions.
+Answers are distinguished from verified results; exports never start another paid run.
+Every question is recorded before work, including failed or human-paused turns.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -32,6 +19,7 @@ from .budget import BudgetExceeded, Meter, RUN_CAP_CENTS
 from .registry import AGENTS
 from .runtime import AgentFailed
 from .tools import ScopeError
+from .cfo_conversation import converse
 
 router = APIRouter(prefix="/api/workspaces/{ws}", tags=["Orchestrator chat"])
 
@@ -47,6 +35,7 @@ class Message(BaseModel):
     thread_id: str = Field(default="", max_length=100)
     #: Lower the run cap for this turn. It can never raise it.
     cap_cents: int | None = Field(default=None, ge=1)
+    full_review: bool = False
 
 
 def _record(connection, ws: str, turn: dict) -> None:
@@ -83,7 +72,10 @@ def reply_for(run: dict, document: dict | None = None) -> dict:
     else:
         headline = "Routed to " + ", ".join(routed) + "."
 
-    lines = [headline]
+    # Lead with the actual answers. Routing diagnostics belong in the badges and
+    # expandable scope details, not in place of a response to the person's question.
+    answers = list(dict.fromkeys(f.get("summary", "") for f in findings if f.get("summary")))
+    lines = ["\n\n".join(answers)] if answers else [headline]
     # Three different outcomes, and they must not be worded as each other. An agent that
     # stopped to ask something *did* reach a conclusion — that a person has to decide. A
     # run where every agent escalated once reported "nothing was concluded" beside three
@@ -136,17 +128,17 @@ def history(ws: str, thread_id: str = "", limit: int = MAX_TURNS):
     with db.connect() as connection:
         if thread_id:
             rows = connection.execute(
-                "SELECT * FROM conversations WHERE ws=? AND thread_id=? ORDER BY rowid"
+                "SELECT * FROM conversations WHERE ws=? AND thread_id=? ORDER BY rowid DESC"
                 " LIMIT ?", (ws, thread_id, min(limit, MAX_TURNS))).fetchall()
         else:
             rows = connection.execute(
-                "SELECT * FROM conversations WHERE ws=? ORDER BY rowid LIMIT ?",
+                "SELECT * FROM conversations WHERE ws=? ORDER BY rowid DESC LIMIT ?",
                 (ws, min(limit, MAX_TURNS))).fetchall()
     return {
         "turns": [{"id": r["id"], "thread_id": r["thread_id"], "run_id": r["run_id"],
                    "role": r["role"], "status": r["status"],
                    "created_at": r["created_at"],
-                   "body": json.loads(r["body"] or "{}")} for r in rows],
+                   "body": json.loads(r["body"] or "{}")} for r in reversed(rows)],
         "note": "Turns are recorded as they happen. A turn that stopped or failed stays "
                 "on the record rather than disappearing.",
     }
@@ -157,18 +149,31 @@ async def talk(ws: str, body: Message):
     """Say something to the orchestrator. Paid work; the cost comes back with the reply."""
     from ..graph import run_investigation
 
-    ingestion.workspace_config(ws)
+    config = ingestion.workspace_config(ws)
     thread_id = body.thread_id or db.uid("thread")
     # A new question is new work, so it gets its own run. The conversation carries on;
     # the investigation does not.
     run_id = db.uid("run")
+    audit_scan = None
+    if body.full_review:
+        from ..reviews import scan
+        audit_scan = scan(ws)
+        body.message = ("Review all domains: receivables, payables, bank and cash; close, "
+                        "accruals and statements; budget, forecast and variance; audit and controls. "
+                        "Find supported issues, cite evidence, identify missing inputs and escalate "
+                        "decisions. Do not post or pay anything. " + body.message)[:2000]
     now = db.now()
 
-    asked = {"id": db.uid("turn"), "thread_id": thread_id, "run_id": run_id,
-             "role": "person", "body": {"text": body.message}, "status": "sent",
-             "created_at": now}
+    asked = {"id": db.uid("turn"), "thread_id": thread_id, "run_id": run_id, "role": "person",
+             "body": {"text": body.message, "full_review": body.full_review,
+                      **({"scan_id": audit_scan["id"], "snapshot_id": audit_scan["snapshot_id"],
+                          "workspace_at_run": config} if audit_scan else {})},
+             "status": "sent", "created_at": now}
     answer_id = db.uid("turn")
     with db.connect() as connection:
+        previous = connection.execute("SELECT body,created_at FROM conversations WHERE ws=? AND role='person' ORDER BY rowid DESC LIMIT 4", (ws,)).fetchall()
+        conversation_context = [{"request": json.loads(row["body"]).get("text", "")[:1500],
+                                 "at": row["created_at"]} for row in reversed(previous)]
         _record(connection, ws, asked)
         # Written before the run, not after. A run that crashes or times out must still
         # leave the question visible; a turn that only appears once it succeeds makes a
@@ -180,14 +185,33 @@ async def talk(ws: str, body: Message):
 
     meter = Meter(run_cap_cents=min(body.cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
     try:
-        run = await run_investigation(ws, body.message, thread_id=run_id,
-                                      cap_cents=meter.run_cap_cents)
+        if not body.full_review:
+            answer, context = await converse(ws, body.message, thread_id, meter)
+            if answer.mode != "run_agents":
+                reply = {"text": answer.text, "title": answer.title, "plan": [], "routed_to": [],
+                         "findings": [], "escalations": [], "unresolved": [], "status": "completed",
+                         "spend": meter.snapshot(), "thread_id": thread_id,
+                         "source_decision_ids": answer.source_decision_ids,
+                         "snapshot_id": context["snapshot_id"], "objective": body.message,
+                         "note": "CFO explanation of saved context, not a new verification. Nothing is posted or paid."}
+                with db.connect() as connection:
+                    _finish(connection, ws, answer_id, reply, "done")
+                return {"thread_id": thread_id, "turn_id": answer_id, "reply": reply, "run": None}
+            objective, routing = answer.objective, " ".join(answer.agent_ids)
+        else:
+            objective, routing = body.message, body.message
+        run = await run_investigation(ws, objective, thread_id=run_id, meter=meter,
+                                      routing_objective=routing, cap_cents=meter.run_cap_cents, conversation_context=conversation_context)
     except BudgetExceeded as exc:
         return _failed(ws, answer_id, thread_id, str(exc), 402, "budget_exceeded")
     except ScopeError as exc:
         return _failed(ws, answer_id, thread_id, str(exc), 403, "out_of_scope")
     except AgentFailed as exc:
         return _failed(ws, answer_id, thread_id, str(exc), 409, "agent_failed")
+    except Exception:
+        logging.getLogger(__name__).exception("Investigation failed for thread %s", thread_id)
+        return _failed(ws, answer_id, thread_id, "The run stopped unexpectedly. Inspect server logs before retrying.",
+                       500, "execution_failed")
 
     # Produced only when the sentence asked for one, and after the run, so a document
     # reflects the work this turn did rather than the books as they were before it.
@@ -205,6 +229,7 @@ async def talk(ws: str, body: Message):
                 f"{exc.detail}")
 
     reply = reply_for(run, document)
+    reply.update({"objective": body.message, "snapshot_id": run.get("snapshot_id"), "full_review": body.full_review})
     with db.connect() as connection:
         _finish(connection, ws, answer_id, reply,
                 "waiting_on_you" if reply["escalations"] else "done")
@@ -224,3 +249,32 @@ def _failed(ws: str, turn_id: str, thread_id: str, message: str, status: int, co
         _finish(connection, ws, turn_id, body, "failed")
     raise HTTPException(status, {"code": code, "message": message,
                                  "thread_id": thread_id, "turn_id": turn_id})
+
+
+@router.get("/chat/{turn_id}/pdf")
+def export_response(ws: str, turn_id: str):
+    from fastapi.responses import Response
+    from ..briefing_pdf import render
+    config = ingestion.workspace_config(ws)
+    with db.connect() as c:
+        row = c.execute("SELECT * FROM conversations WHERE ws=? AND id=? AND role='orchestrator'", (ws, turn_id)).fetchone()
+        if not row:
+            raise HTTPException(404, "Response not found in this workspace.")
+        if row["status"] in ("running", "failed"):
+            raise HTTPException(409, "A completed response is required for export.")
+        body = json.loads(row["body"])
+    title = body.get("title") or "CFO response"
+    finding = {"title": title, "role": "orchestrator", "role_label": "CFO conversation",
+               "status": "gap" if body.get("escalations") or body.get("unresolved") else "pass",
+               "origin": "conversation", "explanation": body.get("text", ""), "amount_cents": None,
+               "action": "Review the source task reports before acting. No books were changed.",
+               "review": "Advisory response; not an independent verification.", "evidence": [],
+               "open_questions": body.get("unresolved", []), "follow_up": None}
+    view = {"workspace": config, "snapshot_id": body.get("snapshot_id"), "report_title": title,
+            "objective": body.get("objective") or "Saved CFO conversation", "task_created_at": row["created_at"],
+            "findings": [finding], "history": [], "limitations": [
+                "Saved response to the specific request, not a fresh analysis or certified audit.",
+                "The books may have changed since this response. Verify the original task evidence.",
+                "Referenced task outputs: " + (", ".join(body.get("source_decision_ids", [])) or "See linked agent conclusions.")]}
+    return Response(render(view), media_type="application/pdf", headers={
+        "Content-Disposition": 'attachment; filename="sherlock-cfo-response.pdf"', "Cache-Control": "no-store"})

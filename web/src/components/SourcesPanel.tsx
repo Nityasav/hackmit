@@ -215,7 +215,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       />
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
-        <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
+        <p className="my-2 text-xs text-ink-dim">CSV only · 30 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
         <div className="my-3 flex flex-wrap items-center gap-3">
           <button type="button" className={primary} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose files</button>
           <span className="text-xs text-ink-dim" aria-live="polite">{files.length ? `${files.length} files selected` : "No files selected"}</span>
@@ -235,7 +235,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
         <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
-          if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
+          if (files.length > 30 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
           const form = new FormData();
           files.forEach((f) => form.append("files", f.file));
           form.append("metadata", JSON.stringify(files.map((f) => ({ ...f.options, auto_detect: f.options.role === "document" }))));

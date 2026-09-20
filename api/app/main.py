@@ -79,7 +79,7 @@ async def intake_write_guard(request: Request, call_next):
     # /api/approvals is a write path into intake data too, now that a decision on an
     # intake workspace is recorded rather than refused.
     guarded = ("/api/workspaces", "/api/approvals")
-    if request.method in {"POST", "PATCH"} and request.url.path.startswith(guarded):
+    if request.method in {"POST", "PATCH", "DELETE"} and request.url.path.startswith(guarded):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
     length = request.headers.get("content-length")
@@ -113,6 +113,14 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+from .source_removal import router as source_removal_router
+app.include_router(source_removal_router)
+from .agents.deliverables import router as deliverables_router
+app.include_router(deliverables_router)
+from .agents.audit_reports import router as audit_reports_router
+app.include_router(audit_reports_router)
 
 
 @app.get("/api/workspaces/{ws}/bundle", response_model=Bundle)

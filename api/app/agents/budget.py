@@ -154,7 +154,9 @@ def spent_today(connection, ws: str) -> int:
     row = connection.execute(
         "SELECT COALESCE(SUM(cost_cents), 0) FROM agent_decisions "
         "WHERE ws=? AND created_at >= date('now') || 'T00:00:00'", (ws,)).fetchone()
-    return int(row[0] or 0)
+    chat = connection.execute("SELECT COALESCE(SUM(json_extract(payload,'$.cost_cents')),0) FROM events "
+                              "WHERE ws=? AND kind='agent.chat_usage' AND created_at>=date('now') || 'T00:00:00'", (ws,)).fetchone()
+    return int(row[0] or 0) + int(chat[0] or 0)
 
 
 def check_day_cap(connection, ws: str, about_to_spend: int = 0) -> None:

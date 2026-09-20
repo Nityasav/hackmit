@@ -31,6 +31,7 @@ export function Timeline({ ws }: { ws: string }) {
   const [open, setOpen] = useState("");
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -83,7 +84,10 @@ export function Timeline({ ws }: { ws: string }) {
 
   return (
     <div className="space-y-2">
-      {events.map((event) => (
+      <input aria-label="Filter transactions" value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="Search transactions…" className="sticky top-0 w-full border border-line bg-white px-3 py-2 text-sm" />
+      <p className="text-xs text-ink-dim">{events.length} recent transactions loaded</p>
+      {events.filter(event => JSON.stringify(event).toLowerCase().includes(search.toLowerCase())).map((event) => (
         <div key={event.id} className="border border-line">
           <button
             type="button"

@@ -26,6 +26,21 @@ from .tools import ScopeError
 router = APIRouter(prefix="/api/workspaces/{ws}/agents", tags=["Agent organization"])
 
 
+@router.get("/activity")
+def activity_events(ws: str, thread_id: str = ""):
+    if not thread_id:
+        return board(ws)
+    import json
+    ingestion.workspace_config(ws)
+    with db.connect() as connection:
+        rows = connection.execute(
+            "SELECT id,created_at,payload FROM events WHERE ws=? AND kind='agent.activity' "
+            "AND (json_extract(payload, '$.thread_id')=? OR json_extract(payload, '$.thread_id') IN "
+            "(SELECT run_id FROM conversations WHERE ws=? AND thread_id=?)) ORDER BY rowid LIMIT 2000",
+            (ws, thread_id, ws, thread_id)).fetchall()
+    return {"events": [dict(id=r["id"], at=r["created_at"], **json.loads(r["payload"])) for r in rows]}
+
+
 class Decision(BaseModel):
     thread_id: str = Field(min_length=1, max_length=100)
     decision: Literal["approved", "rejected"]
@@ -42,6 +57,32 @@ class RunRequest(BaseModel):
     event_ids: list[str] = Field(default_factory=list, max_length=50)
     #: Lower the run cap for this task. It can never raise it.
     cap_cents: int | None = Field(default=None, ge=1)
+
+
+@router.post("/approvals/{approval_id}/revise")
+async def revise(ws: str, approval_id: str, body: RunRequest):
+    from .continuation import resolve
+    if not body.objective.strip():
+        raise HTTPException(422, "Enter revised instructions.")
+    with db.connect() as connection:
+        row = connection.execute("SELECT * FROM approvals WHERE ws=? AND id=?", (ws, approval_id)).fetchone()
+    if not row or row["agent"] not in AGENTS:
+        raise HTTPException(404, "No current agent for this approval.")
+    if row["status"] == "pending":
+        await resolve(ws, approval_id, "rejected")
+    thread = db.uid("thread")
+    with db.connect() as connection:
+        db.event(connection, ws, "review.revised_instructions",
+                 {"approval_id": approval_id, "agent": row["agent"], "instruction": body.objective, "thread_id": thread})
+    try:
+        run = await run_agent(ws, row["agent"], body.objective.strip(),
+                              meter=Meter(run_cap_cents=min(body.cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS)),
+                              thread_id=thread)
+    except BudgetExceeded as exc:
+        raise HTTPException(402, {"code": "budget_exceeded", "message": str(exc)})
+    except (AgentFailed, ScopeError) as exc:
+        raise HTTPException(422, str(exc))
+    return {"thread_id": thread, **run.as_dict()}
 
 
 @router.get("")
@@ -84,7 +125,6 @@ def organization(ws: str):
     }
 
 
-@router.get("/activity")
 def board(ws: str):
     """What every agent is doing right now, and what each one did.
 
@@ -113,6 +153,23 @@ def decisions(ws: str, agent_id: str, limit: int = 50):
     return {"agent_id": agent_id, "decisions": [dict(row) for row in rows]}
 
 
+@router.get("/{agent_id}/insights")
+def insights(ws: str, agent_id: str):
+    """Current deterministic figures, not model prose or an approval."""
+    from .tools import Toolbox
+    if agent_id not in {"A2", "C3"}:
+        raise HTTPException(404, "No chart for this agent.")
+    coverage = ingestion.coverage(ws)
+    if coverage["blocked_agents"].get(agent_id):
+        raise HTTPException(409, "Supply the required records before calculating this view.")
+    config = ingestion.workspace_config(ws)
+    box = Toolbox(ws, AGENTS[agent_id], Meter(), ingestion.financial_records(ws)["records"],
+                  config, coverage["snapshot"]["id"], "read-only")
+    result = box.age_receivables() if agent_id == "A2" else box.decompose_variance()
+    return {"snapshot_id": coverage["snapshot"]["id"], "agent_id": agent_id,
+            "currency": config["currency"], "data": result}
+
+
 @router.post("/{agent_id}/runs", status_code=201)
 async def start(ws: str, agent_id: str, body: RunRequest, request: Request):
     """Run one agent against a bounded task. Paid work; the cost is in the response."""
@@ -128,22 +185,27 @@ async def start(ws: str, agent_id: str, body: RunRequest, request: Request):
     cap = min(body.cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS)
     meter = Meter(run_cap_cents=cap)
     thread_id = db.uid("thread")
-
+    from .activity import emit
+    emit(ws, thread_id, agent_id, "started", body.objective)
     try:
         run = await run_agent(
             ws, agent_id, body.objective, meter=meter, thread_id=thread_id,
             record_keys=tuple(body.record_keys), event_ids=tuple(body.event_ids))
     except BudgetExceeded as exc:
+        emit(ws, thread_id, agent_id, "blocked", str(exc))
         # 402 is the honest status: the work stopped because it ran out of money, not
         # because anything was wrong with the request.
         raise HTTPException(402, {"code": "budget_exceeded", "message": str(exc),
                                   "spend": meter.snapshot()})
     except ScopeError as exc:
+        emit(ws, thread_id, agent_id, "blocked", str(exc))
         raise HTTPException(403, {"code": "out_of_scope", "message": str(exc)})
     except AgentFailed as exc:
+        emit(ws, thread_id, agent_id, "failed", str(exc))
         raise HTTPException(409, {"code": "agent_failed", "message": str(exc),
                                   "spend": meter.snapshot()})
 
+    emit(ws, thread_id, agent_id, "needs_review" if run.escalated else "completed", run.result.summary if run.result else "Task completed.")
     return {"thread_id": thread_id, **run.as_dict(), "spend": meter.snapshot()}
 
 
@@ -173,6 +235,15 @@ async def decide_escalation(ws: str, body: Decision):
     precedent — so answering this is also what teaches the next run what you decided.
     """
     from ..graph import resume_investigation
+
+    if body.approval_id:
+        with db.connect() as connection:
+            proposal = connection.execute("SELECT run_id FROM approvals WHERE ws=? AND id=?", (ws, body.approval_id)).fetchone()
+            conversation = connection.execute("SELECT 1 FROM conversations WHERE ws=? AND thread_id=? AND run_id=?", (ws, body.thread_id, proposal["run_id"] if proposal else "")).fetchone()
+        if not proposal or (proposal["run_id"] != body.thread_id and not conversation):
+            raise HTTPException(404, "Approval not found in this run.")
+        from .continuation import resolve
+        return await resolve(ws, body.approval_id, body.decision)
 
     try:
         outcome = await resume_investigation(ws, body.thread_id, body.decision,

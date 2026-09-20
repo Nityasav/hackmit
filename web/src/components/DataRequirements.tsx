@@ -86,7 +86,7 @@ export function DataRequirements({
 function WaitingOn({ requirement }: { requirement: DataRequirement }) {
   if (requirement.satisfied || requirement.needed_by.length === 0) return null;
   return (
-    <p className="mt-1 font-num text-[11px] text-ink-faint">
+    <p className="mt-1 break-words font-num text-[11px] leading-relaxed text-ink-faint">
       Waiting: {requirement.needed_by.join(", ")}
     </p>
   );
@@ -99,19 +99,21 @@ function Status({ requirement }: { requirement: DataRequirement }) {
       ? "bg-surface-2 text-ink-dim"
       : "bg-amber-50 text-amber-800";
   const label = requirement.satisfied ? "Supplied" : requirement.optional ? "Optional" : "Needed";
-  return <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${tone}`}>{label}</span>;
+  return <span className={`mt-1 inline-block self-start px-1.5 py-0.5 text-[10px] ${tone}`}>{label}</span>;
 }
 
 function FileAsk({ requirement }: { requirement: DataRequirement }) {
   return (
-    <div className="border border-line p-3">
-      <div className="font-semibold">{requirement.label}</div>
+    <div className="flex h-full min-w-0 flex-col border border-line p-3" data-testid="requirement-card">
+      <div className="min-h-5 break-words font-semibold leading-5">{requirement.label}</div>
       <Status requirement={requirement} />
       <p className="mt-1 text-[11px] leading-relaxed text-ink-dim">{requirement.unlocks}</p>
+      <div className="mt-auto pt-3">
       {!requirement.satisfied && requirement.after.length > 0 && (
         <p className="mt-1 text-[11px] text-ink-faint">Supply after: {requirement.after.join(", ")}</p>
       )}
       <WaitingOn requirement={requirement} />
+      </div>
     </div>
   );
 }
@@ -161,14 +163,15 @@ function SettingAsk({
   }
 
   return (
-    <div className="border border-line p-3">
-      <div className="font-semibold">{requirement.label}</div>
+    <div className="flex h-full min-w-0 flex-col border border-line p-3" data-testid="requirement-card">
+      <div className="min-h-5 break-words font-semibold leading-5">{requirement.label}</div>
       <Status requirement={requirement} />
       <p className="mt-1 text-[11px] leading-relaxed text-ink-dim">{requirement.unlocks}</p>
-      <div className="mt-2 flex gap-1.5">
+      <div className="mt-auto pt-3">
+      <div className="flex items-stretch gap-2">
         <input
           aria-label={requirement.label}
-          className="min-w-0 flex-1 border border-line px-2 py-1 text-xs"
+          className="h-9 min-w-0 flex-1 border border-line px-2 py-1 text-xs"
           placeholder={placeholderFor(requirement)}
           value={value}
           onChange={(event) => setDraft(event.target.value)}
@@ -176,12 +179,13 @@ function SettingAsk({
             if (event.key === "Enter") void save();
           }}
         />
-        <button type="button" disabled={busy} className="border border-line px-2 py-1 text-xs" onClick={() => void save()}>
+        <button type="button" disabled={busy} className="h-9 shrink-0 border border-line px-3 py-1 text-xs" onClick={() => void save()}>
           {busy ? "Saving…" : "Save"}
         </button>
       </div>
       {error && <p role="alert" className="mt-1 text-[11px] text-red-800">{error}</p>}
       <WaitingOn requirement={requirement} />
+      </div>
     </div>
   );
 }

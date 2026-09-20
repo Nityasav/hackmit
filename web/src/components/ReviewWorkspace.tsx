@@ -1,6 +1,7 @@
 "use client";
 
 import { displayLabel } from "@/lib/format";
+import { api } from "@/lib/api";
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
@@ -124,6 +125,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     setError("");
     try { setSource(await intakeApi(`/api/workspaces/${ws}/sources/${encodeURIComponent(id)}?start=${start}&limit=20`)); setSourceRef({ id, start }); }
     catch (e) { setError(e instanceof Error ? e.message : "Source unavailable"); }
+  }
+  async function downloadPdf() {
+    setBusy("pdf"); setError("");
+    try {
+      const response = await api.get(`/api/workspaces/${ws}/review/report.pdf`, { responseType: "blob", timeout: 60000 });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url; link.download = "sherlock-financial-review.pdf"; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setError("The PDF could not be generated. Check API access and try again."); }
+    finally { setBusy(""); }
   }
   if (!uploaded) return <div className="border border-line p-6"><h1 className="text-2xl font-semibold">No company is selected yet.</h1>
     <p className="my-3 max-w-2xl text-ink-dim">Create an institution and commit its records to prepare a briefing.</p>

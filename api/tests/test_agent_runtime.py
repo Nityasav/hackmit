@@ -399,6 +399,15 @@ def test_a_result_citing_evidence_it_never_retrieved_is_rejected(ws):
         run(ws, "A1", "Review it.", model, record_keys=(key,))
 
 
+def test_bad_citation_can_be_retrieved_and_corrected_before_publication(ws):
+    key = invoice_key(ws, "INV-100")
+    result = ap_result(citations=[schemas.Citation(role="vendor_invoices", record_key=key)])
+    model = FakeModel([([], result), ([("read_records", {"role": "vendor_invoices"})], None), ([], result)])
+    saved = run(ws, "A1", "Review it.", model, record_keys=(key,))
+    assert saved.result.citations[0].record_key == key
+    assert model.calls == 3
+
+
 def test_an_agent_whose_inputs_are_missing_says_so_instead_of_guessing(tmp_path, monkeypatch):
     monkeypatch.setenv("SCHOOLTRACE_DATA_DIR", str(tmp_path))
     created = ingestion.create_workspace(ingestion.WorkspaceCreate(
