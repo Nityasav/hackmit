@@ -16,7 +16,7 @@ import asyncio
 import pytest
 
 from app import db, events, ingestion
-from app.accounting import cash, reconcile
+from app.accounting import cash, match, reconcile
 from app.agents.budget import Meter
 from app.agents.registry import AGENTS, children
 from app.graph import build_graph, run_investigation
@@ -145,6 +145,58 @@ def test_a_clean_period_reconciles_with_nothing_left_over(ws):
     assert result["totals"]["unmatched_bank"] == 0, result["unmatched_bank"][:2]
     assert result["totals"]["unmatched_book"] == 0, result["unmatched_book"][:2]
     assert result["totals"]["differing"] == 0
+
+
+def test_a_composite_key_is_readable_where_a_person_or_a_model_sees_it(ws):
+    """`PO-7001` line `1` must not print as `PO-70011`.
+
+    Keys join on a unit separator so two records cannot collide. That character is
+    invisible, so a purchase-order line printed raw reads as a document number that does
+    not exist — and a live A1 run quoted exactly that into its citations, which would
+    send a reviewer looking for nothing.
+    """
+    from app import roles
+
+    stored = roles.key_of("purchase_orders", {"po_id": "PO-7001", "line_id": "1"})
+    assert stored == "PO-70011", "the stored key keeps the separator"
+    assert roles.readable_key("purchase_orders", stored) == "PO-7001 · 1"
+    # A single-field key is left exactly as it is.
+    assert roles.readable_key("vendor_invoices", "VI-9001") == "VI-9001"
+
+
+def test_matching_citations_carry_the_readable_form(ws):
+    result = match.three_way(records_of(ws), invoice_key(ws, "INV-100"),
+                             ingestion.workspace_config(ws))
+    order = next(c for c in result.as_dict()["citations"] if c["role"] == "purchase_orders")
+
+    assert "" not in order["display"]
+    assert order["display"] == "PO-1 · 1"
+
+
+def test_a_composite_key_is_readable_where_a_person_or_a_model_sees_it(ws):
+    """`PO-7001` line `1` must not print as `PO-70011`.
+
+    Keys join on a unit separator so two records cannot collide. That character is
+    invisible, so a purchase-order line printed raw reads as a document number that does
+    not exist — and a live A1 run quoted exactly that into its citations, which would
+    send a reviewer looking for nothing.
+    """
+    from app import roles
+
+    stored = roles.key_of("purchase_orders", {"po_id": "PO-7001", "line_id": "1"})
+    assert stored == "PO-70011", "the stored key keeps the separator"
+    assert roles.readable_key("purchase_orders", stored) == "PO-7001 · 1"
+    # A single-field key is left exactly as it is.
+    assert roles.readable_key("vendor_invoices", "VI-9001") == "VI-9001"
+
+
+def test_matching_citations_carry_the_readable_form(ws):
+    result = match.three_way(records_of(ws), invoice_key(ws, "INV-100"),
+                             ingestion.workspace_config(ws))
+    order = next(c for c in result.as_dict()["citations"] if c["role"] == "purchase_orders")
+
+    assert "" not in order["display"]
+    assert order["display"] == "PO-1 · 1"
 
 
 def test_an_unreferenced_bank_line_is_reported_not_guessed_at(ws):

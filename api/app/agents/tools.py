@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .. import db
+from .. import db, roles
 from ..accounting import cash, match, reconcile
 from .budget import BudgetExceeded, Meter
 
@@ -88,9 +88,21 @@ class Toolbox:
         window = rows[offset:offset + min(limit, 200)]
         for row in window:
             self.read_keys.add(row["record_key"])
+            # The source id is in the output this agent is about to read, so citing it
+            # is citing what it saw. Recording only the record key meant a legitimate
+            # citation was refused as fabricated, which is a far worse failure than the
+            # one the check exists to prevent: the guard must catch invention, not
+            # punish an agent for quoting the evidence it was handed.
+            self.read_sources.add(row["source_id"])
         return {
             "role": role, "total": len(rows), "offset": offset,
-            "records": [{"record_key": r["record_key"], "payload": r["payload"],
+            "records": [{"record_key": r["record_key"],
+                         # What a person should read. A composite key joined by an
+                         # invisible separator prints as one run-on identifier, and an
+                         # agent quoting it sends a reviewer looking for a document
+                         # that does not exist.
+                         "display": roles.readable_key(r["role"], r["record_key"]),
+                         "payload": r["payload"],
                          "source_id": r["source_id"], "line": r["locator"]} for r in window],
             "note": "Supplied records only. Nothing here implies the population is complete.",
         }

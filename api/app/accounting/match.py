@@ -81,7 +81,9 @@ def _by_role(records: list[dict]) -> dict[str, list[dict]]:
 
 
 def _cite(record: dict, note: str) -> dict:
+    from ..roles import readable_key
     return {"role": record["role"], "record_key": record["record_key"],
+            "display": readable_key(record["role"], record["record_key"]),
             "source_id": record["source_id"], "line": record["locator"], "note": note}
 
 

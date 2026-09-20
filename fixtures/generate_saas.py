@@ -255,12 +255,18 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
         ref = f"EVT-{period}-P{n:04d}"
         po_id, receipt_id = f"PO-{7000 + n}", f"GR-{8000 + n}"
         invoice_id, invoice_number = f"VI-{9000 + n}", f"INV-{20000 + n}"
-        approver = f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}"
+        # The person who raises the order and the person who approves paying it must
+        # be different, or the segregation-of-duties control fires on every invoice and
+        # a real breach becomes indistinguishable from the baseline. Phase 4 plants the
+        # exceptions; the clean period must not come with one built in.
+        requester = f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}"
+        approver = f"{GIVEN[(n + 7) % len(GIVEN)]} {FAMILY[(n + 5) % len(FAMILY)]}"
+        assert requester != approver
 
         books.add("purchase_orders", {
             "po_id": po_id, "line_id": "1", "vendor_id": vendor["vendor_id"],
             "description": vendor["memo"], "order_date": ordered.isoformat(),
-            "amount": money(amount), "approver": approver, "event_ref": ref})
+            "amount": money(amount), "approver": requester, "event_ref": ref})
         books.add("goods_receipts", {
             "receipt_id": receipt_id, "line_id": "1", "po_id": po_id, "po_line_id": "1",
             "received_date": received.isoformat(), "amount": money(amount), "event_ref": ref})

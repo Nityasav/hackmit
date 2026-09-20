@@ -170,6 +170,26 @@ def key_of(role: str, payload: dict) -> str:
     return "\x1f".join(parts)
 
 
+def readable_key(role: str, key: str) -> str:
+    """A composite key as a person should read it.
+
+    Keys are joined with a unit separator so `("PO-1", "2")` cannot collide with
+    `("PO-12",)`. That character is invisible, so a purchase-order line printed raw
+    reads as `PO-70011` — a document number that does not exist, which sends a reviewer
+    looking for something that was never there. Anything shown to a person, or handed to
+    a model that might quote it, goes through here; the stored key never changes.
+    """
+    parts = key.split("")
+    if len(parts) == 1:
+        return key
+    if role not in KEY_FIELDS:
+        return " · ".join(parts)
+    fields = KEY_FIELDS.get(role, ())
+    if len(fields) == len(parts):
+        return " · ".join(f"{value}" for value in parts)
+    return " · ".join(parts)
+
+
 def row_issues(role: str, payload: dict, config: dict) -> list[tuple[str, str, str | None]]:
     """Role-specific record checks, as ``(code, message, field)``.
 

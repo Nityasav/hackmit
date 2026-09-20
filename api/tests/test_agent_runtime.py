@@ -265,6 +265,21 @@ def test_a_narrowed_box_cannot_reach_records_outside_the_delegation(ws):
         box.three_way_match(invoice_key(ws, "INV-200"))
 
 
+def test_citing_a_source_the_agent_was_shown_is_allowed(ws):
+    """The guard catches invention. It must not refuse evidence the agent was handed.
+
+    `read_records` puts a source id in front of the agent for every row it returns, so
+    citing one is citing what it saw. Recording only the record key made a live A1 run
+    fail with "cited a source it did not read" on a citation that was entirely correct.
+    """
+    box = _toolbox(ws)
+    shown = box.read_records("vendor_invoices")["records"][0]
+
+    box.validate_citations([schemas.Citation(
+        role="vendor_invoices", record_key=shown["record_key"],
+        source_id=shown["source_id"])])
+
+
 def test_citing_a_record_the_agent_never_read_is_refused(ws):
     box = _toolbox(ws)
     fabricated = [schemas.Citation(role="vendor_invoices", record_key="VI-999")]
