@@ -72,7 +72,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title="SchoolTrace local extractor", lifespan=lifespan)
+app = FastAPI(title="Sherlock local extractor", lifespan=lifespan)
 
 
 @app.middleware("http")

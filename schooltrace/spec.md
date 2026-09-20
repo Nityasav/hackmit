@@ -1,4 +1,4 @@
-# SchoolTrace — Product and Technical Specification
+# Sherlock — Product and Technical Specification
 
 Version: 1.0 | Date: 2026-09-19 | Status: implementation-ready hackathon design
 
@@ -16,7 +16,7 @@ Educational institutions can have substantial finance and compliance teams and s
 
 The product hypothesis is that these disconnected records and unresolved exceptions create preventable audit-readiness problems. Consequences can include rework, repayment exposure, distorted spending decisions, and disruption to services students depend on. Funding and financing consequences are possible, not automatic. Do not claim all schools mismanage money or invent prevalence statistics. See [SOURCES.md](SOURCES.md).
 
-SchoolTrace collects financial records, establishes a traceable accounting baseline, and coordinates agents to answer: **What is wrong, what evidence proves it, what remains uncertain, and what action would resolve it?**
+Sherlock collects financial records, establishes a traceable accounting baseline, and coordinates agents to answer: **What is wrong, what evidence proves it, what remains uncertain, and what action would resolve it?**
 
 It supports internal preparation for an external audit. Its auditor agent is an independent review role within the application, not a licensed external auditor or an audit opinion.
 

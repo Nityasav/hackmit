@@ -12,7 +12,7 @@ export default function Home() {
     try { const result = await intakeApi<{ workspace: string }>("/api/review-demo", { method: "POST" }); await refreshWorkspaces(); setWs(result.workspace); router.push("/scan"); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not start demo"); setBusy(false); }
   }
-  return <div className="mx-auto max-w-6xl py-6"><p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">SchoolTrace / your finance review desk</p>
+  return <div className="mx-auto max-w-6xl py-6"><p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">Sherlock / your finance review desk</p>
     <div className="mt-6 grid gap-10 lg:grid-cols-[1.4fr_1fr]"><section><h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-6xl">Know what needs attention.<br /><span className="text-ink-dim">See the evidence behind it.</span></h1>
       <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-dim">Turn a school’s financial records into a reviewable list of questions, checks and next steps. Inspect every source. Ask your finance team for missing evidence. Keep the final decision human.</p>
       <div className="mt-7 flex flex-wrap gap-3"><button disabled={busy} onClick={() => void demo()} className="bg-ink px-6 py-4 font-semibold text-white disabled:opacity-50">{busy ? "Importing fictional records & running checks…" : "Try the guided financial scan →"}</button><Link className="border border-line px-6 py-4" href="/command">Use my own sample records</Link></div>

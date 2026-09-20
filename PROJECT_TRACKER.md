@@ -1,4 +1,4 @@
-# SchoolTrace — project map, implementation tracker and handoff
+# Sherlock — project map, implementation tracker and handoff
 
 Status: INTAKE + OPENAI CFO, GRANTS AND INTERNAL AUDITOR IMPLEMENTED — automatic orchestration and local-model training remain future work.
 Updated: 2026-09-19.

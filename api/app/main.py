@@ -1,4 +1,4 @@
-"""SchoolTrace API.
+"""Sherlock API.
 
 Run: uv run uvicorn app.main:app --reload --port 8000
 Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
         await app.state.cfo_runtime.close()
 
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
 app.include_router(review_router)
 app.include_router(security.router)

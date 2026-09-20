@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Sherlock magnifying glass</title>
+  <rect width="64" height="64" rx="17" fill="#123D38"/>
+  <path d="m39 39 14 14" stroke="#CAA56B" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="27" cy="27" r="16" fill="#21564E" stroke="#F5F0E5" stroke-width="4"/>
+  <path d="M18 27a9 9 0 0 1 9-9" stroke="#F5F0E5" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="30" cy="30" r="3" fill="#CAA56B"/>
+  <path d="m50 10 1.5 4.5L56 16l-4.5 1.5L50 22l-1.5-4.5L44 16l4.5-1.5L50 10Z" fill="#CAA56B"/>
+</svg>

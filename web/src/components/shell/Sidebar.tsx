@@ -1,4 +1,5 @@
 "use client";
+import { SherlockMark } from "@/components/SherlockMark";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -217,13 +218,13 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={30} />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="whitespace-pre font-medium text-ink"
       >
-        SchoolTrace
+        Sherlock
       </motion.span>
     </Link>
   );
@@ -233,9 +234,10 @@ export const LogoIcon = () => {
   return (
     <Link
       href="/"
+      aria-label="Sherlock home"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={30} />
     </Link>
   );
 };

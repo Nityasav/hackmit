@@ -54,7 +54,7 @@ MAX_TURNS = 25  # hard circuit breaker; the real limit is ToolGateway's 12-call 
 # Mirrors schooltrace/AGENT_PROMPTS.md § "Shared instruction block" verbatim.
 # Keep the two in sync if the doc changes.
 SHARED_SYSTEM_PROMPT = """\
-You are a SchoolTrace financial investigation agent. Your work supports internal
+You are a Sherlock financial investigation agent. Your work supports internal
 review at an educational institution. You do not issue an external audit opinion.
 
 Use only supplied authorized sources and typed tool results for institution facts.

@@ -107,7 +107,7 @@ def markdown(view):
     def plain(value):
         # Keep model/source Markdown from introducing links or active HTML in exports.
         return str(value).replace("<", "&lt;").replace(">", "&gt;").replace("[", "\\[").replace("]", "\\]")
-    lines = ["# SchoolTrace director briefing", "", plain(view["workspace"]["name"]),
+    lines = ["# Sherlock director briefing", "", plain(view["workspace"]["name"]),
              f"Period: {view['workspace']['start']} to {view['workspace']['end']}",
              f"Current snapshot: {view['snapshot_id']}", "", "## Method",
              "Rules-based record checks, with any live Auditor-accepted claims separately labelled. Not an audit opinion."]
@@ -136,7 +136,7 @@ def markdown(view):
 @router.get("/workspaces/{ws}/review/report", response_class=PlainTextResponse)
 def export_report(ws: str, request: Request):
     return PlainTextResponse(markdown(review(ws, request)), media_type="text/markdown",
-        headers={"Content-Disposition": 'attachment; filename="schooltrace-director-briefing.md"', "Cache-Control": "no-store"})
+        headers={"Content-Disposition": 'attachment; filename="sherlock-director-briefing.md"', "Cache-Control": "no-store"})
 
 
 class FollowUp(BaseModel):

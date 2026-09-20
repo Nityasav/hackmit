@@ -1,4 +1,10 @@
-# SchoolTrace
+# Sherlock
+
+Brand: Sherlock — follow the evidence. The magnifying-glass mark is shared by the
+site header, sidebar, login and favicon. Existing `SCHOOLTRACE_*` environment
+variables, database filenames, reviewer header, session cookie and extraction
+schema IDs remain compatibility identifiers; renaming the product does not reset
+saved workspaces or break the partner model contract.
 
 An **Office of the CFO for schools, run by AI agents.** Our project for [HackMIT 2026](https://hackmit.org)
 (Maximor track).
@@ -6,7 +12,7 @@ An **Office of the CFO for schools, run by AI agents.** Our project for [HackMIT
 ## What it does
 
 Schools lose track of money across payroll, purchasing and grants, and only find out at audit time.
-SchoolTrace puts a team of five AI agents on the books: they investigate, cite their evidence, re-check each
+Sherlock puts a team of five AI agents on the books: they investigate, cite their evidence, re-check each
 other, and hand you a decision. You approve, and every affected report updates at once.
 
 - **CFO Agent** plans the work and writes the briefing and the close pack

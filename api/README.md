@@ -1,4 +1,4 @@
-# SchoolTrace API
+# Sherlock API
 
 ```bash
 uv sync

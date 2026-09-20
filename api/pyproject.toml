@@ -1,7 +1,7 @@
 [project]
 name = "schooltrace-api"
 version = "0.1.0"
-description = "SchoolTrace API: accounting engine and bundle endpoints"
+description = "Sherlock API: accounting engine and bundle endpoints"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
