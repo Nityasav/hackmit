@@ -1,0 +1,4 @@
+po_id,line_id,vendor_id,description,order_date,amount,approver
+PO-100,1,VEND-001,Classroom supplies,2026-09-01,1200.00,j.okafor
+PO-101,1,VEND-002,"Grounds maintenance, September",2026-09-02,4500.00,j.okafor
+PO-103,1,VEND-004,Board meeting catering,2026-09-17,615.50,m.silva

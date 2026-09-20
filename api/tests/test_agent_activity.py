@@ -199,3 +199,52 @@ def test_the_endpoint_says_whether_anything_is_still_moving(ws, monkeypatch):
     assert view["active"] == 1
     assert view["tasks"][0]["agent"] == "A1"
     assert view["spend"]["day_cap_cents"] > 0
+
+
+# --------------------------------------------------------------------------- #
+# What happens after a person answers
+# --------------------------------------------------------------------------- #
+
+def test_answering_a_question_stops_the_card_asking_it(ws):
+    """The card said "waiting on your decision" after the decision was made.
+
+    `approvals.decide` recorded the answer and told nothing else about it, so the one
+    screen showing what is outstanding went on showing a question that was closed.
+    """
+    from app import approvals
+
+    key = invoice_key(ws, "INV-200")  # No order, no receipt: A1 escalates.
+    model = FakeModel([
+        ([("read_records", {"role": "vendor_invoices"}),
+          ("three_way_match", {"invoice_key": key})], None),
+        ([], ap_result(citations=[schemas.Citation(role="vendor_invoices", record_key=key)],
+                       may_pay=False)),
+    ])
+    run = asyncio.run(run_agent(ws, "A1", "Review invoice INV-200", meter=Meter(),
+                                thread_id="t-decide", client=model))
+    assert only_task(ws)["column"] == "needs_you"
+
+    approvals.decide(ws, "ACK-" + run.decision_id, "approved")
+    card = only_task(ws)
+
+    assert card["column"] == "done"
+    assert card["note"] == "Approved by local-reviewer"
+    assert card["todos"] == [], "a question that was answered is not still owed"
+    assert card["detail"]["resolution"]["decision"] == "approved"
+
+
+def test_the_answer_names_the_run_that_was_waiting_on_it(ws):
+    """So the caller can start it again. Recording and resuming are separate jobs."""
+    from app import approvals
+
+    key = invoice_key(ws, "INV-200")
+    model = FakeModel([
+        ([("read_records", {"role": "vendor_invoices"}),
+          ("three_way_match", {"invoice_key": key})], None),
+        ([], ap_result(citations=[schemas.Citation(role="vendor_invoices", record_key=key)],
+                       may_pay=False)),
+    ])
+    run = asyncio.run(run_agent(ws, "A1", "Review invoice INV-200", meter=Meter(),
+                                thread_id="t-resume", client=model))
+
+    assert approvals.decide(ws, "ACK-" + run.decision_id, "rejected") == ["t-resume"]

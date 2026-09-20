@@ -1,0 +1,3 @@
+remittance_id,customer_id,received_date,amount,reference
+REM-1,CUST-001,2026-09-25,3200.00,REC-1001
+REM-2,CUST-002,2026-09-28,1700.00,REC-1002
