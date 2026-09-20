@@ -106,9 +106,15 @@ CSV + text PDFs + synthetic emails/contracts
 
 Recommended implementation shape: TypeScript web UI, Python API and worker, PostgreSQL, SQL graph tables, local file storage, and one provider-neutral model adapter. A dedicated graph database is optional; typed edges, temporal filtering, traversals, and provenance are required regardless of storage. Confirm supported library versions during implementation rather than relying on unverified SDK names in a challenge brief.
 
-Hackathon build (justified equivalent): `web/` uses Next.js 16 App Router, TypeScript, Tailwind v4, and bun. `api/` uses FastAPI (Python, uv) with `app/accounting`, `app/agents`, and `app/workflows`. The hackathon uses SQLite instead of PostgreSQL for zero-setup local runs; the schema stays portable to Postgres. `contracts/` holds the shared JSON bundle schema and fixtures. The model is Claude Sonnet 5 (`claude-sonnet-5`) behind the provider adapter, plus a clearly labeled replay adapter.
+Hackathon build (justified equivalent): `web/` uses Next.js 16 App Router, TypeScript, Tailwind v4, and bun. `api/` uses FastAPI (Python, uv) with `app/accounting`, `app/agents`, and `app/workflows`. The hackathon uses SQLite instead of PostgreSQL for zero-setup local runs; the schema stays portable to Postgres. `contracts/` holds the shared JSON bundle schema and fixtures.
+
+The model layer is provider-neutral at its boundary and deliberately hybrid. The first live adapter uses the OpenAI Responses API with a server-side `OPENAI_API_KEY`; `OPENAI_MODEL` selects the model without changing agent contracts. Strong hosted models perform planning, investigation and independent challenge. A future fine-tuned local extraction model performs private document perception: schema-guided extraction of requirements, dates, entities, relations and exact source spans. The local model is not permitted to calculate financial results, approve changes or convert an extraction into an audit conclusion. A clearly labeled replay adapter remains available for deterministic demos and evaluation.
+
+The product's internal “brain” is the combination of the orchestrator, immutable run state, deterministic accounting tools, evidence graph, reviewed playbooks and versioned model adapters. No individual model is the system of record. Model output is always a proposal tied to a snapshot and evidence; SQL records, source bytes, deterministic calculations and human decisions remain authoritative within their stated scope.
 
 Use server-sent events or an equivalent event stream to display agent actions. For the hackathon, the web app may poll `GET /api/workspaces/{ws}/bundle` instead. Background runs persist checkpoints in SQL. Every tool call logs agent identity, permitted scope, input hash, output references, latency, and result status. Store concise decision rationales and evidence, not private chain-of-thought.
+
+LangGraph is the selected target for the future multi-agent state machine: CFO plans → specialists investigate → Auditor challenges → evidence/human gates → briefing. Use persistent SQLite checkpoints during the hackathon. The first single-agent slice below uses a compact synchronous loop with persisted tool history; it does not yet implement LangGraph scheduling or automatic crash/evidence resumption. The future local extraction stack is NuExtract3 4B as the initial benchmark candidate, schema-constrained output, Pydantic validation, and offline TRL/PEFT LoRA training, subject to hardware and license verification. No model download or training is part of the first OpenAI-agent slice.
 
 ## 6. Financial data model
 
@@ -181,7 +187,7 @@ Precedent/playbook schema: `id, institution, domain, entity_scope, rule_summary,
 
 Retrieval order: enforce tenant and access scope; filter by period and domain; traverse connected entities and policies; retrieve approved precedents; use semantic similarity only to rank remaining candidates. Similar text cannot override incompatible dates or scope.
 
-### 7.4 Learning loop (RSI via playbooks)
+### 7.4 Fast learning loop (RSI via playbooks)
 
 1. **Notice:** an agent, usually the CFO Agent, sees the same pattern across findings or months.
 2. **Propose:** it drafts a scoped playbook with scope, validity dates, exclusions, and source findings (`propose_playbook`). Status: `proposed`.
@@ -190,11 +196,26 @@ Retrieval order: enforce tenant and access scope; filter by period and domain; t
 5. **Use and re-check:** a later task retrieves the playbook and re-runs its applicability checks against current sources on every use. The decision record logs exactly how the playbook changed the next action, or why it was rejected.
 6. **Retire:** a playbook whose governing source is superseded becomes `retired`, and the old version stays for history.
 
-Do not self-edit production prompts or promote agent summaries into policy. In the MVP, “learning” means controlled retrieval and reuse of reviewed playbooks, not prompt self-modification or fine-tuning. The replay gate is a guard against learning the wrong lesson, not proof of general improvement.
+Do not self-edit production prompts or promote agent summaries into policy. In the online runtime, “learning” means controlled retrieval and reuse of reviewed playbooks, not silent prompt modification or weight updates. The replay gate is a guard against learning the wrong lesson, not proof of general improvement.
 
 Negative-transfer example: September permits a 60/40 transportation allocation under contract A (PB-03). October contract B changes routes and allocation evidence. PB-03 must be flagged as inapplicable and retired, not copied because the vendor name matches.
 
-### 7.5 Invalidation and concurrency
+### 7.5 Slow learning loop (offline local-model improvement)
+
+The local extraction model may improve from reviewer corrections only through an offline, versioned promotion pipeline:
+
+1. **Capture:** save the immutable source snapshot, schema version, base model, adapter version, model extraction and reviewer correction. Never store private chain-of-thought as training data.
+2. **Qualify:** admit an example only when exact quotations resolve to the original source and a reviewer approves the corrected labels. Teacher-model or self-generated labels are proposals, not ground truth.
+3. **Train a candidate:** start with supervised fine-tuning through a separate LoRA adapter. Preference optimization may be evaluated later when accepted/rejected pairs are numerous and representative. Never mutate the production adapter in place.
+4. **Replay a frozen evaluation:** compare the base and candidate on held-out institutions and document templates. Required metrics include schema validity, field precision/recall/F1, exact dates/amounts/IDs, citation-span accuracy, unsupported extraction rate and abstention quality.
+5. **Promote explicitly:** only an authorized human may activate an adapter that passes all regression thresholds. Record dataset hash, code version, hyperparameters, base-model hash, adapter hash, evaluation result and approval. Keep the prior version available for rollback.
+6. **Monitor and retire:** route low-confidence or out-of-distribution documents to review, collect corrections for the next candidate, and retire adapters whose governing schemas or source formats change.
+
+Research patterns such as reflection or self-training may propose retries and candidate examples, but production outputs must never recursively become training truth merely because the model generated them. This prevents feedback-loop amplification, model collapse and prompt-injection content from entering model weights. Raw institutional documents require an authorized retention and training policy before they can enter any training corpus.
+
+The initial local extraction candidate should use JSON-schema-guided document extraction with a small open-weight model specialized for structured extraction. NuExtract-class models, Pydantic schemas and constrained decoding are implementation candidates, not fixed requirements; select the final model through hardware, license, citation-accuracy and held-out evaluations. The API-agent and local-extractor contracts remain separate so either can be replaced independently.
+
+### 7.6 Invalidation and concurrency
 
 When a source, ledger scenario, policy, or approved decision changes, mark all transitively dependent calculations and claims stale. Recompute in dependency order and publish a new report snapshot only after invariant checks pass. Old snapshots remain immutable and visibly dated.
 
@@ -211,6 +232,26 @@ Five roles, shown in the UI as an Office of the CFO:
 | Payroll & Budget agent | Payroll/budget analyst | Payroll tie-out, allocations, variance bridge, budget |
 | Grants & Compliance agent | Restricted-funds specialist | Award terms, windows, allowability, award schedule |
 | Internal Auditor agent | Independent auditor | Re-performs calculations from originals; accept/reject/needs_evidence |
+
+### 8.1 First live slice: CFO snapshot triage
+
+Integration status: `app/agents/cfo.py` powers live snapshot triage in Command center. The separately
+merged `app/cfo/` coordinator exposes `/api/cfo/runs` and a `/cfo` harness, with scripted specialists
+and independent-review gates. Its intake bridge exists, but live specialist/auditor adapters remain
+unregistered. The two execution paths are not yet unified; suggested triage tasks are not auto-dispatched.
+The coordinator's optional local CFO adapter is experimental and is not the planned local document extractor.
+
+The first implemented live role is a bounded CFO triage agent. It runs synchronously for the local hackathon build against exactly one current immutable snapshot. The API key exists only in the FastAPI process environment and is never returned to or entered in the browser. The request uses provider storage disabled where supported.
+
+The CFO receives no database connection, arbitrary file path, shell, web search or mutation tool. Its initial tool allowlist is: read workspace/snapshot context, list sources, literal-search source lines, read a bounded source span, list paginated normalized records by role and run deterministic ledger import-control totals across the entire pinned ledger. Cross-workspace IDs and sources outside the pinned snapshot are rejected. The limits are 12 actual tool calls, one active CFO run per workspace, four minutes per run, 60 seconds per provider request, 2,500 output tokens per response, 60,000 conversation bytes and a conservative 100,000 cumulative token ceiling. The model is configurable. Request IDs prevent duplicate runs; expected snapshot IDs reject stale starts. Completed steps survive failures, and abandoned runs expire after the deadline plus 30 seconds.
+
+The required final call is a structured submission containing a concise executive briefing, scope assessed, limitations, candidate findings, evidence requests and proposed specialist tasks. Citations must identify an authorized source and exact line with a verbatim substring; the application re-validates them before accepting the run. A non-`needs_evidence` candidate requires at least one valid citation. The runtime persists the model ID, snapshot, status, timestamps, token usage, hashed tool inputs, output references, latency and concise decision record. It never stores private chain-of-thought.
+
+The agent must inspect the source inventory before submission. Bounded original-source previews help distinguish missing evidence from present-but-unreviewed evidence. Normalized amounts are integer cents; ledger tools also return formatted display amounts. A supplemental validator rejects currency-prefixed amounts absent from inspected records or tool results. This is a narrow unit-error guard, not a proof of all monetary prose or of the financial interpretation; independent review remains required.
+
+This first role may label an item only `hypothesized`, `needs_evidence` or `cleared`. It cannot substantiate a final finding, approve an adjustment, verify population completeness or issue an audit opinion. Those transitions require specialist work, independent Auditor review and human gates. A model call failure or exhausted tool budget produces a visible failed run; it does not fall back to invented fixture findings.
+
+`cleared` in the raw triage output means proposed clearance pending independent review. The Findings dashboard presents it as an unreviewed hypothesis, and the source panel labels it explicitly. Citation validation checks location and verbatim text, not semantic correctness of the inference. Evidence requests and proposed specialist tasks are suggestions; a user can add a suggested request to the intake evidence queue. New snapshots require an explicit rerun; old results remain accessible and visibly stale.
 
 The human user is the real CFO or controller and approves every adjustment, payment release, and playbook activation. Reuse a model if necessary but separate role context, tools, and permissions. Model diversity is optional and does not guarantee independence.
 

@@ -1,5 +1,52 @@
 # Contracts
 
+## Intake contract v2
+
+The existing bundle remains compatible with `sandbox` and `mit`. New persisted workspace IDs are
+`ws-` plus 16 hexadecimal characters; they are validated by lookup, never treated as filesystem paths.
+Bundles add `contract_version: 2`, optional workspace `intake`, `currency`, `profile`, and execution mode
+`not_started`. New workspaces contain no demo findings/tasks. The TypeScript types in `web/src/lib/types.ts`
+describe intake responses; request models and validation live in the flat `api/app/ingestion.py` module.
+
+| Method/path | Payload / result |
+| --- | --- |
+| GET /api/workspaces | Persisted workspace configurations; fixed demos remain separate |
+| POST /api/workspaces | Name, synthetic/public kind, entity type, jurisdiction, currency, start/end, scope |
+| POST /api/workspaces/{ws}/imports | Multipart `files` plus JSON `metadata` array (one FileOptions per file) → persisted preview |
+| GET /api/workspaces/{ws}/imports | Recent saved imports |
+| GET /api/workspaces/{ws}/imports/{id} | Status, preview version, base revision, per-file fields/rows, controls and issues |
+| PATCH /api/workspaces/{ws}/imports/{id}/mapping | `expected_version`, `files: {source_id: FileOptions}` → new validated preview |
+| POST /api/workspaces/{ws}/imports/{id}/commit | `expected_version`, `idempotency_key` → committed snapshot; 409 on stale/invalid state |
+| GET /api/workspaces/{ws}/coverage | Per-capability source availability, counts, source list, evidence requests |
+| GET /api/workspaces/{ws}/sources/{id} | Metadata plus numbered original text lines (`start`, `limit` ≤ 200) |
+| GET /api/workspaces/{ws}/sources/{id}/spans/{line} | One original line, hash and source version |
+| GET /api/workspaces/{ws}/sources/{id}/download | Unchanged bytes as an attachment |
+| POST /api/workspaces/{ws}/evidence-requests | `title`, requested `role`, optional `task_id` |
+| POST /api/workspaces/{ws}/evidence-requests/{id}/responses | `source_id`, `expected_version`; requires matching-role committed active evidence |
+
+FileOptions: `role`, `source_system`, positive integer `source_version`, optional `external_id` (stable
+document identity), `applies_to`, `mapping` (canonical field → CSV header), `amount_unit` (major/minor),
+optional `expected_rows`/`expected_debit`/`expected_credit`, `excluded` and required `exclusion_reason`
+when excluded. Client mappings are revalidated server-side. All references are workspace-scoped.
+
+Preview statuses: `needs_mapping`, `needs_review`, `ready_to_commit`, `committed`. Parsing happens inside
+the staging transaction; interrupted operations roll back. Any validation issue blocks commit. Explicit
+exclusions remain in the saved batch but never become active evidence/records. Only the first 500 issues
+and first 100 revision diffs are returned; counts report the full population.
+
+Source identity uses `(workspace, role, source_system, stable_record_id, source_version)`; row order and
+filenames do not define financial identity. Same-key changed payloads conflict, later versions supersede
+without deleting history, and duplicate-only imports keep the existing snapshot. Every normalized record
+stores its original source ID and line locator. Source types do not automatically create ledger postings.
+
+Coverage states are source readiness only; full management statements and allocation confirmation stay
+`needs_review` even when inputs exist. `coverage_verified` remains false until a real completeness review
+exists. Evidence `supplied` is not `verified`; attachment saves a future-runtime resumption event, and a
+superseding source returns the request to `needs_review`.
+
+The small public synthetic fixture pack is `fixtures/intake.json`; it is developer input, not a hidden
+benchmark or a saved agent run. Existing UI fixtures remain unchanged for teammate compatibility.
+
 The seam between the four workstreams. **Change these three together:**
 
 | File | Owner of the change |
@@ -52,3 +99,23 @@ Bundle
 | `GET /api/workspaces/{ws}/bundle` | everything the dashboard renders. The web app polls every 2s |
 | `POST /api/approvals/{id}/decision` | `{workspace, decision}` → updated bundle |
 | `POST /api/demo/{action}` | `reset`, `inject_issue`, `add_evidence`, `next_month` |
+
+## CFO agent run contract
+
+`POST /api/workspaces/{ws}/agent-runs` requires the local reviewer header and JSON
+`{snapshot_id, request_id, focus?}`. The snapshot must be the latest committed snapshot. A request ID
+is unique within its workspace; replaying identical inputs returns the saved run, while changing its
+inputs returns 409. The endpoint waits for the bounded run; polling `GET` on the same path lists the
+latest 20 persisted runs, including running/failed runs and partial tool history.
+
+Each run contains `id`, `workspace_id`, `agent`, `snapshot_id`, `current_snapshot`, `status`, `model`,
+`focus`, timestamps, `error`, and `result`. `result.analysis` is present only on completed runs and has
+`executive_briefing`, `scope_assessed`, `limitations`, `findings`, `evidence_requests`, `next_tasks`.
+Findings carry source ID, line and exact quotation. Tool history and cumulative token usage are saved
+without raw model reasoning. Error messages omit provider response bodies and credentials.
+
+The bundle projects only completed CFO output for the current snapshot into briefing, candidate
+findings, queued specialist proposals and the reasoning log. `Finding.status` additionally supports
+`hypothesized`. Proposed clearances remain unreviewed hypotheses in that projection. No proposed task
+is automatically executed and no accounting correction is applied. Live provenance describes a real
+provider run, not an independently verified audit result.

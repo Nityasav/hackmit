@@ -7,12 +7,17 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
-    "openai>=1.0",
+    "python-multipart>=0.0.20",
+    "openai>=2.0",
+    "jsonschema>=4.23",
     "python-dotenv>=1.0",
 ]
 
+[project.optional-dependencies]
+cfo = ["openai"]
+
 [dependency-groups]
-dev = ["pytest>=8.3"]
+dev = ["pytest>=8.3", "httpx>=0.28"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
