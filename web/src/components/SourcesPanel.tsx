@@ -95,7 +95,9 @@ export function SourcesPanel() {
   }, []);
 
   useEffect(() => {
-    if (!isIntake) return;
+    // Without a workspace the base URL is /api/workspaces/, which 404s. Nothing
+    // here is meaningful until someone has created a school.
+    if (!isIntake || !ws) return;
     let mounted = true;
     const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports"), intakeApi<AgentRun[]>(base + "/agent-runs")])
       .then(([c, h, r]) => { if (mounted) { setCoverage(c); setHistory(h); setAgentRuns(r); } })
@@ -103,7 +105,7 @@ export function SourcesPanel() {
     void load();
     const interval = setInterval(load, 10000);
     return () => { mounted = false; clearInterval(interval); };
-  }, [base, isIntake]);
+  }, [base, isIntake, ws]);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
@@ -125,12 +127,20 @@ export function SourcesPanel() {
         <p className="mt-1 text-xs text-ink-dim">Bring the records. See what is supported, what is missing, and where each number came from.</p></div>
       <button className={button} onClick={() => setCreating(true)}>New institution</button>
     </div>
-    {(error || apiError) && <p role="alert" className="mt-3 bg-red-50 p-3 text-accent-bad">{error || apiError}. Check that the API is running on {API_URL}.</p>}
+    {(error || apiError) && (() => {
+      const text = error || apiError || "";
+      // Only a reachability failure should send someone to check the server.
+      // Appending it to every error sent people hunting a live API over a 404.
+      const unreachable = /not reachable|timed out/i.test(text);
+      return <p role="alert" className="mt-3 bg-red-50 p-3 text-accent-bad">
+        {text}{unreachable ? ` Check that the API is running on ${API_URL}.` : ""}
+      </p>;
+    })()}
     {message && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-        <span>{coverage?.workspace.scope || "Loading scope…"}</span>
+        <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No school yet — create one to add records.")}</span>
         <span>· {coverage?.workspace.currency}</span><span>· {coverage?.workspace.profile}</span>
         <button disabled={busy} className={button} onClick={() => act(refresh)}>Refresh sources</button>
       </div>
