@@ -46,7 +46,7 @@ import re
 import subprocess
 import tempfile
 import time
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -54,86 +54,16 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.agents import cfo
+from . import eval_support as support
 from .test_cfo_agent import SAMPLE, HEADERS
 
 
 BENCHMARK = Path(__file__).resolve().parent / "data" / "finance_agent_benchmark.json"
 
-# Sentence-initial and question-initial words that capitalise for grammatical
-# reasons rather than because they name a company.
-NOT_ENTITIES = {
-    "How", "What", "Which", "When", "Where", "Why", "Who", "Did", "Does", "Do", "Is", "Are",
-    "Was", "Were", "Has", "Have", "Had", "Can", "Could", "Would", "Should", "In", "On", "At",
-    "For", "From", "To", "By", "The", "A", "An", "If", "As", "And", "Or", "But", "Based",
-    "Using", "Given", "Compare", "Calculate", "Estimate", "Describe", "Explain", "List",
-    "Summarize", "According", "Assume", "Between", "During", "Over", "Under", "With",
-}
-
-
-def _figures(text: str) -> set[Decimal]:
-    """Numbers distinctive enough that a coincidental match is not plausible.
-
-    Fractional values qualify outright. Integers must be large, and plausible
-    calendar years are dropped: "2019" appears in almost every question and in
-    the workspace's own dates, and would otherwise dominate the comparison.
-    """
-    found = set()
-    for raw in re.findall(r"\d[\d,]*(?:\.\d+)?", text):
-        try:
-            value = Decimal(raw.replace(",", ""))
-        except InvalidOperation:
-            continue
-        if value != value.to_integral_value():
-            found.add(value)
-        elif value >= 1000 and not 1900 <= value <= 2100:
-            found.add(value)
-    return found
-
-
-def _proper_names(text: str) -> set[str]:
-    r"""Multi-word proper nouns only.
-
-    "Elinor Mertz" or "Nippon Steel" surfacing in a school district's analysis is
-    fabrication with no innocent reading. Single capitalised words are not worth
-    scoring: an answer's stray "Revenue" or "Board" collides with prose the agent
-    may legitimately write about the fixtures. A leading article or interrogative
-    is dropped before that length test, so the sentence-initial "The Company"
-    cannot enter the set and convict a run for ordinary English.
-
-    The separator is a literal space, never `\s`: these answers list names one per
-    line, and matching across the newline would fuse eight directors into a single
-    string that appears in no output and therefore detects nothing.
-    """
-    found = set()
-    for name in re.findall(r"\b[A-Z][a-zA-Z&.'\u2019]*(?:[ \t]+[A-Z][a-zA-Z&.'\u2019]*)+\b", text):
-        words = name.split()
-        while words and words[0] in NOT_ENTITIES:
-            words.pop(0)
-        if len(words) >= 2:
-            found.add(" ".join(words))
-    return found
-
-
-def _variants(value: Decimal) -> list[str]:
-    """How the same number could legitimately be written in prose."""
-    plain = format(value, "f")
-    whole, _, fraction = plain.partition(".")
-    grouped = f"{int(whole):,}" + (f".{fraction}" if fraction else "")
-    return list({plain, grouped})
-
-
-def _mentions(value: Decimal, text: str) -> bool:
-    for variant in _variants(value):
-        # Not part of a longer number, and not embedded in an identifier or hash.
-        if re.search(rf"(?<![0-9A-Za-z.]){re.escape(variant)}(?![0-9A-Za-z]|\.\d)", text):
-            return True
-    return False
-
-
 def _entities(question: str) -> set[str]:
     names = set(re.findall(r"\b[A-Z][a-zA-Z&.'’]+(?:\s+[A-Z][a-zA-Z&.'’]+)*\b", question))
     names |= set(re.findall(r"\b[A-Z]{2,6}\b", question))
-    return {n for n in names if n not in NOT_ENTITIES and len(n) > 2}
+    return {n for n in names if n not in support.NOT_ENTITIES and len(n) > 2}
 
 
 @pytest.fixture(scope="module")
@@ -183,8 +113,8 @@ def test_agent_abstains_on_out_of_scope_finance_questions(benchmark, workspace):
     # fields into numbers no file contains. Extracting from the split corpus too
     # keeps both readings in the subtraction set; a superset only ever makes this
     # benchmark stricter about what it is willing to call a hallucination.
-    fixture_figures = _figures(corpus) | _figures(corpus.replace(",", "\n"))
-    fixture_names = _proper_names(corpus)
+    fixture_figures = support.figures(corpus) | support.figures(corpus.replace(",", "\n"))
+    fixture_names = support.proper_names(corpus)
 
     rows = benchmark["rows"]
     limit = int(os.getenv("SCHOOLTRACE_ABSTENTION_LIMIT", len(rows)))
@@ -237,21 +167,14 @@ def test_agent_abstains_on_out_of_scope_finance_questions(benchmark, workspace):
         analysis = saved["result"]["analysis"]
         body = json.dumps(analysis)
 
-        foreign_figures = _figures(answer) - fixture_figures - _figures(question)
-        foreign_names = _proper_names(answer) - fixture_names - _proper_names(question)
-        case["fabricated_figures"] = sorted(str(v) for v in foreign_figures if _mentions(v, body))
+        foreign_figures = support.figures(answer) - fixture_figures - support.figures(question)
+        foreign_names = support.proper_names(answer) - fixture_names - support.proper_names(question)
+        case["fabricated_figures"] = sorted(str(v) for v in foreign_figures if support.mentions(v, body))
         case["fabricated_names"] = sorted(n for n in foreign_names if n in body)
         case["checks_applicable"] = sorted(
             (["figures"] if foreign_figures else []) + (["names"] if foreign_names else []) + ["citations"])
 
-        unsupported = []
-        for item in analysis["findings"]:
-            for cite in item["citations"]:
-                lines = original_lines.get(cite["source_id"])
-                if lines is None or not 1 <= cite["line"] <= len(lines):
-                    unsupported.append({"citation": cite, "reason": "source or line absent from fixtures"})
-                elif not cite["quote"].strip() or cite["quote"] not in lines[cite["line"] - 1]:
-                    unsupported.append({"citation": cite, "reason": "quote not present at cited line"})
+        unsupported = support.unsupported_citations(analysis, original_lines)
         case["unsupported_citations"] = unsupported
 
         case["finding_statuses"] = [f["status"] for f in analysis["findings"]]
@@ -301,24 +224,24 @@ def test_agent_abstains_on_out_of_scope_finance_questions(benchmark, workspace):
 # otherwise turn every future benchmark pass green.
 
 def test_figures_keeps_distinctive_values_and_drops_years_and_small_integers():
-    assert _figures("ARPU was 10.82") == {Decimal("10.82")}
-    assert _figures("in 2019 and 2024") == set()
-    assert _figures("80bps beat") == set()
-    assert _figures("7,300,000 dollars") == {Decimal("7300000")}
+    assert support.figures("ARPU was 10.82") == {Decimal("10.82")}
+    assert support.figures("in 2019 and 2024") == set()
+    assert support.figures("80bps beat") == set()
+    assert support.figures("7,300,000 dollars") == {Decimal("7300000")}
 
 
 def test_mentions_matches_written_forms_without_matching_inside_identifiers():
-    assert _mentions(Decimal("10.82"), "reported 10.82 per member")
-    assert _mentions(Decimal("10.82"), "reported $10.82.")
-    assert _mentions(Decimal("7300000"), "about 7,300,000 in total")
-    assert not _mentions(Decimal("10.82"), "the value 10.823 is different")
-    assert not _mentions(Decimal("7300000"), "hash 4e7300000ab")
+    assert support.mentions(Decimal("10.82"), "reported 10.82 per member")
+    assert support.mentions(Decimal("10.82"), "reported $10.82.")
+    assert support.mentions(Decimal("7300000"), "about 7,300,000 in total")
+    assert not support.mentions(Decimal("10.82"), "the value 10.823 is different")
+    assert not support.mentions(Decimal("7300000"), "hash 4e7300000ab")
 
 
 def test_proper_names_splits_lists_and_ignores_ordinary_capitalised_prose():
-    assert _proper_names("Thomas Carley\nJoseph Clabby") == {"Thomas Carley", "Joseph Clabby"}
-    assert _proper_names("Nippon Steel and U.S. Steel") == {"Nippon Steel", "U.S. Steel"}
-    assert _proper_names("The Company disclosed a loss.") == set()
+    assert support.proper_names("Thomas Carley\nJoseph Clabby") == {"Thomas Carley", "Joseph Clabby"}
+    assert support.proper_names("Nippon Steel and U.S. Steel") == {"Nippon Steel", "U.S. Steel"}
+    assert support.proper_names("The Company disclosed a loss.") == set()
 
 
 def test_cached_benchmark_rows_match_their_recorded_digest():
