@@ -19,6 +19,20 @@ type State = { documents: Doc[]; model: Model[]; prediction: { id: string; docum
 const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
 
+/**
+ * Which agents may read a document of each kind, from the `roles` on their
+ * specs in api/app/agents/registry.py.
+ *
+ * Getting this wrong is silent and expensive: a document staged under a kind
+ * no agent reads is preserved, hashed and citable by a person, and invisible
+ * to every agent — so the work of extracting and checking it buys nothing.
+ * The kinds absent here have no reader at all, which is worth saying on the
+ * screen where the choice is made rather than leaving someone to discover it.
+ */
+const READERS: Record<string, string> = {
+  policy: "Accounts Payable, Controls Testing, Audit & Controls and the Treasurer",
+};
+
 function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {
   let output: Output;
   try {
@@ -115,8 +129,9 @@ function Lab({ ws }: { ws: string }) {
     {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
     {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
-      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
+      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF only, up to 10 MB and 20 pages. The text is read straight out of the file, so a PDF you can select text in will work. A scan or a photo of a document needs character recognition, which is not installed on this server, and will be rejected rather than guessed at.</p>
         <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
+        {READERS[role] ? <p className="mt-2 text-[12.5px] text-ink-dim">Once you have checked it and staged it, {READERS[role]} can read this as evidence and cite it.</p> : <p className="mt-2 text-[12.5px] text-amber-800">No agent reads this kind yet. It will be preserved, citable by a person, and invisible to every agent — pick the kind that matches what the document actually is.</p>}
         <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
             <span>Choose document</span>
@@ -124,7 +139,7 @@ function Lab({ ws }: { ws: string }) {
               <button type="button" className={`${button} font-semibold`} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
               <span className="min-w-0 break-all text-xs text-ink-dim" aria-live="polite">{file?.name || "No document selected"}</span>
             </div>
-            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
+            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
           </div>
           <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
