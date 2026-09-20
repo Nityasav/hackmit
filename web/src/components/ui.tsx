@@ -170,6 +170,10 @@ export function Button({
       onClick={onClick}
       className={cn(
         "w-auto px-11 text-[13.5px] [&_svg]:h-4 [&_svg]:w-4",
+        // The reveal layer is absolute with no left, so it lays out from its static
+        // position (after the label and the padding) and drifts right, clipping the
+        // arrow. Anchor it to the edge so w-full + justify-center actually centres.
+        "[&>div:nth-child(2)]:left-0",
         // The resting dot sits at 20% from the left, which drifts into the label once a
         // button is wider than the 8rem the component assumes. Pin it near the edge.
         // On hover the component's scale-[1.8] still covers the pill from there.

@@ -27,14 +27,11 @@ export default function CommandCenter() {
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
   const pending = pendingApprovals.length;
 
-  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} subtitle={`snapshot ${workspace.snapshot_id}`} /><SourcesPanel key={workspace.id} /></>;
+  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} /><SourcesPanel key={workspace.id} /></>;
 
   return (
     <>
-      <PageHeader
-        title={`${workspace.name} · ${workspace.period}`}
-        subtitle={`snapshot ${workspace.snapshot_id}`}
-      />
+      <PageHeader title={`${workspace.name} · ${workspace.period}`} />
       <SourcesPanel key={workspace.id} />
 
       {/* CFO agent briefing */}

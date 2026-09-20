@@ -109,7 +109,7 @@ function SidebarContent() {
           type="button"
           onClick={() => setWs(nextWorkspace.id)}
           title={`Switch to ${nextWorkspace.name}`}
-          className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-surface-3"
+          className={cn("group/sidebar mt-4 flex items-center gap-2 rounded-md py-2 hover:bg-surface-3", open ? "justify-start px-2" : "justify-center px-0")}
         >
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-ink text-[12px] font-bold text-white">
             {current.short}
@@ -128,7 +128,8 @@ function SidebarContent() {
               <SidebarLink
                 link={link}
                 className={cn(
-                  "rounded-md px-2 transition-colors hover:bg-surface-3",
+                  "rounded-md transition-colors hover:bg-surface-3",
+                  open ? "px-2" : "justify-center px-0",
                   link.active && "bg-surface-3 [&_span]:!font-semibold [&_span]:!text-ink",
                   link.disabled && "opacity-50",
                 )}
@@ -145,7 +146,7 @@ function SidebarContent() {
                 </motion.span>
               )}
               {link.id === "approvals" && pending > 0 && !open && (
-                <span className="pointer-events-none absolute left-[18px] top-1 h-2 w-2 rounded-full bg-ink ring-2 ring-line" />
+                <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-full bg-ink ring-2 ring-surface-2" />
               )}
             </div>
           ))}

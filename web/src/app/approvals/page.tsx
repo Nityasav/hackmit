@@ -7,13 +7,6 @@ import type { Approval } from "@/lib/types";
 import { AgentAvatar, Button, Card, CardTitle, EmptyState, PageHeader, Pill, Toast } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
 
-const KIND_LABEL = {
-  journal: ["Journal correction", "indigo"],
-  payment: ["Payment release", "amber"],
-  playbook: ["Learning", "teal"],
-  evidence: ["Evidence request", "gray"],
-} as const;
-
 export default function ApprovalsPage() {
   const { bundle, decideApproval } = useData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -138,7 +131,6 @@ export default function ApprovalsPage() {
 }
 
 function Row({ approval, active, onClick }: { approval: Approval; active: boolean; onClick: () => void }) {
-  const [label, tone] = KIND_LABEL[approval.kind];
   return (
     <button
       type="button"
@@ -152,11 +144,13 @@ function Row({ approval, active, onClick }: { approval: Approval; active: boolea
         <b className="block truncate">{approval.title}</b>
         <span className="block truncate text-ink-dim">{approval.summary}</span>
       </div>
-      <span className="ml-auto flex-none">
-        <Pill tone={approval.status === "approved" ? "green" : approval.status === "rejected" ? "red" : tone}>
-          {approval.status === "pending" ? label : approval.status === "approved" ? "Approved" : "Rejected"}
-        </Pill>
-      </span>
+      {approval.status !== "pending" && (
+        <span className="ml-auto flex-none">
+          <Pill tone={approval.status === "approved" ? "green" : "red"}>
+            {approval.status === "approved" ? "Approved" : "Rejected"}
+          </Pill>
+        </span>
+      )}
     </button>
   );
 }
