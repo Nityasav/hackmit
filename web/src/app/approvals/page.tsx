@@ -34,7 +34,7 @@ export default function ApprovalsPage() {
   return (
     <TabGate tab="approvals">
       <PageHeader title="Approvals" subtitle="Agents propose. You decide. Nothing moves without you." />
-      <div className="grid gap-4 min-[900px]:grid-cols-[1fr_1.1fr]">
+      <div className="grid gap-4 min-[900px]:grid-cols-[1fr_1.1fr] [&>*]:min-w-0">
         <Card>
           <CardTitle right={`${pending.length} pending`}>Waiting on you</CardTitle>
           {pending.length === 0 && (
@@ -150,7 +150,7 @@ function Row({ approval, active, onClick }: { approval: Approval; active: boolea
       <AgentAvatar id={approval.agent} size="sm" />
       <div className="min-w-0">
         <b className="block truncate">{approval.title}</b>
-        <span className="truncate text-ink-dim">{approval.summary}</span>
+        <span className="block truncate text-ink-dim">{approval.summary}</span>
       </div>
       <span className="ml-auto flex-none">
         <Pill tone={approval.status === "approved" ? "green" : approval.status === "rejected" ? "red" : tone}>

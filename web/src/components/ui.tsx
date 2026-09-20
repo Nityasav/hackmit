@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+
+import { cn } from "@/lib/utils";
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 import type { AgentId, FindingStatus, PlaybookStatus } from "@/lib/types";
 
 const AGENT_BG: Record<AgentId, string> = {
@@ -153,25 +156,31 @@ export function Button({
   disabled,
   title,
 }: {
-  children: React.ReactNode;
+  children: string;
   primary?: boolean;
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
 }) {
   return (
-    <button
-      type="button"
+    <InteractiveHoverButton
+      text={children}
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-2 rounded-[7px] border px-3.5 py-2 text-[13.5px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={cn(
+        "w-auto px-11 text-[13.5px] [&_svg]:h-4 [&_svg]:w-4",
+        // The resting dot sits at 20% from the left, which drifts into the label once a
+        // button is wider than the 8rem the component assumes. Pin it near the edge.
+        // On hover the component's scale-[1.8] still covers the pill from there.
+        "[&>div:last-child]:left-6",
+        "[&>span:first-child]:relative [&>span:first-child]:z-20",
+        "disabled:pointer-events-none disabled:opacity-50",
         primary
-          ? "border-ink bg-ink text-white hover:bg-ink"
-          : "border-line bg-surface text-ink hover:border-ink"
-      }`}
-    >
-      {children}
-    </button>
+          // Primary rests filled and inverts on hover; secondary does the reverse.
+          ? "border-ink bg-ink text-white [&>div:last-child]:bg-white [&>div:nth-child(2)]:text-ink"
+          : "border-ink text-ink",
+      )}
+    />
   );
 }

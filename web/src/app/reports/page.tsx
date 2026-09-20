@@ -24,7 +24,7 @@ export default function ReportsPage() {
         <AdvancedStats />
       </div>
 
-      <div className="grid gap-4 min-[900px]:grid-cols-2">
+      <div className="grid gap-4 min-[900px]:grid-cols-2 [&>*]:min-w-0">
         <Card>
           <CardTitle>
             <AgentAvatar id="cfo" size="sm" />
