@@ -774,7 +774,8 @@ def _evidence_lines(doc: dict, correction: dict) -> list[str]:
     return lines
 
 
-def _record_rows(doc: dict, correction: dict, required: list[str]) -> list[dict]:
+def _record_rows(doc: dict, correction: dict, required: list[str],
+                 default_currency: str | None = None) -> list[dict]:
     """One document's checked values as intake rows.
 
     `record_id` is namespaced by the document's lineage, so rows gathered from
@@ -785,7 +786,8 @@ def _record_rows(doc: dict, correction: dict, required: list[str]) -> list[dict]
     for i, record in enumerate(correction["output"]["records"]):
         row = {key: obs["value"] for key, obs in record.items()
                if obs["status"] == "present" and key in required + CARRY_FIELDS}
-        row = {key: normalize_for_intake(key, value, row.get("currency")) for key, value in row.items()}
+        row = {key: normalize_for_intake(key, value, row.get("currency") or default_currency)
+               for key, value in row.items()}
         if "record_id" in required and not row.get("record_id"):
             row["record_id"] = f"{lineage}:{i+1}"
         rows.append(row)
@@ -845,6 +847,7 @@ def stage_set(ws: str, body: StageSet, request: Request):
                                  "stage them individually as evidence")
 
     history = _corrections(ws)
+    workspace_currency = ingestion.workspace_config(ws).get("currency")
     uploads, rows = [], []
     required = list(roles.FIELDS[intake_role]) if body.include_records else []
     for correction, doc in pairs:
@@ -857,7 +860,7 @@ def stage_set(ws: str, body: StageSet, request: Request):
                                   source_system="reviewed-extraction",
                                   external_id=lineage, source_version=revision)))
         if body.include_records:
-            rows.extend(_record_rows(doc, correction, required))
+            rows.extend(_record_rows(doc, correction, required, workspace_currency))
 
     if body.include_records:
         uploads.append(("reviewed-records.csv", _records_csv(required, rows),
@@ -905,7 +908,9 @@ def stage(ws: str, body: Stage, request: Request):
     if body.include_records and intake_role and intake_role not in ingestion.DOCUMENT_ROLES:
         required = list(roles.FIELDS[intake_role])
         uploads.append(("reviewed-records.csv",
-                        _records_csv(required, _record_rows(doc, correction, required)),
+                        _records_csv(required, _record_rows(
+                            doc, correction, required,
+                            ingestion.workspace_config(ws).get("currency"))),
                         ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction",
                                               source_version=revision)))
     with db.connect() as c:
@@ -925,7 +930,15 @@ def _corrections(ws):
 
 
 def normalize_for_intake(key, value, currency=None):
-    """Conservative deterministic normalization; unknown formats stay quarantined."""
+    """Conservative deterministic normalization; unknown formats stay quarantined.
+
+    `currency` is the one the document itself states, falling back to the
+    workspace's. Without that fallback the symbol was only stripped when the
+    extraction happened to capture a currency field — and an invoice that
+    prints "$3,200.00" and names no currency is the ordinary case, so the
+    amount reached intake unparsed and the whole import was held for review
+    over a dollar sign in a workspace that keeps its books in dollars.
+    """
     text = value.strip()
     if key in MONEY_LIKE:
         if text.startswith("$") and currency in {"USD", "CAD"}:

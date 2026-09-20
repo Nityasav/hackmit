@@ -120,6 +120,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     setSource(await intakeApi<SourceDetail>(`${base}/sources/${id}?start=${line}`));
   }
   const draftChanged = batch && batch.files.some((f) => JSON.stringify(f.options) !== JSON.stringify(draft[f.id]));
+  //: The newest import that has been staged but never committed. `/imports`
+  //: returns newest first, so the first match is the one to act on.
+  const waiting = history.find((h) => h.status !== "committed");
 
   return <section className="mb-4 border border-line bg-white p-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -181,6 +184,24 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           await refresh();
         })}>{busy ? "Working…" : "Preview import"}</button>
       </div>
+
+      {/* An import staged from the Document lab is created server-side, so this
+          panel learns about it from the poll and otherwise said nothing: the
+          Document lab told people to "scroll up to the import" and there was
+          nothing up here to scroll to. An import waiting to be committed is
+          the one thing on this screen that needs attention, so it says so and
+          opens itself. */}
+      {!batch && waiting && <div className="mt-4 border border-amber-300 bg-amber-50 p-3">
+        <b className="text-[13px]">An import is staged and waiting to be committed.</b>
+        <p className="my-1 text-[12.5px]">
+          {waiting.created_at.slice(0, 19).replace("T", " ")} · nothing is in the books until you
+          review and commit it.
+        </p>
+        <button className={button} disabled={busy}
+          onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + waiting.id)))}>
+          Open it to review and commit
+        </button>
+      </div>}
 
       {history.length > 0 && <label className="mt-4 block text-xs">Resume an import
         <select className={input + " mt-1"} value={batch?.id || ""} disabled={busy} onChange={(e) => { const id = e.target.value; if (id) act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + id))); }}>

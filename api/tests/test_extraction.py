@@ -630,3 +630,37 @@ def test_a_field_set_mismatch_names_the_fields(client):
     detail = response.json()["detail"]
     assert "student_ref" in detail, detail
     assert "missing:" in detail and "older field set" in detail
+
+
+def test_a_dollar_amount_normalises_against_the_workspace_currency(client):
+    """An invoice that prints "$3,200.00" and names no currency is the ordinary
+    case. Stripping the symbol only when the extraction happened to capture a
+    currency field sent the amount to intake unparsed, and held the whole
+    import for review over a dollar sign in a workspace that keeps its books
+    in dollars."""
+    ws = workspace(client)
+    text = "Invoice A-900 vendor V-1 amount $3,200.00 dated 2026-09-01 due 2026-10-01"
+    doc = client.post(path(ws) + "/documents",
+                      files={"file": ("a900.txt", text.encode(), "text/plain")},
+                      data={"role": "invoice"}).json()
+    record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None}
+              for key in ex.schema("invoice")}
+    page = doc["pages"][0]["text"]
+    for key, value in {"invoice_number": "A-900", "vendor_id": "V-1",
+                       "amount": "$3,200.00", "invoice_date": "2026-09-01",
+                       "due_date": "2026-10-01"}.items():
+        start = page.index(value)
+        record[key] = {"status": "present", "value": value, "page": 1,
+                       "start": start, "end": start + len(value)}
+    correction = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": {"schema_version": ex.SCHEMA_VERSION, "records": [record]},
+        "group": "g", "training_authorized": False, "authorization_note": "synthetic",
+        "note": "n", "text_sha256": doc["text_sha256"]}).json()
+
+    staged = client.post(path(ws) + "/stage",
+                         json={"correction_id": correction["id"], "include_records": True}).json()
+
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
+    assert register["preview"][0]["payload"]["amount_cents"] == 320000
+    assert not [i for i in batch["issues"] if i["code"] == "invalid_value"], batch["issues"]

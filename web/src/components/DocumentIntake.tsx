@@ -228,7 +228,7 @@ function Lab({ ws }: { ws: string }) {
         })}</ul>
         <button className={button} disabled={busy || combine.length < 2}
           onClick={() => act(async () => { await post("/stage-set", { correction_ids: combine, include_records: true }); setCombine([]); },
-            "Combined into one import. Scroll up to the import, check it, then commit it.")}>
+            "Combined into one import, waiting under Add records above. Open it there to review and commit; nothing is in the books until you do.")}>
           {combine.length < 2 ? "Select at least two" : `Combine ${combine.length} into one import`}
         </button>
       </section>}
@@ -245,7 +245,7 @@ function Lab({ ws }: { ws: string }) {
         <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Institution, supplier or template <span className="text-amber-800">(required)</span><input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Review note <span className="text-amber-800">(required)</span><input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>Data authorization <span className="text-amber-800">(required)</span><input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
         <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim() || uncited.length > 0} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Stage new records for import. Leave unchecked if these records are already imported.</label>
-          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
+          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged. It is now waiting under Add records above — open it there to review and commit. Nothing is in the books until you do.")}>Stage it for import</button></div>
         {/* A disabled control that does not say why reads as a broken one. */}
         {reshaped &&
           <p className="mt-2 text-[12.5px] text-amber-800">
