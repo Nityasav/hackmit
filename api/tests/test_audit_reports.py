@@ -22,7 +22,8 @@ def test_audit_report_is_scoped_to_the_run_and_its_saved_scan(client, ws, monkey
     assert any(d["not_assessed"] for d in report["domains"])
     assert "overall financial health" in report["executive_summary"]
     with db.connect() as c:
-        assert all(f["id"] in {r[0] for r in c.execute("SELECT id FROM agent_decisions WHERE ws=? AND thread_id=?", (ws, thread))}
+        assert report["run_id"] != thread
+        assert all(f["id"] in {r[0] for r in c.execute("SELECT id FROM agent_decisions WHERE ws=? AND thread_id=?", (ws, report["run_id"]))}
                    for f in report["findings"] if f["origin"] == "agent")
     client.post(f"/api/workspaces/{ws}/review/scans")
     assert client.get(path).json()["scan"]["id"] == report["scan"]["id"]

@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
+import { FinancialReportSummary } from "@/components/FinancialReportSummary";
 import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
@@ -186,6 +187,14 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           reasonable instinct. */}
       <Decisions />
       {section === "reports" ? <>
+        <section className="border border-line p-5">
+          <FinancialReportSummary findings={view.findings} company={view.workspace.name} period={`${view.workspace.start} – ${view.workspace.end}`} busy={!!busy} onDownload={() => void downloadPdf()} />
+          {view.findings.map(f => <AnimatedDisclosure key={f.id} className="mt-3 border-t border-line pt-3" summaryClassName="font-semibold" summary={<>{f.title}<span className="ml-2 text-xs font-normal text-ink-dim">{f.stale ? "Historical" : displayLabel(f.status)}</span></>}>
+            <p className="mt-3 text-sm leading-relaxed">{f.explanation}</p><p className="mt-2 text-sm"><b>Next step:</b> {f.action}</p>
+            <p className="mt-2 text-xs text-ink-dim">{f.review}</p>
+            <p className="mt-2 break-all text-xs text-ink-dim">{f.evidence.map(e => `${e.source_id}, line ${e.line}`).join("; ") || "No evidence cited"}</p>
+          </AnimatedDisclosure>)}
+        </section>
         {/* The deliverable comes first. The raw briefing below it is the working text
             someone edits; this is the thing they hand over. */}
         <section className="border border-line bg-surface-2 p-5 print:border-0 print:bg-transparent print:p-0">
@@ -224,11 +233,11 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
       </>}
       <AnimatedDisclosure className="border border-line p-4" summaryClassName="font-semibold"
         summary={<>Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</>}>
-        <div className="mt-3 flex flex-wrap items-end gap-3 text-xs">
-          <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
-          <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
-          <label>Raised by
-            <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
+        <div className="mt-3 grid items-end gap-3 text-xs sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr_auto]">
+          <label className="flex min-w-0 flex-col gap-1.5">From<input type="date" className={control + " h-10 w-full min-w-0"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
+          <label className="flex min-w-0 flex-col gap-1.5">To<input type="date" className={control + " h-10 w-full min-w-0"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
+          <label className="flex min-w-0 flex-col gap-1.5">Raised by
+            <select className={control + " h-10 w-full min-w-0"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
               <option value="">Any agent</option>
               {historyAgents.map(a => <option key={a} value={a}>{agentName(a)}</option>)}
               {/* A record check is arithmetic over rows, not an agent's conclusion. */}

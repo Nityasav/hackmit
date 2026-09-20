@@ -89,7 +89,7 @@ def report(ws: str, thread_id: str):
                f"{counts['attention']} items need attention; {counts['gap']} results have evidence gaps. "
                f"{not_assessed} specialist areas have no recorded contribution; {pending} decisions remain pending. "
                "This describes the supplied records, not assurance of the company's overall financial health.")
-    return {"thread_id": thread_id, "status": answer["status"], "created_at": asked["created_at"],
+    return {"thread_id": thread_id, "run_id": run_id, "status": answer["status"], "created_at": asked["created_at"],
         "workspace": request.get("workspace_at_run") or config, "snapshot_id": snapshot, "stale": stale,
         "legacy": legacy, "headline": headline, "executive_summary": summary,
         "objective": request.get("text", ""), "domains": domains, "unresolved": unresolved,

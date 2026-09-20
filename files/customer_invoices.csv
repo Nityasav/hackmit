@@ -1,0 +1,4 @@
+record_id,customer_id,invoice_number,invoice_date,due_date,amount
+CI-1,CUST-001,REC-1001,2026-09-02,2026-10-02,3200.00
+CI-2,CUST-002,REC-1002,2026-09-06,2026-10-06,1750.00
+CI-3,CUST-003,REC-1003,2026-07-15,2026-09-13,2400.00

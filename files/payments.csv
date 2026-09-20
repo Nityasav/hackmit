@@ -1,0 +1,4 @@
+payment_id,vendor_id,payment_date,method,amount,reference
+PAY-9001,VEND-001,2026-09-12,ach,1200.00,INV-2291
+PAY-9002,VEND-002,2026-09-20,ach,4500.00,INV-3310
+PAY-9004,VEND-003,2026-09-22,wire,8900.00,INV-2310

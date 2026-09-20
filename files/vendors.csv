@@ -1,0 +1,5 @@
+vendor_id,name,country,payment_terms_days
+VEND-001,Maple Ridge Supplies,US,30
+VEND-002,Northwind Facilities,US,45
+VEND-003,Clearwater IT Services,US,30
+VEND-004,Birchwood Catering,US,15

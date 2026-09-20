@@ -39,7 +39,7 @@ from ..agents.registry import AGENTS, children
 from ..agents.runtime import AgentFailed
 from ..agents.tools import ScopeError, Toolbox
 from . import escalation
-from .state import RunState, WorkerOutput, initial
+from .state import RunState, initial
 
 #: Worker subgraphs wired so far. The rest are registered as they gain their tools;
 #: routing to an unwired worker reports that plainly rather than silently doing nothing.
@@ -90,6 +90,7 @@ def _subagent_node(agent_id: str):
         if agent_id not in (state.get("assigned") or []):
             return {}
 
+        emit(state["ws"], state["thread_id"], agent_id, "started", spec.charter)
         try:
             run = await runtime.run_agent(
                 state["ws"], agent_id,
@@ -111,6 +112,8 @@ def _subagent_node(agent_id: str):
         review = await _review(state, run, spec, runtime_config)
         if review:
             finding["review"] = review
+        emit(state["ws"], state["thread_id"], agent_id,
+             "needs_review" if run.escalated else "completed", finding["summary"])
         return {
             "findings": [finding],
             "results": {agent_id: run.as_dict()},
@@ -238,7 +241,7 @@ CONTRIBUTED = ("findings", "events_touched", "unresolved", "results",
                "spend_cents", "model_calls", "tool_calls", "escalated")
 
 
-def _worker_node(worker_id: str):
+def _worker_node(worker_id: str, collaborate: bool = False):
     """A worker subgraph as a node, returning only what it added.
 
     A compiled subgraph sharing its parent's schema returns the *whole* state it
@@ -252,7 +255,7 @@ def _worker_node(worker_id: str):
     the records as well means two domains now run together routinely, so the node hands
     back its delta rather than its state.
     """
-    subgraph = _worker_subgraph(worker_id)
+    subgraph = _worker_subgraph(worker_id, collaborate)
 
     async def node(state: RunState, config) -> dict:
         out = await subgraph.ainvoke(state, config)
@@ -446,7 +449,7 @@ def build_graph(checkpointer=None, *, collaborate=False):
     graph = StateGraph(RunState)
     graph.add_node("plan", _plan_node)
     for worker_id in WIRED_WORKERS:
-        graph.add_node(worker_id, _worker_node(worker_id))
+        graph.add_node(worker_id, _worker_node(worker_id, collaborate))
         graph.add_edge(worker_id, "synthesize")
     graph.add_node("synthesize", _synthesize_node)
 

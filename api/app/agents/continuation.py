@@ -8,6 +8,10 @@ async def resolve(ws, approval_id, decision):
         row = connection.execute("SELECT * FROM approvals WHERE ws=? AND id=?", (ws, approval_id)).fetchone()
         if not row:
             raise HTTPException(404, "Approval not found in this workspace.")
+        if row["status"] != "pending":
+            raise HTTPException(409, {"code": "already_decided",
+                "message": f"That question was already {row['status']}. Nothing needs doing again.",
+                "decision": row["status"]})
         graph = connection.execute(
             "SELECT * FROM approvals WHERE ws=? AND finding_id=? AND id LIKE 'ESC-%'",
             (ws, row["finding_id"])).fetchone()

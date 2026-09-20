@@ -1,0 +1,4 @@
+receipt_id,line_id,po_id,po_line_id,received_date,amount
+GR-500,1,PO-100,1,2026-09-03,1200.00
+GR-501,1,PO-101,1,2026-09-07,4500.00
+GR-503,1,PO-103,1,2026-09-18,615.50

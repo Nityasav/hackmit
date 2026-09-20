@@ -3,11 +3,9 @@
 import { displayLabel } from "@/lib/format";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
 import type { IntakeUiProgress } from "@/lib/workflow";
 import { DataRequirements } from "@/components/DataRequirements";
-import { FileUpdates } from "@/components/FileUpdates";
 import { StarterPacks } from "@/components/StarterPacks";
 import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
@@ -188,19 +186,6 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       {coverage && <DataRequirements ws={ws} coverage={coverage} onSaved={refresh} />}
       <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
 
-      <div className="mt-5 border border-line bg-surface-2 p-4">
-        <h3 className="font-semibold">Running the agents</h3>
-        <p className="mt-1 max-w-prose text-xs text-ink-dim">
-          Books is where the records go in. The agents are started from Investigation, so
-          there is one place a paid run can begin rather than two.
-        </p>
-        <Link href="/investigation" className="mt-3 inline-block text-sm font-semibold text-ink underline">
-          Open the investigation &rarr;
-        </Link>
-      </div>
-
-      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
-
       <StarterPacks
         period={coverage?.workspace.id === ws ? coverage.workspace : null}
         disabled={busy}
@@ -364,9 +349,19 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div className="mt-5 space-y-3">
         <AnimatedDisclosure className="border border-line p-3" summaryClassName="font-semibold" summary={<>Committed sources ({coverage?.sources.length || 0})</>}>
           {!coverage?.sources.length && <p className="mt-2 text-xs text-ink-dim">No committed sources yet.</p>}
-          {coverage?.sources.map((s) => <button key={s.id} className="mt-2 flex w-full justify-between gap-2 border border-line p-2 text-left text-xs hover:bg-surface-2" onClick={() => act(() => viewSource(s.id))}>
-            <span>{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
-          </button>)}
+          {coverage?.sources.map((s) => <div key={s.id} className="mt-2 flex items-center gap-3 border border-line p-3 text-xs">
+            <button className="flex min-w-0 flex-1 justify-between gap-2 text-left" onClick={() => act(() => viewSource(s.id))}>
+              <span className="break-all">{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
+            </button>
+            {s.active && <button disabled={busy} className="border border-red-200 px-3 py-2 text-red-800 disabled:opacity-40" onClick={() => {
+              if (!window.confirm(`Remove "${s.name}" from active books? Coverage will update and earlier results may become outdated. The original file and history are retained.`)) return;
+              void act(async () => {
+                await intakeApi(base + "/sources/" + encodeURIComponent(s.id), { method: "DELETE",
+                  body: { expected_revision: coverage.workspace.revision, confirmation: s.name } });
+                await Promise.all([refresh(), refreshBundle()]);
+              });
+            }}>Remove</button>}
+          </div>)}
         </AnimatedDisclosure>
         <AnimatedDisclosure className="border border-line p-3" summaryClassName="font-semibold" summary={<>Evidence requests ({coverage?.requests.length || 0})</>}>
           <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>

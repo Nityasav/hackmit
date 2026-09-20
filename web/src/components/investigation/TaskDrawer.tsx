@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 
 import { AGENT_NAME, AgentAvatar, Pill, ProgressBar, Pulse } from "@/components/ui";
 import { duration, elapsedSeconds } from "@/lib/format";
@@ -68,6 +69,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
 
   if (!task) return null;
 
+  const decisionId = task.decision_id || (task.id.startsWith("task-decision-") ? task.id.slice(5) : null);
   const doneSteps = task.steps.filter((step) => step.state === "done").length;
   const detail = task.detail ?? null;
   const output = detail?.result && Object.keys(detail.result).length > 0 ? detail.result : null;
@@ -132,7 +134,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
         </div>
 
         <div className="flex-1 overflow-auto px-4 py-3.5">
-          {task.id.startsWith("task-decision-") && <TaskDeliverable key={`${ws}-${task.id}`} ws={ws} decision={task.id.slice(5)} />}
+          {decisionId && <TaskDeliverable key={`${ws}-${decisionId}`} ws={ws} decision={decisionId} />}
           <details><summary className="cursor-pointer text-sm font-semibold">Task execution details</summary>
           {task.steps.length > 0 && (
             <>
@@ -291,6 +293,28 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
               <p className="mt-1 font-accent text-[12px] text-ink-dim">
                 A reviewer accepting the work is not a person approving it.
               </p>
+            </>
+          )}
+
+          {/* A finished card was a dead end: the conclusion went into the briefing and
+              the trail, and nothing on the board said so. */}
+          {(task.column === "done" || task.column === "needs_you") && (
+            <>
+              <Heading className="mt-5">Where this went</Heading>
+              <ul className="space-y-1 text-[13.5px] leading-relaxed">
+                <li>
+                  <Link href="/briefing" className="underline underline-offset-4">
+                    The briefing
+                  </Link>{" "}
+                  — this conclusion, its evidence and its next step, with a copy to download.
+                </li>
+                <li>
+                  <Link href="/investigation" className="underline underline-offset-4">
+                    Investigation
+                  </Link>{" "}
+                  — the finding, the reasoning log, and anything still waiting on you.
+                </li>
+              </ul>
             </>
           )}
 

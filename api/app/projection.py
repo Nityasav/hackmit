@@ -316,13 +316,29 @@ def _derived(ws):
 
     if not decisions:
         briefing = ("Upload records and answer what the agents need. No agent has run "
-                    "for this workspace.")
-    elif escalated:
-        briefing = (f"{len(decisions)} agent conclusion(s), {escalated} needing a person. "
-                    "Nothing has been approved, posted or paid.")
+                    "in this workspace yet.")
     else:
-        briefing = (f"{len(decisions)} agent conclusion(s), none escalated. Reviewer "
-                    "acceptance is not human approval.")
+        # What they concluded, not how many times they concluded something. A count is
+        # the one thing a person can already see, and a briefing that says only that
+        # leaves them to open thirteen cards to find out what happened.
+        exceptions = [d for d in decisions if d["action"].endswith("exception")]
+        gaps = [d for d in decisions
+                if d["action"].endswith("insufficient_evidence")]
+        agents = ", ".join(sorted({AGENTS[d["agent"]].name for d in decisions
+                                   if d["agent"] in AGENTS}))
+        lines = [f"{len(decisions)} conclusion(s) from {agents}."]
+        if exceptions:
+            lines.append(f"{len(exceptions)} raised an exception: "
+                         + exceptions[0]["summary"])
+        if gaps:
+            lines.append(f"{len(gaps)} could not conclude on the evidence supplied.")
+        if escalated:
+            lines.append(f"{escalated} need a person. Nothing has been approved, "
+                         "posted or paid.")
+        else:
+            lines.append("None needed a person. Reviewer acceptance is not human "
+                         "approval.")
+        briefing = " ".join(lines)
 
     comparisons, gate = approvals_module.comparisons(approval_rows, findings)
     spent = sum(d["cost_cents"] for d in decisions)

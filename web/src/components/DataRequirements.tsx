@@ -67,7 +67,7 @@ export function DataRequirements({
         summaryClassName="text-xs font-semibold"
         summary={<>{group.label} ({group.items.length})</>}
       >
-        <div className="mt-3 grid items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-3 grid auto-rows-fr items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="requirements-grid">
         {group.items.map((requirement) =>
           requirement.kind === "setting" ? (
             <SettingAsk key={requirement.id} ws={ws} requirement={requirement} onSaved={onSaved} />
