@@ -1,6 +1,6 @@
 # Agents (owner: Agent design)
 
-- `adapter.py` — model adapter (Anthropic `claude-sonnet-5`) + a replay adapter that reads a saved run
+- `adapter.py` — model adapter (OpenAI `gpt-5.6-sol`) + a replay adapter that reads a saved run
 - `tools.py` — typed tool gateway (spec.md §8): search_sources, read_source_span, query_financial_records,
   traverse_context, calculate, retrieve_precedents, submit_finding, propose_adjustment, request_evidence,
   submit_review, propose_playbook, prepare_payment_batch

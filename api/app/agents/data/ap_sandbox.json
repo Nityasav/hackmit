@@ -1,0 +1,55 @@
+{
+  "vendors": [
+    { "id": "V-08", "name": "Campus Supply Co.", "status": "active", "bank_account_last4": "4471", "bank_changed_at": null },
+    { "id": "V-03", "name": "Northside Transit", "status": "active", "bank_account_last4": "9902", "bank_changed_at": null },
+    { "id": "V-12", "name": "Riverside HVAC Services", "status": "active", "bank_account_last4": "2210", "bank_changed_at": "2026-09-27" },
+    { "id": "V-15", "name": "GreenScape Grounds", "status": "active", "bank_account_last4": "6635", "bank_changed_at": null },
+    { "id": "V-20", "name": "Lakeside Office Supply", "status": "active", "bank_account_last4": "1188", "bank_changed_at": null },
+    { "id": "V-25", "name": "TechForward Solutions", "status": "active", "bank_account_last4": "7743", "bank_changed_at": null }
+  ],
+  "purchase_orders": [
+    { "id": "PO-889", "line": 1, "vendor_id": "V-20", "description": "Classroom office supplies, Q3 restock", "ordered_qty": 40, "ordered_amount_cents": 320000, "approved_by": "M. Alvarez (Procurement)", "approval_date": "2026-08-20" },
+    { "id": "PO-901", "line": 1, "vendor_id": "V-08", "description": "Facilities maintenance parts, batch A", "ordered_qty": 1, "ordered_amount_cents": 240000, "approved_by": "M. Alvarez (Procurement)", "approval_date": "2026-09-01" },
+    { "id": "PO-901", "line": 2, "vendor_id": "V-08", "description": "Facilities maintenance parts, batch B", "ordered_qty": 1, "ordered_amount_cents": 240000, "approved_by": "M. Alvarez (Procurement)", "approval_date": "2026-09-01" },
+    { "id": "PO-912", "line": 1, "vendor_id": "V-08", "description": "October facilities restock, delivery 1", "ordered_qty": 1, "ordered_amount_cents": 240000, "approved_by": "M. Alvarez (Procurement)", "approval_date": "2026-09-28" },
+    { "id": "PO-912", "line": 2, "vendor_id": "V-08", "description": "October facilities restock, delivery 2", "ordered_qty": 1, "ordered_amount_cents": 240000, "approved_by": "M. Alvarez (Procurement)", "approval_date": "2026-09-28" },
+    { "id": "PO-930", "line": 1, "vendor_id": "V-12", "description": "HVAC quarterly service contract", "ordered_qty": 1, "ordered_amount_cents": 124000, "approved_by": "T. Ruiz (Facilities Director)", "approval_date": "2026-09-05" }
+  ],
+  "goods_receipts": [
+    { "id": "RCPT-551", "po_id": "PO-901", "po_line": 1, "received_date": "2026-09-04", "received_qty": 1, "batch": "B-11", "acceptance_ref": "Signed delivery slip, front office" },
+    { "id": "RCPT-560", "po_id": "PO-901", "po_line": 2, "received_date": "2026-09-18", "received_qty": 1, "batch": "B-14", "acceptance_ref": "Signed delivery slip, facilities shed" },
+    { "id": "RCPT-771", "po_id": "PO-912", "po_line": 1, "received_date": "2026-10-03", "received_qty": 1, "batch": "B-19", "acceptance_ref": "Signed delivery slip, facilities shed" },
+    { "id": "RCPT-774", "po_id": "PO-912", "po_line": 2, "received_date": "2026-10-17", "received_qty": 1, "batch": "B-23", "acceptance_ref": "Signed delivery slip, facilities shed" }
+  ],
+  "invoices": [
+    { "id": "INV-2240", "vendor_id": "V-15", "po_id": null, "po_line": null, "receipt_ids": [], "invoice_date": "2026-08-29", "due_date": "2026-09-28", "service_start": "2026-08-01", "service_end": "2026-08-31", "gross_cents": 185000, "tax_cents": 0, "net_cents": 185000, "credit_memo_ids": ["CM-77"], "status": "exception" },
+    { "id": "INV-2266", "vendor_id": "V-25", "po_id": null, "po_line": null, "receipt_ids": [], "invoice_date": "2026-09-10", "due_date": "2026-10-10", "service_start": "2026-08-28", "service_end": "2026-08-28", "gross_cents": 185000, "tax_cents": 0, "net_cents": 185000, "credit_memo_ids": [], "status": "exception" },
+    { "id": "INV-2291", "vendor_id": "V-08", "po_id": "PO-901", "po_line": 1, "receipt_ids": ["RCPT-551"], "invoice_date": "2026-09-05", "due_date": "2026-10-05", "service_start": null, "service_end": null, "gross_cents": 240000, "tax_cents": 0, "net_cents": 240000, "credit_memo_ids": [], "status": "matched" },
+    { "id": "INV-2291A", "vendor_id": "V-08", "po_id": "PO-901", "po_line": 2, "receipt_ids": ["RCPT-560"], "invoice_date": "2026-09-19", "due_date": "2026-10-19", "service_start": null, "service_end": null, "gross_cents": 240000, "tax_cents": 0, "net_cents": 240000, "credit_memo_ids": [], "status": "matched" },
+    { "id": "INV-2302", "vendor_id": "V-12", "po_id": "PO-930", "po_line": 1, "receipt_ids": [], "invoice_date": "2026-09-29", "due_date": "2026-10-29", "service_start": "2026-09-01", "service_end": "2026-09-30", "gross_cents": 124000, "tax_cents": 0, "net_cents": 124000, "credit_memo_ids": [], "status": "held" },
+    { "id": "INV-2317", "vendor_id": "V-20", "po_id": "PO-889", "po_line": 1, "receipt_ids": [], "invoice_date": "2026-09-22", "due_date": "2026-10-22", "service_start": null, "service_end": null, "gross_cents": 320000, "tax_cents": 0, "net_cents": 320000, "credit_memo_ids": [], "status": "open" },
+    { "id": "INV-3102", "vendor_id": "V-08", "po_id": "PO-912", "po_line": 1, "receipt_ids": ["RCPT-771"], "invoice_date": "2026-10-04", "due_date": "2026-11-03", "service_start": null, "service_end": null, "gross_cents": 240000, "tax_cents": 0, "net_cents": 240000, "credit_memo_ids": [], "status": "matched" },
+    { "id": "INV-3102B", "vendor_id": "V-08", "po_id": "PO-912", "po_line": 2, "receipt_ids": ["RCPT-774"], "invoice_date": "2026-10-18", "due_date": "2026-11-17", "service_start": null, "service_end": null, "gross_cents": 240000, "tax_cents": 0, "net_cents": 240000, "credit_memo_ids": [], "status": "matched" }
+  ],
+  "approvals": [
+    { "id": "APR-889", "record_type": "purchase_order", "record_id": "PO-889", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-08-20T10:15:00" },
+    { "id": "APR-901", "record_type": "purchase_order", "record_id": "PO-901", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-09-01T09:00:00" },
+    { "id": "APR-912", "record_type": "purchase_order", "record_id": "PO-912", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-09-28T09:00:00" },
+    { "id": "APR-930", "record_type": "purchase_order", "record_id": "PO-930", "actor": "T. Ruiz", "authority": "Facilities Director", "action": "approved", "decided_at": "2026-09-05T11:00:00" },
+    { "id": "APR-2291", "record_type": "invoice", "record_id": "INV-2291", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-09-06T08:30:00" },
+    { "id": "APR-2291A", "record_type": "invoice", "record_id": "INV-2291A", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-09-20T08:30:00" },
+    { "id": "APR-3102", "record_type": "invoice", "record_id": "INV-3102", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-10-05T08:30:00" },
+    { "id": "APR-3102B", "record_type": "invoice", "record_id": "INV-3102B", "actor": "M. Alvarez", "authority": "Procurement", "action": "approved", "decided_at": "2026-10-19T08:30:00" }
+  ],
+  "payment_batches": [
+    {
+      "id": "PAY-B9",
+      "invoice_ids": ["INV-2291", "INV-2291A"],
+      "held_invoice_ids": ["INV-2302"],
+      "hold_reasons": { "INV-2302": "Vendor V-12 changed bank details on 2026-09-27, days before this invoice's due date. Escalate and verify by phone before paying." },
+      "total_cents": 3821000,
+      "status": "pending",
+      "note": "Batch is 44 invoices in the demo narrative; only the 2 referenced in this fixture (INV-2291, INV-2291A) are modeled here. total_cents reflects the full batch."
+    }
+  ]
+}
