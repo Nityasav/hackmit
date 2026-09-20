@@ -124,7 +124,9 @@ class Limits(Contract):
 
 
 class RunRequest(Contract):
-    workspace: Literal["sandbox", "mit"] = "sandbox"
+    # "sandbox"/"mit" are the fixed demo workspaces; anything else is an intake
+    # workspace ID, which only a registered live data adapter can resolve.
+    workspace: str = Field(default="sandbox", pattern=r"^[A-Za-z0-9_-]{1,64}$")
     objective: str = Field(default="Review the current close and prepare a CFO briefing.", min_length=1, max_length=2000)
     mode: Literal["scripted", "model_preview", "live"] = "scripted"
     limits: Limits = Field(default_factory=Limits)

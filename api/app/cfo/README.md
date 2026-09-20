@@ -30,6 +30,8 @@ this feature does not overwrite their fixtures or require a bundle-schema change
 ## API
 
 - `POST /api/cfo/runs`: `{ "workspace": "sandbox", "objective": "Review payroll allocation", "mode": "scripted" }` → 202 with run ID.
+  `workspace` is `sandbox`, `mit`, or an intake workspace ID (`ws-...`). Intake IDs
+  require `mode: "live"`; the scripted harness answers for `sandbox` only.
 - `GET /api/cfo/runs/{id}`: plan, task states, accepted claims, unresolved items, activity records, briefing, report.
 - `GET /api/cfo/runs/{id}/report`: Markdown report, or 409 until published.
 - `GET /api/cfo/workspaces/{workspace}/latest`: latest saved run.
@@ -112,18 +114,33 @@ Every confirmed numeric amount belongs in a Calculation, not free-form prose. Sp
 internal LLM calls/token budgets remain Linda's responsibility; CFO accounting covers
 its own model calls plus observed shared evidence-tool calls.
 
-## Maxim: plug in records and calculations
+## Records: wired to intake; calculations still open
+
+`app/integrations/cfo_intake.py` implements `DataSource` over the committed
+intake snapshot, so a CFO run can read real uploaded records:
+
+| Port method | Status | Backed by |
+| --- | --- | --- |
+| `snapshot(workspace)` | Implemented | `ingestion.coverage`: institution, period, profile, active committed sources, capability gaps and open evidence requests |
+| `read_source(scope, source_id)` | Implemented | `ingestion.source_view`, bounded to 400 lines / 20,000 characters, refused unless the snapshot still matches |
+| `calculate(scope, calculation_id)` | **Fails closed** | Nothing yet: the scope publishes an empty calculation inventory |
+
+The bridge reads only. It never stages, commits, mutates records or publishes
+snapshots. Intake roles map to specialist domains as `invoice → ap`,
+`payroll → py`, `grants → gr`, and everything else to `shared`.
+
+Until the accounting engine publishes a calculation inventory, specialists can
+cite evidence and explain a finding but cannot assert an amount, and the scope
+carries that limitation as an explicit gap. To close it, expose deterministic
+calculations bound to the snapshot and fill in `calculate`:
 
 ```python
-async def snapshot(workspace) -> Scope:
-    ...  # authorized source and available calculation inventory
-
-async def read_source(scope, source_id) -> SourceSpan:
-    ...  # immutable original excerpt with locator and snapshot ID
-
 async def calculate(scope, calculation_id) -> Calculation:
-    ...  # run/retrieve a deterministic calculation bound to that snapshot
+    ...  # integer-cent amount, cash delta, impact category and source IDs
 ```
+
+Calculation IDs are chosen by the data layer; publish their descriptions and
+dependencies in the inventory returned by `snapshot`.
 
 Keep arbitrary SQL, files, and evaluator truth outside these methods. The adapter
 enforces institution/workspace access and immutable snapshots. Calculation IDs are
@@ -135,24 +152,22 @@ does not certify your calculation engine. A changed snapshot prevents publicatio
 accepted conclusions. New evidence should produce a new snapshot and a new CFO run;
 automatic resume across changed snapshots is intentionally not implemented.
 
-## Connect the adapters later
+## Connect the adapters
 
-Create a module you own, e.g. `app/integrations/cfo_factory.py`:
+`app/integrations/cfo_factory.py` already registers the intake data adapter.
+Add the agents to the same call when they exist:
 
 ```python
-from app.cfo.api import Adapters
-
-def create_adapters():
-    # Import Maxim's data adapter and Linda's agents here when available.
-    return Adapters(
-        data=your_data_adapter,
-        specialists={"ap": your_ap, "py": your_payroll, "gr": your_grants},
-        auditor=your_independent_auditor,
-    )
+return Adapters(
+    data=IntakeDataSource(),
+    specialists={"ap": your_ap, "py": your_payroll, "gr": your_grants},
+    auditor=your_independent_auditor,
+)
 ```
 
 Set `CFO_ADAPTER_FACTORY=app.integrations.cfo_factory:create_adapters` in the server
-environment. This is trusted server configuration, not user input. The factory is
+environment. With records registered but no agents, a live run stops with a 503 that
+names the missing agents; it never falls back to the scripted harness. This is trusted server configuration, not user input. The factory is
 synchronous and runs once per server process. Alternatively, set
 `app.state.cfo_runtime = CFORuntime(repository, adapters)` in your application startup.
 

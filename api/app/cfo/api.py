@@ -3,7 +3,7 @@
 import asyncio
 import importlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,8 +22,8 @@ router = APIRouter(prefix="/api/cfo", tags=["CFO orchestration"])
 @dataclass
 class Adapters:
     data: DataSource
-    specialists: dict[str, Specialist]
-    auditor: Auditor
+    specialists: dict[str, Specialist] = field(default_factory=dict)
+    auditor: Auditor | None = None
 
 
 class CFORuntime:
@@ -45,8 +45,9 @@ class CFORuntime:
             if self.adapters is None:
                 raise HTTPException(503, "Live data/specialist adapters are not registered. Set CFO_ADAPTER_FACTORY; see app/cfo/README.md.")
             adapters = self.adapters
-            if not {"ap", "py", "gr"}.issubset(adapters.specialists):
-                raise HTTPException(503, "Register ap, py, and gr specialist adapters.")
+            if not {"ap", "py", "gr"}.issubset(adapters.specialists) or adapters.auditor is None:
+                raise HTTPException(503, "Records are registered, but the ap, py, gr and auditor agents are not. "
+                                         "Register them in the adapter factory; see app/cfo/README.md.")
             if any(adapters.auditor is agent for agent in adapters.specialists.values()):
                 raise HTTPException(503, "The auditor must be a separate agent instance from the preparers.")
         if request.mode != "scripted":
