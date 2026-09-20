@@ -679,9 +679,31 @@ def coverage(ws):
         coverage_requirements = requirements.status(config, present)
         sources = []
         active_ids = {r["source_id"] for r in records}
-        for f in connection.execute("SELECT id,name,sha256,options,committed FROM sources WHERE ws=? AND committed=1 ORDER BY rowid DESC", (ws,)):
+        # How many of the workspace's live records each file is still answering for.
+        # Counted from the same active set as `active_ids`, so a file shown as active
+        # always has a count above zero and the two can never disagree.
+        live_records: dict[str, int] = {}
+        for r in records:
+            live_records[r["source_id"]] = live_records.get(r["source_id"], 0) + 1
+        # `source_system`, `external_id` and `source_version` are the provenance a
+        # staged extraction writes: a file staged from a reviewed document carries
+        # system "reviewed-extraction" and that document's lineage id. Files listing
+        # needs them to draw a file back to the document it came from, and reading
+        # them here costs nothing because the options are already parsed. Fetching
+        # each source's detail instead would be one request per file.
+        for f in connection.execute(
+                "SELECT s.id,s.name,s.sha256,s.options,b.created_at FROM sources s "
+                "JOIN batches b ON b.id=s.batch_id "
+                "WHERE s.ws=? AND s.committed=1 ORDER BY s.rowid DESC", (ws,)):
+            options = json.loads(f["options"])
             sources.append({"id": f["id"], "name": f["name"], "sha256": f["sha256"],
-                            "role": json.loads(f["options"])["role"], "active": f["id"] in active_ids})
+                            "role": options["role"], "active": f["id"] in active_ids,
+                            "source_system": options.get("source_system", ""),
+                            "external_id": options.get("external_id", ""),
+                            "source_version": options.get("source_version", 1),
+                            # The batch that carried this file in: when it was uploaded.
+                            "uploaded_at": f["created_at"],
+                            "record_count": live_records.get(f["id"], 0)})
         requests = [dict(r) for r in connection.execute("SELECT * FROM evidence_requests WHERE ws=? ORDER BY rowid DESC", (ws,))]
         latest = connection.execute("SELECT id,revision,created_at FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
         return {"workspace": config, "snapshot": dict(latest) if latest else None, "counts": counts,

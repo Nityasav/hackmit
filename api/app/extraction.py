@@ -863,6 +863,11 @@ def stage_set(ws: str, body: StageSet, request: Request):
             rows.extend(_record_rows(doc, correction, required, workspace_currency))
 
     if body.include_records:
+        # Deliberately no external id. These rows were gathered from several
+        # documents, so naming one lineage would claim a single parent this file
+        # does not have. It is listed as joined to nothing rather than joined to
+        # the wrong thing; each document's own evidence file still carries its
+        # lineage, so every row remains traceable through that.
         uploads.append(("reviewed-records.csv", _records_csv(required, rows),
                         ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction",
                                               source_version=1)))
@@ -907,12 +912,16 @@ def stage(ws: str, body: Stage, request: Request):
     intake_role = INTAKE_ROLE[doc["role"]]
     if body.include_records and intake_role and intake_role not in ingestion.DOCUMENT_ROLES:
         required = list(roles.FIELDS[intake_role])
+        # The same lineage the evidence file carries. For a financial role the
+        # external id is never a record key — keys come from the parsed CSV — so
+        # this only records which document the rows were read out of, which is
+        # the one join that lets a number in the books be traced to a page.
         uploads.append(("reviewed-records.csv",
                         _records_csv(required, _record_rows(
                             doc, correction, required,
                             ingestion.workspace_config(ws).get("currency"))),
                         ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction",
-                                              source_version=revision)))
+                                              external_id=lineage, source_version=revision)))
     with db.connect() as c:
         latest = [x for x in items(c, ws, "correction") if x["document_id"] == doc["id"]][-1]
         if latest["id"] != correction["id"] or document(c, ws, doc["id"])["text_sha256"] != doc["text_sha256"]:
