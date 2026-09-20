@@ -31,3 +31,6 @@ bun.lockb
 
 # bun is the package manager (see web/package.json "packageManager")
 package-lock.json
+
+# build artifact from `pip install -e api`
+*.egg-info/
