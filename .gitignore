@@ -13,6 +13,7 @@ __pycache__/
 .env*.local
 
 # local data
+api/data/
 *.db
 *.sqlite3
 

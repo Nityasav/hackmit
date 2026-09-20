@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useData } from "@/lib/data";
+import { SourcesPanel } from "@/components/SourcesPanel";
 import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
 import { AgentAvatar, AiTag, Button, Card, CardTitle, PageHeader, ProgressBar, Pulse } from "@/components/ui";
@@ -12,12 +13,15 @@ export default function CommandCenter() {
   const done = tasks.filter((t) => t.column === "done").length;
   const pending = approvals.filter((a) => a.status === "pending").length;
 
+  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} subtitle={`snapshot ${workspace.snapshot_id}`} /><SourcesPanel key={workspace.id} /></>;
+
   return (
     <>
       <PageHeader
         title={`${workspace.name} · ${workspace.period}`}
         subtitle={`snapshot ${workspace.snapshot_id}`}
       />
+      <SourcesPanel key={workspace.id} />
 
       {/* CFO agent briefing */}
       <div className="mb-2.5 rounded-xl border border-teal-200 bg-gradient-to-b from-teal-50 to-white p-3.5">

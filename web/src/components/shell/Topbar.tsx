@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useData } from "@/lib/data";
 import { Pill, Pulse } from "@/components/ui";
 
-const MODE_LABEL = { live: "Live run", recorded: "Recorded run", scripted: "Scripted preview" } as const;
+const MODE_LABEL = { live: "Live run", recorded: "Recorded run", scripted: "Scripted preview", not_started: "No agent run yet" } as const;
 
 export function Topbar() {
   const router = useRouter();
@@ -55,7 +55,7 @@ export function Topbar() {
       )}
 
       <Pill tone={isPublic ? "green" : "amber"}>{isPublic ? "Public report" : "Synthetic scenario"}</Pill>
-      <Pill tone="blue" className={source === "fixtures" ? "" : "hidden"}>
+      <Pill tone="blue">
         {MODE_LABEL[bundle.workspace.mode]}
       </Pill>
       {source === "api" && <Pill tone={apiError ? "red" : "teal"}>{apiError ? "API offline" : "Live API"}</Pill>}

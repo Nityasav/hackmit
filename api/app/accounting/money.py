@@ -6,6 +6,28 @@ Owner: Functionality. Invariant IDs refer to ACCOUNTING_CONTROLS.md §2.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, localcontext
+import re
+
+
+def parse_minor_units(raw: str, unit: str = "major") -> int:
+    """Parse uploaded money exactly, including values beyond Decimal's default precision.
+
+    Bound amounts to the safe integer range shared with the TypeScript contract.
+    """
+    if len(raw) > 80 or not re.fullmatch(r"-?\d+(?:\.\d+)?", raw):
+        raise ValueError("Use an exact number without currency symbols or grouping separators")
+    if unit not in {"major", "minor"}:
+        raise ValueError("Amount unit must be major or minor")
+    try:
+        with localcontext() as context:
+            context.prec = max(32, len(raw) + 4)
+            amount = Decimal(raw) * (100 if unit == "major" else 1)
+            if not amount.is_finite() or amount != amount.to_integral_value() or abs(amount) > 9_000_000_000_000:
+                raise ValueError("Unsupported monetary precision or amount")
+            return int(amount)
+    except InvalidOperation:
+        raise ValueError("Invalid amount") from None
 
 
 class InvariantError(ValueError):

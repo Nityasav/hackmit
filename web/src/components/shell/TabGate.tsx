@@ -12,8 +12,7 @@ export function TabGate({ tab, children }: { tab: TabId; children: React.ReactNo
       <div className="text-3xl text-slate-300">⊘</div>
       <div className="font-semibold">Not available for {bundle.workspace.name}</div>
       <p className="max-w-sm text-[12.5px] text-slate-500">
-        This is a read-only public report. Agents can read and reconcile it, but there are no transactions to
-        run workflows on, approve, or learn from.
+        {bundle.workspace.intake ? "Your records are stored, but the agent investigation and approval runtime is not connected yet. Manage sources and evidence requests in the Command center." : "This is a read-only public report. There are no transactions to run workflows on, approve, or learn from."}
       </p>
       <button
         type="button"
