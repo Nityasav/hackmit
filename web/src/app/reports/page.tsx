@@ -14,7 +14,18 @@ export default function ReportsPage() {
   const beforeLabel = report.before_label ?? "As reported";
   const afterLabel = report.after_label ?? (applied ? "After approved fixes" : `After ${gate?.id} (pending)`);
 
-  if (workspace.intake) return <><PageHeader title="Reports" subtitle="No investigation report yet" /><Card>Your uploaded sources are available in the Command center. An agent investigation and independent review must run before findings or financial reports can be generated.</Card></>;
+  // A report exists when a run published one, or when there are findings to report on.
+  // Which workspace it is does not decide that; whether the work happened does.
+  if (!report.markdown && findings.length === 0)
+    return (
+      <>
+        <PageHeader title="Reports" subtitle="No investigation report yet" />
+        <Card>
+          Your uploaded sources are available in the Command center. An agent investigation and independent review
+          must run before findings or financial reports can be generated.
+        </Card>
+      </>
+    );
 
   return (
     <>
@@ -39,7 +50,10 @@ export default function ReportsPage() {
             ))}
           </ol>
           <div className="flex flex-wrap gap-2">
-            <Button primary onClick={() => download(`${workspace.id}-report.md`, toMarkdown(bundle))}>
+            <Button
+              primary
+              onClick={() => download(`${workspace.id}-report.md`, report.markdown ?? toMarkdown(bundle))}
+            >
               Export Markdown
             </Button>
             <Button onClick={() => download(`${workspace.id}-bundle.json`, JSON.stringify(bundle, null, 2))}>
@@ -47,11 +61,21 @@ export default function ReportsPage() {
             </Button>
           </div>
           <div className="mt-2 text-[13px] text-ink-dim">
-            Every claim in the export carries its finding ID, evidence and status. Unresolved items stay in their own
-            section instead of being dropped.
+            {report.markdown
+              ? "The export is the document the run published, with every amount injected from the calculation engine rather than written by the model."
+              : "Every claim in the export carries its finding ID, evidence and status. Unresolved items stay in their own section instead of being dropped."}
           </div>
         </Card>
 
+        {report.comparisons.length === 0 ? (
+          <Card>
+            <CardTitle>Before and after</CardTitle>
+            <p className="text-[14px] text-ink-dim">
+              Nothing to compare yet. A before-and-after appears once a proposal is approved and the affected
+              schedules are recomputed against it — an approval is what makes an &ldquo;after&rdquo; exist.
+            </p>
+          </Card>
+        ) : (
         <Card>
           <CardTitle right={applied ? undefined : "preview until you approve"}>
             {beforeLabel} vs {afterLabel}
@@ -84,6 +108,7 @@ export default function ReportsPage() {
             </div>
           )}
         </Card>
+        )}
 
         <Card className="min-[900px]:col-span-2">
           <CardTitle>Findings in this pack</CardTitle>

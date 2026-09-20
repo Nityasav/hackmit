@@ -211,6 +211,77 @@ def test_the_learning_workstreams_keys_pass_through_untouched(client):
     assert bundle["ablation"] is None
 
 
+def test_kpis_are_omitted_rather_than_shown_as_zero(client):
+    """A row of zeros reads as a clean result; an empty strip reads as no work yet."""
+    ws = commit_pack(client, later=True)
+    labels = {k["label"] for k in client.get(f"/api/workspaces/{ws}/bundle").json()["kpis"]}
+
+    assert "Sources committed" in labels, "records are committed, so this one has backing data"
+    assert "Findings" not in labels, "no run has produced a finding"
+    assert "Reviewed exposure" not in labels
+    assert "Evidence calls" not in labels
+
+
+def test_kpis_come_from_the_run_once_one_exists(client):
+    ws = commit_pack(client, later=True)
+    snapshot = _snapshot_id(ws)
+    priced = AcceptedClaim(
+        task_id="ap-task", role="ap", claim=_claim("ap-1", calculation_id="calc-1"),
+        review=Review(verdict="accept", rationale="Reperformed."),
+        calculation=Calculation(id="calc-1", snapshot_id=snapshot, source_ids=["s1"], amount_cents=125_00,
+                                cash_delta_cents=0, category="exposure", description="Unsupported invoice total"))
+    unpriced = AcceptedClaim(task_id="ap-task", role="ap", claim=_claim("ap-2", disposition="explained"),
+                             review=Review(verdict="accept", rationale="Explained."))
+    RunRepository().save(_run(ws, snapshot, accepted=[priced, unpriced]))
+
+    kpis = {k["label"]: k for k in client.get(f"/api/workspaces/{ws}/bundle").json()["kpis"]}
+    assert kpis["Findings"]["value"] == "2"
+    assert "2 independently reviewed" in kpis["Findings"]["note"]
+    # Only the claim the engine priced contributes; the other is not counted as zero.
+    assert kpis["Reviewed exposure"]["value"] == "$125.00"
+    assert "1 of 2" in kpis["Reviewed exposure"]["note"]
+
+
+def test_the_report_is_the_runs_own_published_document(client):
+    """Not a second rendering of it: the export must be what the run published."""
+    ws = commit_pack(client, later=True)
+    snapshot = _snapshot_id(ws)
+    run = _run(ws, snapshot, accepted=[AcceptedClaim(
+        task_id="ap-task", role="ap", claim=_claim(),
+        review=Review(verdict="accept", rationale="Reperformed."))])
+    run.report_markdown = "# CFO review — Fictional school\n\nReviewed conclusions.\n"
+    run.unresolved = ["ap-task: one open question."]
+    RunRepository().save(run)
+
+    report = client.get(f"/api/workspaces/{ws}/bundle").json()["report"]
+    assert report["markdown"] == run.report_markdown
+    assert report["title"] == "CFO review — Fictional school"
+    assert report["sections"] == ["Reviewed conclusions (1)", "Unresolved matters (1)", "Limitations"]
+    # Before/after needs an approval to recompute against, which does not exist yet.
+    assert report["comparisons"] == []
+
+
+def test_a_workspace_with_no_run_reports_nothing(client):
+    ws = commit_pack(client, later=True)
+    report = client.get(f"/api/workspaces/{ws}/bundle").json()["report"]
+    assert report["markdown"] is None
+    assert report["title"] == "No investigation report yet"
+    assert report["sections"] == []
+
+
+def test_the_briefing_links_to_the_report_once_one_is_published(client):
+    ws = commit_pack(client, later=True)
+    snapshot = _snapshot_id(ws)
+    assert client.get(f"/api/workspaces/{ws}/bundle").json()["briefing"]["actions"] == []
+
+    run = _run(ws, snapshot)
+    run.report_markdown = "# CFO review\n"
+    RunRepository().save(run)
+
+    actions = client.get(f"/api/workspaces/{ws}/bundle").json()["briefing"]["actions"]
+    assert [a["href"] for a in actions] == ["reports"]
+
+
 def test_only_the_projection_module_builds_a_bundle():
     """One builder, or the tabs drift apart again."""
     from pathlib import Path

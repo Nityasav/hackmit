@@ -259,6 +259,83 @@ def _coordinator_decisions(run):
     return decisions
 
 
+def _money(cents):
+    sign = "-" if cents < 0 else ""
+    units, remainder = divmod(abs(cents), 100)
+    return f"{sign}${units:,}.{remainder:02d}"
+
+
+def _kpis(cov, findings, triage, coordinator):
+    """Five numbers, each traceable to a query.
+
+    A measure with nothing behind it is left out rather than shown as zero: an
+    empty strip says "no work yet", where a row of zeros reads as a clean result.
+    """
+    kpis = []
+
+    active = [s for s in cov["sources"] if s["active"]]
+    if active:
+        records = sum(cov["counts"].values())
+        kpis.append({"label": "Sources committed", "value": str(len(active)),
+                     "note": f"{records} record(s) in the current snapshot", "tone": "good"})
+
+    requests = cov["requests"]
+    if requests:
+        open_requests = [r for r in requests if r["status"] in {"open", "needs_review"}]
+        kpis.append({"label": "Evidence gaps", "value": str(len(open_requests)),
+                     "note": f"of {len(requests)} request(s) raised",
+                     "tone": "warn" if open_requests else "good"})
+
+    if findings:
+        reviewed = sum(1 for f in findings if f["verified_by"])
+        kpis.append({"label": "Findings", "value": str(len(findings)),
+                     "note": f"{reviewed} independently reviewed",
+                     "tone": "good" if reviewed == len(findings) else "warn"})
+
+        # Only amounts the engine produced and the auditor reperformed are summed.
+        priced = [f["amount_cents"] for f in findings if f["amount_cents"] is not None]
+        if priced:
+            kpis.append({"label": "Reviewed exposure", "value": _money(sum(priced)),
+                         "note": f"across {len(priced)} of {len(findings)} finding(s) with a calculation",
+                         "tone": "warn"})
+
+    if triage or coordinator:
+        used = sum(len(json.loads(r["output"]).get("tool_calls", [])) for r in triage)
+        used += sum(run["tool_calls"] for run in coordinator)
+        models = sum(run["model_calls"] for run in coordinator)
+        kpis.append({"label": "Evidence calls", "value": str(used),
+                     "note": f"{len(triage) + len(coordinator)} run(s); {models} coordinator model call(s)",
+                     "tone": "good"})
+    return kpis
+
+
+def _report(cov, findings, coordinator):
+    """The run's own published report, not a second rendering of it.
+
+    `app/cfo/reporting.py` already composes this from accepted claims, with the
+    money injected by the renderer rather than written by the model, so the
+    export is that document verbatim.
+    """
+    published = next((run for run in coordinator if run["report_markdown"]), None)
+    if not published:
+        return {"title": "No investigation report yet", "sections": [], "comparisons": [], "markdown": None}
+
+    scope = published.get("scope") or {}
+    reviewed = len(published["accepted"])
+    unresolved = len(published["unresolved"])
+    return {
+        "title": f"CFO review — {scope.get('institution', cov['workspace']['name'])}",
+        "sections": [
+            f"Reviewed conclusions ({reviewed})",
+            f"Unresolved matters ({unresolved})",
+            "Limitations",
+        ],
+        # Before/after needs an approval to recompute against, which Phase 4 adds.
+        "comparisons": [],
+        "markdown": published["report_markdown"],
+    }
+
+
 def _load_runs(connection, ws, snapshot_id):
     """Coordinator runs planned against the snapshot now in force.
 
@@ -372,6 +449,13 @@ def _derived(ws):
     used += sum(run["tool_calls"] for run in coordinator)
     total = 12 * len(triage) + sum(run["request"]["limits"]["max_tool_calls"] for run in coordinator)
 
+    report = _report(cov, findings, coordinator)
+    actions = []
+    if findings:
+        actions.append({"label": "Review findings", "href": "findings", "primary": True})
+    if report["markdown"]:
+        actions.append({"label": "Open the report", "href": "reports", "primary": not findings})
+
     return {
         "contract_version": 2,
         "workspace": {
@@ -387,11 +471,12 @@ def _derived(ws):
         "briefing": {
             "generated_at": generated_at,
             "text": briefing_text or "Upload records and review source coverage. Agent investigations have not run.",
-            "actions": [{"label": "Review findings", "href": "findings", "primary": True}] if findings else [],
+            "actions": actions,
         },
-        "kpis": [], "workflows": [], "tasks": tasks, "findings": findings, "approvals": [],
+        "kpis": _kpis(cov, findings, triage, coordinator),
+        "workflows": [], "tasks": tasks, "findings": findings, "approvals": [],
         "decisions": decisions,
         # Owned by the Learning workstream; this layer must keep emitting them unchanged.
         "playbooks": [], "ablation": None,
-        "report": {"title": "No investigation report yet", "sections": [], "comparisons": []},
+        "report": report,
     }

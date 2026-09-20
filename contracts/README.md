@@ -77,7 +77,7 @@ Bundle
 ├─ decisions[]    Reasoning log: when / how (tool calls) / why / alternatives / memory_checks / outcome
 ├─ playbooks[]    RSI: replay gate result, uses, status (active|needs_approval|retired|blocked)
 ├─ ablation       memory on vs off. `example: true` until the evaluator produces real numbers
-└─ report         sections, before/after comparisons, applies_approval
+└─ report         sections, before/after comparisons, applies_approval, markdown
 ```
 
 ## Rules

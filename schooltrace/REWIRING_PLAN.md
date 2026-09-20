@@ -166,7 +166,23 @@ links, and `ingestion.py` no longer constructs a bundle.
 
 ---
 
-## Phase 3 — Real KPIs, real Reports
+## Phase 3 — Real KPIs, real Reports — **DONE**
+
+Step 4 needed no work: `AdvancedStats` already returns `null` when no finding carries an amount, so
+there was no demo fallback to remove. Two things were needed that the plan missed:
+
+- **`Report.markdown` was added to the contract** (Pydantic, TypeScript and `contracts/README.md`
+  together, per the contract rule). Without it the Reports tab had no way to *reuse*
+  `cfo/reporting.py` — it was rendering its own Markdown client-side, a second renderer of the same
+  document. The export is now the run's published report verbatim, with the client-side renderer
+  left only as the fallback for the recorded fixtures until Phase 8.
+- **The Command center short-circuited intake workspaces** straight to `SourcesPanel`, so the KPIs
+  this phase built would have been invisible there. It now shows the briefing and the KPI strip
+  above the sources once a run has produced them.
+
+The Reports tab no longer decides what to show based on *which workspace* it is, but on whether the
+work happened: a published report or any findings.
+
 
 1. **KPIs** (`kpis: []` today). Derive five, each from a source that already exists:
    - records committed / sources active — `ingestion.coverage`

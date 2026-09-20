@@ -253,6 +253,9 @@ class Report(BaseModel):
     title: str
     sections: list[str]
     comparisons: list[Comparison]
+    #: The run's own published Markdown, when a run produced one. Rendered by
+    #: app/cfo/reporting.py so the export is the report, not a second rendering.
+    markdown: str | None = None
     applies_approval: str | None = None
     before_label: str | None = None
     after_label: str | None = None

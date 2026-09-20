@@ -184,6 +184,8 @@ export interface Report {
   title: string;
   sections: string[];
   comparisons: { label: string; before: string; after: string }[];
+  /** The run's own published Markdown, when a run produced one. */
+  markdown?: string | null;
   applies_approval?: string;
   before_label?: string;
   after_label?: string;

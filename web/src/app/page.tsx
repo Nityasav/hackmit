@@ -26,7 +26,40 @@ export default function CommandCenter() {
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
   const pending = pendingApprovals.length;
 
-  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} /><SourcesPanel key={workspace.id} /></>;
+  // An intake workspace is still mostly about its sources, but once a run has produced
+  // something there is no reason to hide the briefing and the numbers behind it.
+  if (workspace.intake)
+    return (
+      <div className="mx-auto max-w-[1180px]">
+        <PageHeader title={`${workspace.name} · ${workspace.period}`} />
+        {briefing.actions.length > 0 && (
+          <Section first>
+            <div className="flex items-center gap-2">
+              <b className="text-[14px]">CFO Agent</b>
+              <span className="font-accent text-[13px] text-ink-dim">{briefing.generated_at}</span>
+            </div>
+            <p className="mt-4 max-w-[68ch] text-[17px] leading-[1.6]">{briefing.text}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {briefing.actions.map((a) => (
+                <Link key={a.label} href={TAB_HREF[a.href]}>
+                  <Button primary={a.primary}>{a.label}</Button>
+                </Link>
+              ))}
+            </div>
+          </Section>
+        )}
+        {kpis.length > 0 && (
+          <Section>
+            <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
+              {kpis.map((k) => (
+                <Figure key={k.label} label={k.label} value={k.value} note={k.note} tone={k.tone === "warn" ? "warn" : "good"} />
+              ))}
+            </div>
+          </Section>
+        )}
+        <SourcesPanel key={workspace.id} />
+      </div>
+    );
 
   return (
     <div className="mx-auto max-w-[1180px]">
