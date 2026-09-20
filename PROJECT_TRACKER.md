@@ -50,10 +50,10 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 | Dashboard | Eight tabs, two fixed workspaces, fixture-backed display and interactions | `web/src/app/`, `web/src/lib/data.tsx` |
 | API | Health, bundle, approval-state mutation, reset; other demo actions 501 | `api/app/main.py` |
 | Store | Legacy demos stay in memory; intake has SQLite originals, records, snapshots and events | `api/app/store.py`, `api/app/db.py` |
-| Accounting | Allocation split, journal checks, reclassification and cash delta helpers | `api/app/accounting/money.py` |
-| Tests | 49 backend checks including intake API, revision, atomicity, scope and original accounting tests | `api/tests/` |
+| Accounting | Allocation split, journal checks, reclassification and cash delta helpers; deterministic payroll tie-out and fund-allocation calculations | `api/app/accounting/money.py`, `api/app/accounting/payroll.py` |
+| Tests | 123 backend checks including intake API, revision, atomicity, scope, CFO orchestration, payroll calculations and the payroll agent's boundaries | `api/tests/` |
 | Documents/import | Dynamic workspaces, CSV/text intake, mappings, validation, original evidence, coverage and evidence requests implemented | `api/app/ingestion.py`, `web/src/components/SourcesPanel.tsx` |
-| Agents | README and package marker only; adapter/tool gateway/orchestrator unimplemented | `api/app/agents/` |
+| Agents | Payroll & Budget (`py`) specialist implemented on OpenAI structured output, with a bounded model adapter and role prompts; AP, Grants and the Internal Auditor unimplemented | `api/app/agents/` |
 | Workflows | README and package marker only; real scenario workflows unimplemented | `api/app/workflows/` |
 | Shared data | TypeScript/Pydantic mirrors and two demo JSON bundles | `contracts/`, `api/app/models.py`, `web/src/lib/types.ts` |
 | Reports/learning | Fixture presentation, not real recomputation or measured learning | Dashboard data path and fixture contract |
@@ -93,9 +93,9 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 | Source functions in `api/app/ingestion.py` | Implemented | Immutable originals in SQLite, metadata, scoped spans and downloads |
 | Coverage functions in `api/app/ingestion.py` | Implemented | Input readiness and review/unsupported gates |
 | `api/app/store.py` / `ingestion.bundle` | Existing / implemented | Separate legacy demos and persisted empty intake bundles |
-| `api/app/accounting/` | Helpers exist; expand | Ledger, schedules, exact calculations, lineage, invariants |
+| `api/app/accounting/` | Helpers and payroll calculations exist; expand | Ledger, schedules, AP/grant calculations, lineage, invariants |
 | `api/app/context/` | PROPOSED | Versioned nodes/edges, temporal retrieval and dependency invalidation |
-| `api/app/agents/` | Placeholder | Provider/replay adapters, role prompts, tools, orchestration and decisions |
+| `api/app/agents/` | Payroll agent implemented | AP, Grants and Internal Auditor agents; replay adapter; decision log |
 | `api/app/workflows/` | Placeholder | Close/payroll/AP/grants/audit-prep stages, evidence resumption and scenarios |
 | `api/app/review/` | PROPOSED | Versioned human decisions, idempotent adjustment application |
 | `api/app/memory/` | PROPOSED | Playbook proposals, applicability, replay-gate results, activation/retirement |

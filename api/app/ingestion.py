@@ -553,6 +553,23 @@ def coverage(ws):
                 "coverage_verified": False, "note": "Coverage is limited to supplied records; no audit opinion or full-population completeness is implied."}
 
 
+def financial_records(ws):
+    """Active committed records, for the deterministic accounting engine only.
+
+    Read-only projection: role, business key, parsed payload and the source the
+    record came from. Callers get the records, never the connection, so SQL and
+    original bytes stay inside this module.
+    """
+    with db.connect() as connection:
+        workspace(connection, ws)
+        records = active_records(connection, ws)
+        return {
+            "records": [{"role": r["role"], "record_key": r["record_key"], "payload": r["payload"],
+                         "source_id": r["source_id"], "locator": r["locator"]} for r in records],
+            "roles": sorted({r["role"] for r in records}),
+        }
+
+
 def create_evidence_request(ws, body: EvidenceCreate):
     with db.connect() as connection:
         workspace(connection, ws)
