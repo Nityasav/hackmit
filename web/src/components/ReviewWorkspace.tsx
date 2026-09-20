@@ -20,7 +20,11 @@ type View = { workspace: { name: string; start: string; end: string }; snapshot_
   // briefing and its own status; that coordinator no longer exists, and
   // reading its shape off this one crashed the whole Briefing page.
   live: { decisions: number; escalated: number; spend_cents: number } | null; live_stale: boolean;
-  history: { id: string; created_at: string; actor: string; kind: string; payload: { note?: string; status?: string; owner?: string } }[];
+  // `summary` is one plain sentence saying what was actually done. The list
+  // used to show an event kind and a timestamp, which says that something
+  // happened without saying what.
+  history: { id: string; created_at: string; actor: string; kind: string; summary?: string;
+    payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
 const roles: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", rc: "Revenue & Collections" };
 const currency = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -119,7 +123,11 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
             <FollowUpForm key={`${current.id}-${current.snapshot_id}-${current.follow_up?.version || 0}`} ws={ws} finding={current} saved={refresh} />
           </article>}</div>
       </>}
-      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up & scan history ({view.history.length})</summary>{view.history.map(e => <div key={e.id} className="border-t border-line py-3 text-sm"><b>{e.kind} · {e.actor}</b><p>{e.created_at}</p><p>{e.payload.status?.replaceAll("_", " ")} {e.payload.owner} {e.payload.note}</p></div>)}</details>
+      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up & scan history ({view.history.length})</summary>{!view.history.length && <p className="mt-3 text-sm text-ink-dim">Nothing yet. Approving or rejecting an agent&rsquo;s conclusion, recording a follow-up on a finding, and running the record checks all appear here.</p>}
+        {view.history.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
+          <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
+          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind}</p>
+        </div>)}</details>
       <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
     </>}
   </div>;
