@@ -59,7 +59,15 @@ export function RecordsBrowser() {
     return () => { active = false; };
   }, [ws]);
 
-  const populated = Object.entries(counts).filter(([, n]) => n > 0).map(([r]) => r);
+  // Roles that hold records AND carry a date. Vendors, customers and policies
+  // are reference data and documents, not transactions: they have no date to
+  // filter on, so offering them only produced a 422 once picked.
+  const populated = Object.entries(counts)
+    .filter(([role, n]) => n > 0 && (dates[role]?.dates.length || 0) > 0)
+    .map(([role]) => role);
+  const undatable = Object.entries(counts)
+    .filter(([role, n]) => n > 0 && !(dates[role]?.dates.length))
+    .map(([role]) => role);
 
   const query = useCallback((withField: string) => {
     const params = new URLSearchParams({ role });
@@ -187,6 +195,13 @@ export function RecordsBrowser() {
             </div>
           )}
         </>
+      )}
+
+      {undatable.length > 0 && (
+        <p className="mb-2 text-[12.5px] text-ink-dim">
+          {undatable.map(displayLabel).join(", ")} are not listed: they are reference data and
+          documents rather than transactions, so they carry no date to search by.
+        </p>
       )}
 
       {!register && !error && (
