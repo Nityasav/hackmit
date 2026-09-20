@@ -32,7 +32,6 @@ export default function CommandCenter() {
   return (
     <>
       <PageHeader title={`${workspace.name} · ${workspace.period}`} />
-      <SourcesPanel key={workspace.id} />
 
       {/* CFO agent briefing */}
       <div className="mb-4 rounded-xl border border-line bg-surface p-5">
@@ -186,6 +185,11 @@ export default function CommandCenter() {
             </Link>
           ))}
         </Card>
+      </div>
+
+      {/* Where the records come from. Below the close, since a demo workspace is already loaded. */}
+      <div className="mt-4">
+        <SourcesPanel key={workspace.id} />
       </div>
 
       <Toast message={toast} onDone={() => setToast(null)} />
