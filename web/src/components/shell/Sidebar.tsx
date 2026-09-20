@@ -6,16 +6,13 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bot,
-  Brain,
   FileSearch,
   FileText,
   LayoutDashboard,
   LogOut,
   type LucideIcon,
   ScrollText,
-  SquareKanban,
   Stamp,
-  Workflow,
 } from "lucide-react";
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "@/components/ui/sidebar";
 import { useData } from "@/lib/data";
@@ -25,13 +22,10 @@ import { cn } from "@/lib/utils";
 
 const ICON: Record<TabId, LucideIcon> = {
   command: LayoutDashboard,
-  board: SquareKanban,
-  workflows: Workflow,
   findings: FileSearch,
-  approvals: Stamp,
+  board: Stamp,
   reports: FileText,
   reasoning: ScrollText,
-  learning: Brain,
 };
 
 export function AppSidebar({ userEmail }: { userEmail: string }) {
@@ -75,20 +69,16 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
   const { open } = useSidebar();
   const { bundle, ws, setWs, intakeWorkspaces } = useData();
   const pathname = usePathname();
-  const pending = bundle.approvals.filter((a) => a.status === "pending").length;
 
-  // Demo workspaces plus anything imported through intake. Clicking cycles through them.
-  const workspaces = [
-    { id: "sandbox", name: "Sandbox University", short: "SU" },
-    { id: "mit", name: "MIT FY2025", short: "MIT" },
-    ...intakeWorkspaces.map((w) => ({ id: w.id, name: w.name, short: initials(w.name) })),
-  ];
+  // Every workspace is one someone created and uploaded records to. Clicking
+  // cycles through them.
+  const workspaces = intakeWorkspaces.map((w) => ({ id: w.id, name: w.name, short: initials(w.name) }));
   const currentIndex = Math.max(
     0,
     workspaces.findIndex((w) => w.id === ws),
   );
-  const current = workspaces[currentIndex] ?? { name: bundle.workspace.name, short: initials(bundle.workspace.name) };
-  const nextWorkspace = workspaces[(currentIndex + 1) % workspaces.length];
+  const current = workspaces[currentIndex] ?? { id: ws, name: bundle.workspace.name, short: initials(bundle.workspace.name) };
+  const nextWorkspace = workspaces.length ? workspaces[(currentIndex + 1) % workspaces.length] : current;
 
   const links = TABS.map((tab) => ({
     id: tab.id,
@@ -96,8 +86,7 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
     href: tab.href,
     icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
     active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows"].includes(tab.id)),
-    badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
+    disabled: bundle.workspace.disabled_tabs.includes(tab.id),
   }));
 
   return (
@@ -135,20 +124,6 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
                   link.disabled && "opacity-50",
                 )}
               />
-              {link.badge && (
-                <motion.span
-                  animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
-                  className={cn(
-                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-none px-1.5 text-[12px] font-bold",
-                    link.id === "approvals" ? "bg-ink text-white" : "bg-surface-3 text-ink-dim",
-                  )}
-                >
-                  {link.badge}
-                </motion.span>
-              )}
-              {link.id === "approvals" && pending > 0 && !open && (
-                <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-none bg-ink ring-2 ring-surface-2" />
-              )}
             </div>
           ))}
         </div>
@@ -157,8 +132,8 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
       <div className="flex flex-col gap-1">
         <SidebarLink
           link={{
-            label: bundle.workspace.intake ? "Five-agent review & activity" : `${bundle.agents.length} agents · ${bundle.workspace.model}`,
-            href: bundle.workspace.intake ? "/cfo" : "/board",
+            label: "Five-agent review & activity",
+            href: "/cfo",
             icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
           }}
         />

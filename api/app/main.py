@@ -19,9 +19,9 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import store, ingestion
+from . import ingestion
 from .agents import cfo
-from .models import ApprovalDecision, Bundle, WorkspaceId
+from .models import Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
 from .reviews import router as review_router
 from . import security
@@ -82,34 +82,9 @@ def health() -> dict[str, str]:
 def get_bundle(ws: WorkspaceId) -> Bundle:
     """Everything the dashboard renders, in one payload. The web app polls this."""
     try:
-        return store.get_bundle(ws) if ws in {"sandbox", "mit"} else Bundle.model_validate(ingestion.bundle(ws))
+        return Bundle.model_validate(ingestion.bundle(ws))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"unknown workspace {ws}")
-
-
-@app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
-def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. The only path that may apply a change to a scenario."""
-    if body.workspace not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Intake workspaces do not have an agent approval runtime yet")
-    try:
-        return store.decide_approval(body.workspace, approval_id, body.decision)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
-
-
-@app.post("/api/demo/{action}", response_model=Bundle)
-def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month.
-
-    TODO(workflows): drive these from app/workflows/scenarios.py.
-    """
-    if ws not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Reset is only available for demo workspaces")
-    if action == "reset":
-        store.reset(ws)
-        return store.get_bundle(ws)
-    raise HTTPException(status_code=501, detail=f"demo action '{action}' not implemented yet")
 
 
 @app.get("/api/workspaces")

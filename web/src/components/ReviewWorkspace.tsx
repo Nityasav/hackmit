@@ -77,9 +77,9 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     <section className="border border-line bg-surface-2 p-5"><div className="flex flex-wrap items-center gap-3">
       <button disabled={!!busy || !view?.snapshot_id} className={primary} onClick={() => void run("scan")}>{busy === "scan" ? "Running checks…" : view?.scan ? "Rerun record checks" : "Scan committed records"}</button>
       <Link href="/cfo" className={control}>Optional: live five-agent review ↗</Link>
-      {view?.demo && <button className={control} disabled={!!busy || view.evidence_added} onClick={() => void run("evidence")}>{busy === "evidence" ? "Importing evidence and rescanning…" : view.evidence_added ? "Service evidence added" : "Demo: add withheld evidence & rescan"}</button>}
+      {view?.demo && <button className={control} disabled={!!busy || view.evidence_added} onClick={() => void run("evidence")}>{busy === "evidence" ? "Importing evidence and rescanning…" : view.evidence_added ? "Service evidence added" : "Add the withheld service record & rescan"}</button>}
     </div><p className="mt-3 text-sm text-ink-dim">Record checks run locally, without a model. A live review sends selected records to the API provider and can incur cost. Neither changes your books.</p>
-      {view?.demo && <p className="mt-2 text-sm">Judge challenge: inspect the duplicate candidate → open its source → assign an owner → add withheld service evidence → compare the new scan → export the briefing.</p>}</section>
+</section>
     {error && <p role="alert" className="border border-red-300 bg-red-50 p-3 text-red-800">{error}</p>}
     {(stale || view?.live_stale) && <p role="status" className="border border-amber-300 bg-amber-50 p-4">New records have been committed. Older results are historical, not current assurance. Rerun before making a decision.</p>}
     {view && <>

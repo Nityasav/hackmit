@@ -1,70 +1,54 @@
-# Database
+# Supabase schema
 
-Postgres on Supabase is the source of truth for everything the dashboard
-renders. The JSON under `seed/` is only the material the tables were first
-loaded from — the app does not read it at runtime.
+Postgres holds accounts and what people do. It does not hold review content:
+workspaces, records, findings, tasks and agent runs live in the intake service,
+which computes them from committed records and agent runs.
 
-## What is stored
+## Tables
 
-| Area | Tables |
+| Purpose | Tables |
 | --- | --- |
-| Workspace | `workspaces` |
-| Agents | `agents`, `agent_state_events` |
-| Briefing | `briefings`, `briefing_actions` |
-| Headline numbers | `kpis` |
-| Workflows | `workflows`, `workflow_stages` |
-| Agent board | `tasks`, `task_steps`, `task_todos`, `task_transitions` |
-| Findings | `findings`, `evidence_nodes` |
-| Approvals | `approvals`, `approval_journal_lines`, `approval_effects`, `approval_decisions` |
-| Reasoning log | `decisions`, `decision_tags`, `decision_tool_calls`, `decision_alternatives`, `decision_memory_checks` |
-| Learning | `playbooks`, `ablations`, `ablation_rows` |
-| Report | `reports`, `report_sections`, `report_comparisons` |
+| Accounts | `profiles` |
+| Usage | `user_sessions`, `activity_events` |
 | Sample records | `starter_packs`, `starter_pack_files` |
-| People | `profiles` |
-| What people do | `user_sessions`, `activity_events` |
 
-History is kept rather than overwritten: `agent_state_events` records every
-change to what an agent is doing, `task_transitions` records every board move,
-and `approval_decisions` records every decision including reversals.
+`profiles` is created by the `handle_new_user` trigger on `auth.users` and
+carries `last_seen_at` / `last_workspace` for presence.
+
+`activity_events` records what someone did (`page_view`, `sign_in`,
+`workspace_switch`, …) against a `workspace_id` owned by the intake service.
+There is no foreign key to a workspaces table, because there is no such table
+here.
+
+`starter_packs` / `starter_pack_files` hold the sample CSVs offered on the
+records page. They are product content, uploaded through the same import,
+mapping and commit path as anyone's own files.
 
 ## Functions
 
-| Function | Who may call it | What it does |
+| Function | Granted to | What it does |
 | --- | --- | --- |
-| `get_bundle(ws)` | authenticated | Assembles the whole dashboard payload in one round trip. Runs as the caller, so row-level policies decide what comes back. |
-| `list_workspaces()` | authenticated | The workspaces the caller may open. |
-| `decide_approval(ws, approval, decision)` | authenticated | The human approval path. Updates the approval, logs the decision, closes the waiting task and records the activity, atomically. |
-| `touch_presence(ws, path)` | authenticated | Keeps `profiles.last_seen_at` current. |
-| `seed_workspace(bundle)` | nobody by default | Loads a bundle from JSON. Granted only for the length of a seed run. |
-| `seed_starter_pack(pack)` | nobody by default | Same, for the sample records. |
+| `handle_new_user()` | trigger only | Creates a profile row for a new account. |
+| `touch_presence(ws, p_path)` | authenticated | Updates `last_seen_at` and `last_workspace`. The workspace id is shape-checked only and grants no access by itself. |
+| `get_starter_pack()` | authenticated | Returns the sample record set. |
+| `seed_starter_pack(pack)` | nobody by default | Loads a starter pack. Grant for the length of a seed run, then revoke. |
 
 ## Row-level security
 
-RLS is on for every table. A table with RLS on and no policy denies
-everything, so each policy below opens one thing deliberately.
+Every table has RLS on. A person reads and writes only their own `profiles`,
+`user_sessions` and `activity_events` rows. Starter packs are readable by any
+signed-in account and writable by nobody.
 
-- Workspaces with no owner are shared demos every signed-in user can read.
-  Workspaces with an owner are readable only by that owner.
-- Child tables reach the workspace through `can_read_workspace()`, and
-  grandchildren reach it through their parent.
-- The only write the dashboard makes against shared data is deciding an
-  approval, and it goes through `decide_approval`.
-- `user_sessions` and `activity_events` are readable and writable only by the
-  person they describe.
+## History
 
-## Re-seeding
+The dashboard once read a whole demo bundle from Postgres across 34 tables
+(`workspaces`, `findings`, `approvals`, `kpis`, `workflows`, `playbooks`,
+`ablations`, …). Those served two seeded demo workspaces, `sandbox` and `mit`.
+No real workspace ever had a row in them, so they were dropped in the
+`remove_demo_bundle_schema` migration.
 
-```bash
-cd web
-set -a; . ./.env.local; set +a
-SEED_EMAIL=you@example.com SEED_PASSWORD=... node scripts/seed-db.mjs
-```
+## Outstanding
 
-`seed_workspace` must be granted to `authenticated` for the run and revoked
-after:
-
-```sql
-grant execute on function public.seed_workspace(jsonb) to authenticated;
--- run the seeder
-revoke execute on function public.seed_workspace(jsonb) from authenticated;
-```
+- The `on_auth_user_auto_confirm` trigger confirms new accounts without email
+  verification. Remove it before real production, once SMTP is configured.
+- Leaked-password protection is off; it is a Supabase dashboard toggle.

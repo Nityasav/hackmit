@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { cn } from "@/lib/utils";
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
-import type { AgentId, FindingStatus, PlaybookStatus } from "@/lib/types";
+import type { AgentId, FindingStatus } from "@/lib/types";
 
 const AGENT_BG: Record<AgentId, string> = {
   cfo: "bg-agent-cfo",
@@ -163,17 +163,7 @@ export function FindingStatusPill({ status }: { status: FindingStatus }) {
   return <Pill tone={tone}>{label}</Pill>;
 }
 
-const PLAYBOOK_STATUS: Record<PlaybookStatus, [string, Tone]> = {
-  active: ["Active", "green"],
-  needs_approval: ["Needs you", "amber"],
-  retired: ["Retired", "gray"],
-  blocked: ["Blocked", "red"],
-};
 
-export function PlaybookStatusPill({ status, note }: { status: PlaybookStatus; note?: string }) {
-  const [label, tone] = PLAYBOOK_STATUS[status];
-  return <Pill tone={tone}>{note ? `${label}: ${note}` : label}</Pill>;
-}
 
 export function EmptyState({ icon = "✓", title, children }: { icon?: string; title: string; children?: React.ReactNode }) {
   return (

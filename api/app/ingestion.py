@@ -693,7 +693,7 @@ def bundle(ws):
         "contract_version": 2,
         "workspace": {"id": ws, "name": w["name"], "kind": w["kind"], "period": f"{w['start']} — {w['end']}",
                       "mode": "live" if run else "not_started", "snapshot_id": snapshot_id or "No committed records",
-                      "disabled_tabs": ["workflows", "approvals", "learning"], "model": run["model"] if run else "Not configured",
+                      "disabled_tabs": [], "model": run["model"] if run else "Not configured",
                       "run_budget": {"used": sum(len(json.loads(r["output"]).get("tool_calls", [])) for r in runs), "total": 12 * len(runs)},
                       "intake": True, "currency": w["currency"], "profile": w["profile"]},
         "agents": agents,

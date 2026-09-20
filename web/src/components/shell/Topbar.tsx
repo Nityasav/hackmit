@@ -8,12 +8,12 @@ export function Topbar() {
   return (
     <header className="flex flex-wrap items-center gap-4 border-b border-line bg-surface px-4 py-3">
       <Link href="/" className="font-semibold">SchoolTrace / Start here</Link>
-      <nav aria-label="Main navigation" className="flex flex-wrap gap-3 text-sm"><Link href="/command">Records</Link><Link href="/scan">Scan</Link><Link href="/findings">Findings</Link><Link href="/reports">Reports</Link><Link href="/access">Access & data</Link></nav>
+      <nav aria-label="Main navigation" className="flex flex-wrap gap-3 text-sm"><Link href="/command">Records</Link><Link href="/scan">Scan</Link><Link href="/findings">Findings</Link><Link href="/reports">Director briefing</Link><Link href="/access">Access & data</Link></nav>
       <label className="ml-auto text-xs">Workspace <select aria-label="Workspace" value={ws} onChange={e => setWs(e.target.value)} className="ml-2 max-w-64 border border-line bg-white p-2 text-sm">
-        <option value="sandbox">Fixed demo · Sandbox University</option><option value="mit">Public report example · MIT</option>
+        {intakeWorkspaces.length === 0 && <option value="">No workspace yet</option>}
         {intakeWorkspaces.map(w => <option key={w.id} value={w.id}>{w.name} · {w.id.slice(-4)}</option>)}
       </select></label>
-      {!ws.startsWith("ws-") && <p className="w-full text-xs text-amber-800">Example workspace: displayed findings and activity are bundled demonstrations, not a new analysis. <Link href="/" className="underline">Start an interactive fictional scan</Link>.</p>}
+      {intakeWorkspaces.length === 0 && <p className="w-full text-xs text-ink-dim">No workspace yet. <Link href="/" className="underline">Create one and upload records</Link> to start a review.</p>}
       {apiError && <p role="alert" className="w-full text-xs text-red-700">{apiError} · <Link href="/access" className="underline">Check access</Link></p>}
     </header>
   );

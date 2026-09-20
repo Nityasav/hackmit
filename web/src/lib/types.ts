@@ -3,15 +3,7 @@
 
 export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
 export type WorkspaceId = string;
-export type TabId =
-  | "command"
-  | "board"
-  | "workflows"
-  | "findings"
-  | "approvals"
-  | "reports"
-  | "reasoning"
-  | "learning";
+export type TabId = "command" | "board" | "findings" | "reports" | "reasoning";
 
 export interface Workspace {
   id: WorkspaceId;
@@ -45,23 +37,6 @@ export interface Briefing {
   actions: { label: string; href: TabId; primary?: boolean }[];
 }
 
-export interface Kpi {
-  label: string;
-  value: string;
-  note: string;
-  tone?: "good" | "warn" | "neutral";
-}
-
-export type StageState = "done" | "running" | "human" | "todo";
-
-export interface Workflow {
-  id: string;
-  name: string;
-  owner: AgentId;
-  progress: number;
-  stages: { name: string; state: StageState }[];
-}
-
 export type Column = "queued" | "working" | "needs_you" | "auditor_review" | "done";
 
 export interface TaskStep {
@@ -86,8 +61,6 @@ export interface Task {
   rationale: string | null;
   note?: string;
   note_tone?: "warn" | "info";
-  /** Set on "needs_you" tasks that wait on an Approval. */
-  approval_id?: string;
 }
 
 export interface EvidenceNode {
@@ -123,27 +96,6 @@ export interface Finding {
   evidence: EvidenceNode[];
 }
 
-export interface JournalLine {
-  account: string;
-  fund: string;
-  debit_cents: number;
-  credit_cents: number;
-}
-
-export type ApprovalStatus = "pending" | "approved" | "rejected";
-
-export interface Approval {
-  id: string;
-  agent: AgentId;
-  kind: "journal" | "payment" | "playbook" | "evidence";
-  title: string;
-  summary: string;
-  verified: boolean;
-  status: ApprovalStatus;
-  journal?: JournalLine[];
-  effects?: { label: string; value: string; tone?: "good" | "neutral" }[];
-}
-
 export interface Decision {
   id: string;
   run: string;
@@ -151,42 +103,10 @@ export interface Decision {
   agent: AgentId;
   action: string;
   summary: string;
-  tags: { label: string; kind?: "mem" | "memx" }[];
   when: { run: string; step: string; started: string; finished: string; trigger: string };
   how: { tool: string; input: string; output: string }[];
   why: string;
-  alternatives: { option: string; reason: string; chosen: boolean }[];
-  memory_checks: { text: string; ok: boolean }[];
   outcome: string;
-}
-
-export type PlaybookStatus = "active" | "needs_approval" | "retired" | "blocked";
-
-export interface Playbook {
-  id: string;
-  title: string;
-  source: string;
-  proposed_by: AgentId;
-  replay: { passed: boolean; new_false_positives: number; months: string[] };
-  uses: string;
-  status: PlaybookStatus;
-  status_note?: string;
-}
-
-export interface Ablation {
-  /** true until the numbers come from the real evaluator. */
-  example: boolean;
-  rows: { metric: string; without: number; with: number }[];
-  note: string;
-}
-
-export interface Report {
-  title: string;
-  sections: string[];
-  comparisons: { label: string; before: string; after: string }[];
-  applies_approval?: string;
-  before_label?: string;
-  after_label?: string;
 }
 
 export interface Bundle {
@@ -194,15 +114,9 @@ export interface Bundle {
   workspace: Workspace;
   agents: Agent[];
   briefing: Briefing;
-  kpis: Kpi[];
-  workflows: Workflow[];
   tasks: Task[];
   findings: Finding[];
-  approvals: Approval[];
   decisions: Decision[];
-  playbooks: Playbook[];
-  ablation: Ablation | null;
-  report: Report;
 }
 
 export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice" | "service" | "policy" | "document";

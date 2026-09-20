@@ -190,7 +190,7 @@ def import_files(ws, files):
 
 @router.post("/review-demo", status_code=201)
 def create_demo():
-    ws = ingestion.create_workspace(ingestion.WorkspaceCreate(name="Maplebridge · judge demo", start="2026-09-01", end="2026-09-30",
+    ws = ingestion.create_workspace(ingestion.WorkspaceCreate(name="Maplebridge School District (sample)", start="2026-09-01", end="2026-09-30",
         scope="Fictional management review: duplicate candidates, budget variance, payroll and grant support."))["id"]
     files, _ = demo_files()
     import_files(ws, files)

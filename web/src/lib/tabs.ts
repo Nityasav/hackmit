@@ -4,19 +4,20 @@ export interface TabDef {
   id: TabId;
   label: string;
   href: string;
-  group: "Office of the CFO" | "Work product" | "Agent brain";
-  tag?: string;
+  group: "Review" | "Work product";
 }
 
+/**
+ * Only sections backed by the review pipeline appear here. Workflows,
+ * Approvals and Learning were removed: the bundle never carried rows for them
+ * outside the retired demo workspaces.
+ */
 export const TABS: TabDef[] = [
-  { id: "command", label: "Records & overview", href: "/command", group: "Office of the CFO" },
-  { id: "board", label: "Agent board", href: "/board", group: "Office of the CFO" },
-  { id: "workflows", label: "Workflows", href: "/workflows", group: "Office of the CFO" },
-  { id: "findings", label: "Findings", href: "/findings", group: "Work product" },
-  { id: "approvals", label: "Approvals", href: "/approvals", group: "Work product" },
-  { id: "reports", label: "Reports", href: "/reports", group: "Work product" },
-  { id: "reasoning", label: "Reasoning log", href: "/reasoning", group: "Agent brain" },
-  { id: "learning", label: "Learning", href: "/learning", group: "Agent brain", tag: "RSI" },
+  { id: "command", label: "Records & overview", href: "/command", group: "Review" },
+  { id: "findings", label: "Findings", href: "/findings", group: "Review" },
+  { id: "board", label: "Follow-up", href: "/board", group: "Work product" },
+  { id: "reports", label: "Director briefing", href: "/reports", group: "Work product" },
+  { id: "reasoning", label: "Reasoning log", href: "/reasoning", group: "Work product" },
 ];
 
 export const TAB_HREF = Object.fromEntries(TABS.map((t) => [t.id, t.href])) as Record<TabId, string>;
