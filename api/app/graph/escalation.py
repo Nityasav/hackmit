@@ -74,18 +74,54 @@ def request_decision(*, ws: str, agent_id: str, thread_id: str, decision_id: str
 
 
 def _apply(ws: str, proposal_id: str, answer: Any) -> dict:
-    """Record what the person chose, once the graph resumes with it."""
+    """Record what the person chose, once the graph resumes with it.
+
+    An approval row and a paused run are two halves of one question, and they can be
+    answered from two screens. A person who decided it on the approvals page and then
+    came back to the chat used to find the run stranded: `decide` refused the second
+    call as already decided, the resume raised, and the graph never advanced past a
+    question that had in fact been answered.
+
+    So an already-decided approval is not an error here. The decision already on record
+    is the person's, it is used as given, and the run continues. What is refused is a
+    *different* answer to a question already settled — that is a real conflict and
+    silently overwriting it would lose a decision somebody made.
+    """
     decision = answer.get("decision") if isinstance(answer, dict) else answer
     if decision not in {"approved", "rejected"}:
         raise ValueError("A decision is either approved or rejected.")
-    # `decide` is the only path out of pending, and the only writer of precedent.
-    approvals.decide(ws, proposal_id, decision)
+
+    recorded = _recorded(ws, proposal_id)
+    if recorded is None:
+        # `decide` is the only path out of pending, and the only writer of precedent.
+        approvals.decide(ws, proposal_id, decision)
+        elsewhere = False
+    else:
+        if recorded != decision:
+            raise ValueError(
+                f"{proposal_id} was already {recorded} on the approvals page. Answering "
+                f"it again as {decision} would overwrite a decision somebody made.")
+        elsewhere = True
+
     return {
         "approval_id": proposal_id,
         "decision": decision,
+        "decided_elsewhere": elsewhere,
         "note": ("Recorded as a human decision. Nothing was posted, paid or changed in "
-                 "an external system."),
+                 "an external system." if not elsewhere else
+                 "This was already decided on the approvals page. The run has been "
+                 "continued with that decision; nothing was recorded twice."),
     }
+
+
+def _recorded(ws: str, proposal_id: str) -> str | None:
+    """The decision already on this approval, or None while it is still pending."""
+    with db.connect() as connection:
+        row = connection.execute(
+            "SELECT status FROM approvals WHERE ws=? AND id=?", (ws, proposal_id)).fetchone()
+    if row is None or row["status"] == "pending":
+        return None
+    return row["status"]
 
 
 def _agent(agent_id: str) -> dict:
