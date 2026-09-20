@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
-import sample from "../fixtures/intake.json";
 
 const ROLES: Record<SourceRole, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
@@ -37,7 +38,12 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
   </dialog>;
 }
 
+interface StarterFile { name: string; role: string; content: string; later?: boolean }
+interface StarterPack { name: string; start: string; end: string; files: StarterFile[] }
+const EMPTY_PACK: StarterPack = { name: "", start: "", end: "", files: [] };
+
 export function SourcesPanel() {
+  const [sample, setSample] = useState<StarterPack>(EMPTY_PACK);
   const { ws, bundle, setWs, refreshWorkspaces, refreshBundle, apiError } = useData();
   const isIntake = Boolean(bundle.workspace.intake);
   const [creating, setCreating] = useState(false);
@@ -67,6 +73,16 @@ export function SourcesPanel() {
     ]);
     setCoverage(cov); setHistory(imports); setAgentRuns(runs);
   }, [base]);
+  // The starter pack is product content, so it comes from the database rather
+  // than being compiled into the bundle.
+  useEffect(() => {
+    let mounted = true;
+    void createClient()
+      .rpc("get_starter_pack")
+      .then(({ data }) => { if (mounted && data) setSample(data as StarterPack); });
+    return () => { mounted = false; };
+  }, []);
+
   useEffect(() => {
     if (!isIntake) return;
     let mounted = true;

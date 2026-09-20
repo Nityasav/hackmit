@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Playfair_Display, Poppins, Raleway } from "next/font/google";
 import { DataProvider } from "@/lib/data";
+import { ActivityTracker } from "@/components/ActivityTracker";
 import { AppSidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { createClient } from "@/lib/supabase/server";
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             the window to itself rather than being framed by the dashboard. */}
         {user ? (
           <DataProvider>
+            <ActivityTracker />
             <div className="flex h-screen flex-col overflow-hidden md:flex-row">
               <AppSidebar userEmail={user.email ?? ""} />
               <div className="flex min-w-0 flex-1 flex-col">
