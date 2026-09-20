@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
-import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
+import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 import sample from "../../../contracts/fixtures/intake.json";
 
 const ROLES: Record<SourceRole, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
   payroll: "Payroll", grants: "Grant register", budget: "Budget", invoice: "Invoices",
   policy: "Award terms / policy", service: "Service evidence", document: "Other document",
+};
+const AGENTS = {
+  cfo: { label: "CFO Agent", action: "Run CFO triage", focus: "Perform an initial risk triage of the committed snapshot." },
+  grants_compliance: { label: "Grants & Compliance agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
+  internal_auditor: { label: "Internal Auditor agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
 };
 const input = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs";
 const button = "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40";
@@ -41,23 +46,31 @@ export function SourcesPanel() {
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
+  const [allAgentRuns, setAgentRuns] = useState<AgentRun[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentRun["agent"]>("cfo");
+  const agentRuns = allAgentRuns.filter((run) => run.workspace_id === ws && run.agent === selectedAgent);
+  const agentRunning = allAgentRuns.some((run) => run.workspace_id === ws && run.status === "running");
+  const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
+  const [agentFocus, setAgentFocus] = useState("Perform an initial risk triage of the committed snapshot.");
+  const [agentBusy, setAgentBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const base = `/api/workspaces/${encodeURIComponent(ws)}`;
   const refresh = useCallback(async () => {
-    const [cov, imports] = await Promise.all([
+    const [cov, imports, runs] = await Promise.all([
       intakeApi<Coverage>(base + "/coverage"),
       intakeApi<typeof history>(base + "/imports"),
+      intakeApi<AgentRun[]>(base + "/agent-runs"),
     ]);
-    setCoverage(cov); setHistory(imports);
+    setCoverage(cov); setHistory(imports); setAgentRuns(runs);
   }, [base]);
   useEffect(() => {
     if (!isIntake) return;
     let mounted = true;
-    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports")])
-      .then(([c, h]) => { if (mounted) { setCoverage(c); setHistory(h); } })
+    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports"), intakeApi<AgentRun[]>(base + "/agent-runs")])
+      .then(([c, h, r]) => { if (mounted) { setCoverage(c); setHistory(h); setAgentRuns(r); } })
       .catch(() => { /* The shared API status shows outages; retry without discarding the last snapshot. */ });
     void load();
     const interval = setInterval(load, 10000);
@@ -102,7 +115,78 @@ export function SourcesPanel() {
           <p className="mt-1 text-[11px] text-slate-500">{c.note}</p>
         </div>)}
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} Sources are available for review; no agent investigation has run.</p>
+      <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
+
+      <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
+            <p className="mt-1 max-w-3xl text-xs text-slate-600">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>
+          {agentRuns[0] && <span className="text-[11px] text-slate-500">Latest: {agentRuns[0].status} · {agentRuns[0].model}{agentRuns[0].current_snapshot ? "" : " · stale snapshot"}</span>}
+        </div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <select aria-label="Investigation agent" className={input} disabled={agentBusy || agentRunning} value={selectedAgent} onChange={(e) => {
+            const agent = e.target.value as AgentRun["agent"];
+            setSelectedAgent(agent); setAgentFocus(AGENTS[agent].focus); setError(""); setMessage("");
+          }}>{Object.entries(AGENTS).map(([id, agent]) => <option key={id} value={id}>{agent.label}</option>)}</select>
+          <input aria-label="Agent focus" className={input} value={agentFocus} maxLength={500} onChange={(e) => setAgentFocus(e.target.value)} />
+          <button disabled={busy || agentBusy || agentRunning || !snapshot || !agentFocus.trim()} className={primary + " whitespace-nowrap"} onClick={async () => {
+            setAgentBusy(true); setError(""); setMessage("");
+            try {
+              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: JSON.stringify({
+                agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
+              }) });
+              setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
+              await refreshBundle();
+              setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
+            } catch (e) { setError(e instanceof Error ? e.message : "Agent request failed"); }
+            finally { setAgentBusy(false); void refresh().catch(() => {}); }
+          }}>{agentBusy || agentRunning ? "Agent working…" : AGENTS[selectedAgent].action}</button>
+        </div>
+        {!snapshot && <p className="mt-2 text-xs text-amber-700">Commit at least one valid source snapshot before running the agent.</p>}
+        {selectedAgent === "grants_compliance" && <p className="mt-2 text-xs text-slate-500">Checks supplied award terms and payroll service periods. Payroll totals are not complete grant expenditure. Findings remain unreviewed; no compliance certification is issued.</p>}
+        {selectedAgent === "internal_auditor" && <p className="mt-2 text-xs text-slate-500">Run CFO or Grants first. Reviews up to four findings per run using fresh source reads and calculation checks. Accept means the limited claim is supported—not approval of a transaction or an audit opinion.</p>}
+        {agentRuns[0]?.review_targets_current === false && <p className="mt-2 text-xs text-amber-700">A preparer reran or the snapshot changed. These historical verdicts do not cover all current findings; rerun the Auditor.</p>}
+        {agentRuns[0]?.error && <p className="mt-3 rounded bg-red-50 p-2 text-xs text-red-800">{agentRuns[0].error}</p>}
+        {agentRuns[0]?.result.analysis && <div className="mt-4 border-t border-violet-100 pt-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <span>snapshot {agentRuns[0].snapshot_id}</span><span>{agentRuns[0].result.tool_calls?.length || 0} logged tool calls</span>
+            <span>{agentRuns[0].result.usage?.total_tokens || 0} tokens</span>
+          </div>
+          <p className="mt-2 text-sm"><b>Briefing:</b> {agentRuns[0].result.analysis.executive_briefing}</p>
+          <p className="mt-1 text-xs text-slate-500">Scope: {agentRuns[0].result.analysis.scope_assessed}</p>
+          {agentRuns[0].result.review_scope && <p className="mt-2 text-xs">Reviewed {agentRuns[0].result.review_scope.reviewed_count} of {agentRuns[0].result.review_scope.candidate_count} candidate findings in this run. Remaining findings are unreviewed.</p>}
+          {agentRuns[0].result.analysis.reviews?.map((review) => <div key={review.finding_id} className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <b>Auditor verdict: {review.verdict.replaceAll("_", " ")}</b>
+            <p className="break-all font-mono text-[10px] text-slate-500">{review.finding_id}</p>
+            <p className="mt-1 text-xs">{review.rationale}</p>
+            <p className="mt-1 text-xs">Required action: {review.required_action || "No further action proposed within this limited review."}</p>
+            <div className="mt-2 flex flex-wrap gap-2">{review.citations.map((citation, index) => <button key={index} className="text-xs text-teal-700 underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
+              Source line {citation.line}: “{citation.quote}”
+            </button>)}</div>
+          </div>)}
+          {agentRuns[0].result.analysis.findings.map((finding, index) => <div key={index} className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2"><b>{finding.title}</b><span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">{finding.status === "cleared" ? "proposed clearance · unreviewed" : finding.status.replaceAll("_", " ")}</span></div>
+            <p className="mt-1 text-xs">{finding.summary}</p>
+            <div className="mt-2 flex flex-wrap gap-2">{finding.citations.map((citation) => <button key={`${citation.source_id}:${citation.line}`} className="text-xs text-teal-700 underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
+              Source line {citation.line}: “{citation.quote}”
+            </button>)}</div>
+            {finding.limitations.length > 0 && <p className="mt-2 text-[11px] text-slate-500">Limits: {finding.limitations.join("; ")}</p>}
+          </div>)}
+          {agentRuns[0].result.analysis.next_tasks.length > 0 && <div className="mt-3"><b className="text-xs">Proposed specialist work</b><ul className="mt-1 list-disc pl-5 text-xs">
+            {agentRuns[0].result.analysis.next_tasks.map((task, index) => <li key={index}><b>{task.title}</b> · {task.objective}</li>)}
+          </ul></div>}
+          {agentRuns[0].result.analysis.evidence_requests.map((request, index) => <div key={index} className="mt-3 rounded border border-amber-200 bg-white p-3 text-xs">
+            <b>Suggested evidence: {request.title}</b><p className="my-1">{request.reason}</p>
+            <button className={button} disabled={busy || !agentRuns[0].current_snapshot || Boolean(coverage?.requests.some((r) => r.task_id === agentRuns[0].id && r.title === request.title))}
+              onClick={() => act(async () => {
+                setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: JSON.stringify({
+                  title: request.title, role: request.role, task_id: agentRuns[0].id,
+                }) }));
+              })}>Add evidence request</button>
+          </div>)}
+          {agentRuns[0].result.analysis.limitations.length > 0 && <p className="mt-3 text-xs text-slate-500"><b>Run limitations:</b> {agentRuns[0].result.analysis.limitations.join("; ")}</p>}
+        </div>}
+      </div>
 
       <div className="mt-5 border-t border-slate-100 pt-4">
         <h3 className="font-semibold">1. Add records</h3>

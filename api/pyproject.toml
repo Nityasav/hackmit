@@ -8,6 +8,9 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "python-multipart>=0.0.20",
+    "openai>=2.0",
+    "jsonschema>=4.23",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

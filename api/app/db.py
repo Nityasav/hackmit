@@ -52,9 +52,22 @@ CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     kind TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    agent TEXT NOT NULL, snapshot_id TEXT NOT NULL REFERENCES snapshots(id),
+    status TEXT NOT NULL, model TEXT NOT NULL, focus TEXT NOT NULL,
+    created_at TEXT NOT NULL, completed_at TEXT,
+    output TEXT NOT NULL DEFAULT '{}', error TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_requests (
+    ws TEXT NOT NULL REFERENCES workspaces(id), request_id TEXT NOT NULL,
+    run_id TEXT NOT NULL REFERENCES agent_runs(id),
+    PRIMARY KEY(ws, request_id)
+);
 CREATE INDEX IF NOT EXISTS active_records ON records(ws, active);
 CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
-PRAGMA user_version = 1;
+CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
+PRAGMA user_version = 2;
 """
 
 
@@ -78,7 +91,7 @@ def connect():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version > 1:
+    if version > 2:
         connection.close()
         raise RuntimeError("Database is newer than this application; refusing to downgrade")
     connection.executescript(SCHEMA)
@@ -94,8 +107,8 @@ def connect():
         connection.close()
 
 
-def event(connection, ws: str, kind: str, payload: dict) -> None:
+def event(connection, ws: str, kind: str, payload: dict, actor: str = "local-reviewer") -> None:
     connection.execute(
         "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)",
-        (uid("event"), ws, kind, "local-reviewer", now(), encode(payload)),
+        (uid("event"), ws, kind, actor, now(), encode(payload)),
     )
