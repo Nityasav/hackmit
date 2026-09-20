@@ -236,6 +236,11 @@ def card(row, now: datetime | None = None) -> dict:
         tone = "warn"
     elif state == "queued":
         note, tone = "Delegated, not started", "info"
+    elif state == "auditor_review":
+        reviewer = AGENTS[agent].reviewer
+        note = (f"{AGENTS[reviewer].name} is re-reading the evidence and redoing the maths"
+                if reviewer else "Being re-checked independently")
+        tone = "info"
 
     # `failed` is not a board column: the card belongs where a person will look for it,
     # and its note says plainly that nothing was produced.

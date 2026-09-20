@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 
-import { AGENT_NAME, AgentAvatar, Pill, ProgressBar, Pulse } from "@/components/ui";
+import { AGENT_NAME, AgentAvatar, ProgressBar, Pulse } from "@/components/ui";
 import { duration, elapsedSeconds } from "@/lib/format";
 import type { Column, Task } from "@/lib/types";
 
@@ -197,24 +197,21 @@ function TaskCard({ task, now, onOpen }: { task: Task; now: number | null; onOpe
           {task.todos.length > 0 && <span>{task.todos.length} still owed</span>}
         </div>
 
+        {/* Wraps rather than runs off the card: a note can be a one-word status or the
+            whole reason a run stopped, and a pill would clip the second kind. The
+            drawer has it in full. */}
         {task.note && (
-          <div className="mt-2">
-            <Pill tone={task.note_tone === "warn" ? "red" : "gray"}>{task.note}</Pill>
-          </div>
+          <p
+            className={`mt-2 line-clamp-3 break-words px-2 py-1 text-[12px] leading-snug ${
+              task.note_tone === "warn"
+                ? "bg-red-50 text-red-800 ring-1 ring-red-200"
+                : "bg-surface-2 text-ink-dim ring-1 ring-line"
+            }`}
+          >
+            {task.note}
+          </p>
         )}
       </button>
-
-      {/* The one place a card is more than a card: where it hands off to you. */}
-      {task.column === "needs_you" && (
-        <p className="border-t border-line px-2.5 py-1.5 text-[12px] text-ink-dim">
-          Waiting on a person, not on a decision screen. Open the task for what it asked for.
-        </p>
-      )}
-      {task.column === "auditor_review" && (
-        <p className="border-t border-line px-2.5 py-1.5 text-[12px] text-ink-dim">
-          The Internal Auditor is re-reading the sources and redoing the math.
-        </p>
-      )}
     </div>
   );
 }
