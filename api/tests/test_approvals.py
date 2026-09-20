@@ -5,6 +5,8 @@ check the two rules the module is built on: no agent can reach a decision, and
 no proposal may carry an amount the engine did not produce.
 """
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,7 +16,7 @@ from app.cfo.repository import RunRepository
 from app.cfo.schemas import AcceptedClaim, Calculation, Review
 
 from app.main import app
-from tests.test_cfo_intake import HEADERS, commit_pack
+from tests.test_cfo_intake import HEADERS, SAMPLE, commit_pack
 from tests.test_projection import _claim, _run, _snapshot_id
 
 
@@ -86,13 +88,13 @@ def test_deciding_requires_the_local_reviewer(client):
 
 def test_a_rerun_cannot_undecide_something_a_human_decided(client):
     ws = commit_pack(client, later=True)
-    snapshot = _snapshot_id(ws)
-    RunRepository().save(_substantiated(ws, snapshot))
+    run = _substantiated(ws, _snapshot_id(ws))
+    RunRepository().save(run)
     approval_id = client.get(f"/api/workspaces/{ws}/bundle").json()["approvals"][0]["id"]
     client.post(f"/api/approvals/{approval_id}/decision", json={"workspace": ws, "decision": "approved"})
 
     # The same run is saved again, as a poll or a rerun would.
-    RunRepository().save(_substantiated(ws, snapshot))
+    RunRepository().save(run)
     approvals_now = client.get(f"/api/workspaces/{ws}/bundle").json()["approvals"]
     assert len(approvals_now) == 1
     assert approvals_now[0]["status"] == "approved"
@@ -186,3 +188,155 @@ def test_a_public_documents_workspace_has_nothing_to_approve(client):
                                               "scope": "Published documents"}).json()["id"]
     bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
     assert "approvals" in bundle["workspace"]["disabled_tabs"]
+
+
+def test_a_finding_says_when_its_proposal_was_decided(client):
+    """Before this the Findings tab was byte-identical before and after a decision.
+
+    `Finding.status` is a closed vocabulary with no value meaning "decided", so the
+    decision rides in the summary, the way the auditor's verdict already does.
+    """
+    ws = commit_pack(client, later=True)
+    RunRepository().save(_substantiated(ws, _snapshot_id(ws)))
+    before = client.get(f"/api/workspaces/{ws}/bundle").json()
+    approval_id = before["approvals"][0]["id"]
+    finding_before = before["findings"][0]
+
+    after = client.post(f"/api/approvals/{approval_id}/decision",
+                        json={"workspace": ws, "decision": "rejected"}).json()
+    finding = next(f for f in after["findings"] if f["id"] == finding_before["id"])
+    assert finding["summary"] != finding_before["summary"]
+    assert finding["summary"].startswith(f"Your decision: {approval_id} rejected.")
+    # The claim itself did not change, so neither does what the auditor concluded.
+    assert finding["status"] == finding_before["status"] == "substantiated"
+
+
+def _supersede(client, ws):
+    """Commit the later source pack, which publishes a new snapshot over the old one."""
+    files = [f for f in SAMPLE["files"] if f.get("later")]
+    batch = client.post(f"/api/workspaces/{ws}/imports",
+                        files=[("files", (f["name"], f["content"].encode(), "text/plain")) for f in files],
+                        data={"metadata": json.dumps([{"role": f["role"], **f.get("options", {})}
+                                                      for f in files])}).json()
+    client.post(f"/api/workspaces/{ws}/imports/{batch['id']}/commit",
+                json={"expected_version": batch["version"], "idempotency_key": batch["id"]})
+
+
+def test_a_pending_proposal_against_a_superseded_snapshot_says_so(client):
+    """A new snapshot drops the findings, and the proposals must not look current.
+
+    The evidence a pending proposal describes has changed underneath it — the
+    finding it names is no longer in the bundle — so it is marked rather than
+    silently presented as something still worth deciding on today's records.
+    """
+    ws = commit_pack(client, later=False)
+    RunRepository().save(_run(ws, _snapshot_id(ws), accepted=[
+        AcceptedClaim(task_id="ap-task", role="ap", claim=_claim("ap-1"),
+                      review=Review(verdict="accept", rationale="Reperformed.")),
+        AcceptedClaim(task_id="ap-task", role="ap", claim=_claim("ap-2"),
+                      review=Review(verdict="accept", rationale="Reperformed."))]))
+    decided, left_open = [a["id"] for a in client.get(f"/api/workspaces/{ws}/bundle").json()["approvals"]]
+    client.post(f"/api/approvals/{decided}/decision", json={"workspace": ws, "decision": "approved"})
+
+    _supersede(client, ws)
+    bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
+    assert bundle["findings"] == [], "the run is stale, so its findings are gone"
+
+    approvals_now = {a["id"]: a for a in bundle["approvals"]}
+    assert len(approvals_now) == 2, "a decision a person took is a permanent record, never deleted"
+    assert approvals_now[left_open]["title"].startswith("Superseded evidence · ")
+    assert "superseded by a newer snapshot" in approvals_now[left_open]["summary"]
+    # The decided one is history and is left exactly as the person left it.
+    assert approvals_now[decided]["status"] == "approved"
+    assert not approvals_now[decided]["title"].startswith("Superseded")
+
+
+def _triage_run(ws, snapshot, run_id="run-triage-1", source_id="s1"):
+    """A completed snapshot-triage run: one agent, no independent review, no calculation."""
+    output = {"analysis": {
+        "executive_briefing": "Triage briefing.", "scope_assessed": "September close.",
+        "limitations": ["Population completeness is not verified."],
+        "findings": [{"title": "Invoice may lack a receipt", "status": "hypothesized",
+                      "summary": "The register shows no matching goods receipt.",
+                      "citations": [{"source_id": source_id, "line": 2, "quote": "INV-1001"}],
+                      "limitations": ["No independent review."]}],
+        "evidence_requests": [], "next_tasks": []}, "tool_calls": [], "usage": {}}
+    with db.connect() as connection:
+        connection.execute(
+            "INSERT INTO agent_runs(id,ws,agent,snapshot_id,status,model,focus,created_at,completed_at,output)"
+            " VALUES(?,?,?,?,'completed','test-model','September close',?,?,?)",
+            (run_id, ws, "cfo", snapshot, db.now(), db.now(), db.encode(output)))
+
+
+def test_a_triage_candidate_can_be_pursued_or_dropped_by_a_human(client):
+    """Triage produced findings nobody could ever act on: no proposal was written.
+
+    The candidate has no independent review and no calculation, so the only
+    honest proposal is whether to pursue it, and it must not claim otherwise.
+    """
+    ws = commit_pack(client, later=True)
+    _triage_run(ws, _snapshot_id(ws))
+
+    bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
+    finding = bundle["findings"][0]
+    proposal = bundle["approvals"][0]
+    assert proposal["finding_id"] == finding["id"], "the candidate is reachable from its proposal"
+    assert proposal["kind"] == "decision" and proposal["status"] == "pending"
+    assert proposal["verified"] is False, "nobody re-read the sources; the UI warns about exactly this"
+    assert proposal["journal"] is None, "no calculation stands behind it, so no amount and no journal"
+    assert proposal["title"].startswith("Decide whether to pursue: ")
+
+    after = client.post(f"/api/approvals/{proposal['id']}/decision",
+                        json={"workspace": ws, "decision": "approved"}).json()
+    assert after["approvals"][0]["status"] == "approved"
+    assert next(f for f in after["findings"] if f["id"] == finding["id"])["amount_cents"] is None
+
+
+def test_an_unreviewed_proposal_may_never_carry_a_journal(client):
+    """A journal moves money between funds; triage has not earned the right to propose one."""
+    ws = commit_pack(client, later=True)
+    with db.connect() as connection:
+        with pytest.raises(Exception) as caught:
+            approvals.store(connection, ws, {
+                "id": "ADJ-triage", "agent": "cfo", "kind": "journal", "title": "Reclassify",
+                "summary": "Balanced, but nothing independently reviewed it", "verified": False,
+                "journal": [{"account": "Salary expense", "fund": "A", "debit_cents": 100, "credit_cents": 0},
+                            {"account": "Salary expense", "fund": "B", "debit_cents": 0, "credit_cents": 100}]})
+    assert "unreviewed_journal" in str(caught.value.detail)
+
+
+def test_no_triage_proposal_is_built_with_a_journal(client):
+    """Structural, not incidental: the triage builder emits nothing a ledger could accept."""
+    proposals = approvals.proposals_from_triage("run-1", "snapshot-1", [
+        {"id": "run-1-finding-1", "agent": "cfo", "title": "Candidate", "summary": "Unreviewed."}])
+    assert [p.get("journal") for p in proposals] == [None]
+    assert [p["verified"] for p in proposals] == [False]
+
+
+def test_two_workspaces_in_one_database_both_keep_their_proposals(client):
+    """One SQLite file holds every workspace, and `approvals.id` is its primary key.
+
+    A claim id is unique only inside its run: `ap-1` is what the first AP task calls
+    its first claim, everywhere. An id built from the claim alone collided across
+    runs and workspaces, and `ON CONFLICT(id) DO NOTHING` dropped the second
+    proposal at write time, leaving a finding no one could act on. Every other test
+    gets its own data directory, which is why this only shows with two workspaces
+    sharing one.
+    """
+    seen = []
+    for _ in range(2):
+        ws = commit_pack(client, later=True)
+        RunRepository().save(_substantiated(ws, _snapshot_id(ws)))
+        bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
+        assert len(bundle["findings"]) == 1
+        assert len(bundle["approvals"]) == 1, "the second workspace's proposal was silently dropped"
+        seen.append((ws, bundle["approvals"][0]))
+
+    (first_ws, first), (second_ws, second) = seen
+    assert first["id"] != second["id"]
+    # The proposal is named after the finding it resolves, and that carries the run.
+    assert first["id"] == f"ACK-{first['finding_id']}"
+    assert second["id"] == f"ACK-{second['finding_id']}"
+    with db.connect() as connection:
+        rows = {row["id"]: row["ws"] for row in connection.execute("SELECT id, ws FROM approvals")}
+    assert rows == {first["id"]: first_ws, second["id"]: second_ws}

@@ -59,6 +59,12 @@ def store(connection, ws, proposal):
             assert_balanced(_lines(journal))
         except InvariantError as exc:
             _fail("unbalanced_journal", f"A proposed journal must balance before it is stored: {exc}")
+        if not proposal.get("verified"):
+            # A journal moves money between funds. Only a claim that survived
+            # independent review may propose one, whatever kind it calls itself,
+            # which is what keeps unreviewed triage out of the ledger.
+            _fail("unreviewed_journal",
+                  "A journal may only be proposed from an independently reviewed claim")
     connection.execute(
         "INSERT INTO approvals(id, ws, snapshot_id, run_id, finding_id, task_id, agent, kind, title, summary,"
         " journal, effects, verified, status, created_at)"
@@ -73,10 +79,34 @@ def store(connection, ws, proposal):
     )
 
 
-def listing(connection, ws):
-    return [_row(row) for row in connection.execute(
-        "SELECT * FROM approvals WHERE ws=? ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, rowid",
-        (ws,))]
+def listing(connection, ws, snapshot_id=None):
+    """Every proposal in the workspace, the ones still waiting on a person first.
+
+    A *pending* proposal raised against a snapshot that has since been superseded
+    describes evidence that has changed underneath it — the finding behind it is
+    no longer in the bundle at all — so it is marked rather than left looking
+    current. An *already decided* one is the permanent record of what a person
+    chose at the time, and is neither rewritten nor removed.
+    """
+    rows = []
+    for row in connection.execute(
+            "SELECT * FROM approvals WHERE ws=? ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, rowid",
+            (ws,)):
+        approval = _row(row)
+        if approval["status"] == "pending" and _superseded(row, snapshot_id):
+            approval["title"] = "Superseded evidence · " + approval["title"]
+            approval["summary"] = (
+                "The records this was raised against have been superseded by a newer snapshot, so the "
+                "finding behind it is no longer in this workspace. Rerun the investigation against the "
+                "current snapshot before acting on it. "
+            ) + approval["summary"]
+        rows.append(approval)
+    return rows
+
+
+def _superseded(row, snapshot_id):
+    """True when the proposal names a snapshot and it is not the one in force."""
+    return bool(snapshot_id and row["snapshot_id"] and row["snapshot_id"] != snapshot_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -121,9 +151,15 @@ def proposals_for(run, records):
     for accepted in run["accepted"]:
         claim = accepted["claim"]
         calculation = accepted.get("calculation")
+        # A claim id is unique only inside its run - `ap-1` is what the first AP task
+        # calls its first claim, in every run and every workspace. `approvals.id` is a
+        # primary key over the whole database, so an id built from the claim alone
+        # collided and the second proposal was silently dropped on write. The run id
+        # carries it, exactly as the finding id it resolves does.
+        finding_id = f"{run['id']}-{claim['id']}"
         base = {"run_id": run["id"], "task_id": accepted["task_id"], "agent": accepted["role"],
                 "snapshot_id": (run.get("scope") or {}).get("snapshot_id"),
-                "finding_id": f"{run['id']}-{claim['id']}",
+                "finding_id": finding_id,
                 # An accepted claim was reviewed; that is not the same as approved.
                 "verified": True}
 
@@ -137,7 +173,7 @@ def proposals_for(run, records):
                     {"account": account, "fund": destination, "debit_cents": amount, "credit_cents": 0},
                     {"account": account, "fund": source_fund, "debit_cents": 0, "credit_cents": amount},
                 ]
-                out.append({**base, "id": f"ADJ-{claim['id']}", "kind": "journal",
+                out.append({**base, "id": f"ADJ-{finding_id}", "kind": "journal",
                             "title": f"Reclassify {money(amount)} out of {source_fund}",
                             "summary": f"{claim['title']}. Amount from {calculation['id']}; "
                                        f"{calculation['description']}",
@@ -153,7 +189,7 @@ def proposals_for(run, records):
             # The engine established the amount but the records do not name a
             # destination fund. Inventing one would defeat the provenance rule, so
             # ask for the record that would settle it.
-            out.append({**base, "id": f"EV-{claim['id']}", "kind": "evidence",
+            out.append({**base, "id": f"EV-{finding_id}", "kind": "evidence",
                         "title": f"Provide a structured allocation record for {claim['title']}",
                         "summary": f"{money(amount)} is unsupported per {calculation['id']}, but the committed "
                                    "records do not name a destination fund, so no journal can be proposed "
@@ -161,7 +197,7 @@ def proposals_for(run, records):
             continue
 
         if claim["disposition"] == "substantiated":
-            out.append({**base, "id": f"ACK-{claim['id']}", "kind": "decision",
+            out.append({**base, "id": f"ACK-{finding_id}", "kind": "decision",
                         "title": f"Decide how to resolve: {claim['title']}",
                         "summary": f"{claim['conclusion']} No deterministic calculation backs an amount, so no "
                                    "journal is proposed. Approving records your decision to act on it."})
@@ -181,6 +217,42 @@ def _award_of(records, calculation):
 def sync(ws, run, records):
     """Write any proposals this run supports that are not already recorded."""
     proposals = proposals_for(run, records)
+    if not proposals:
+        return
+    with db.connect() as connection:
+        for proposal in proposals:
+            store(connection, ws, proposal)
+
+
+# --------------------------------------------------------------------------- #
+# Proposals derived from a snapshot-triage run
+# --------------------------------------------------------------------------- #
+
+def proposals_from_triage(run_id, snapshot_id, findings):
+    """What a triage candidate may ask a person for, and nothing more.
+
+    Triage is one agent reading a snapshot alone: no independent review and no
+    deterministic calculation, so every proposal it raises is `verified: False`
+    and the Approvals tab warns that nobody re-checked it. It never carries a
+    journal or an amount — there is no calculation behind it to carry one — so
+    the only honest question is whether the candidate is worth pursuing. Without
+    this a triage-only workspace has findings no one can ever act on.
+    """
+    return [{
+        "id": f"TRI-{finding['id']}", "run_id": run_id, "task_id": None,
+        "finding_id": finding["id"], "snapshot_id": snapshot_id, "agent": finding["agent"],
+        "kind": "decision",
+        "title": f"Decide whether to pursue: {finding['title']}",
+        "summary": f"{finding['summary']} Nothing independently reviewed this candidate and no "
+                   "calculation backs an amount for it, so the only proposal is the decision to "
+                   "pursue it or drop it. Approving opens no ledger entry and pays nothing.",
+        "verified": False,
+    } for finding in findings]
+
+
+def sync_triage(ws, run_id, snapshot_id, findings):
+    """Write the pursue-or-drop proposals a completed triage run supports."""
+    proposals = proposals_from_triage(run_id, snapshot_id, findings)
     if not proposals:
         return
     with db.connect() as connection:
@@ -211,6 +283,58 @@ def decide(ws, approval_id, decision, reviewer=REVIEWER):
             "applied": False,
             "note": "Recorded as a human decision. No payment, posting or payroll change is executed.",
         }, actor=reviewer)
+
+
+#: What approving or rejecting actually did, so the log never overstates it.
+_OUTCOME = {
+    "approved": "Approved by {actor}. The report's after-figures now treat the finding it resolves as "
+                "settled. No payment, posting or payroll change was executed.",
+    "rejected": "Rejected by {actor}. The proposal stays on record as refused and nothing was applied.",
+}
+
+
+def decisions(connection, ws):
+    """The human's own decisions, as Decision records for the Reasoning log.
+
+    Every action in a run reaches the log, and a person deciding a proposal is an
+    action — the one the product exists to make legible. `decide` already writes
+    the event; without this it stopped there and the log showed only the agents.
+    """
+    titles = {row["id"]: row for row in connection.execute(
+        "SELECT id, run_id, title FROM approvals WHERE ws=?", (ws,))}
+    out = []
+    for row in connection.execute(
+            "SELECT actor, created_at, payload FROM events WHERE ws=? AND kind='approval_decided'"
+            " ORDER BY created_at, rowid", (ws,)):
+        payload = json.loads(row["payload"])
+        approval_id, verdict, actor = payload["approval_id"], payload["decision"], row["actor"]
+        proposal = titles.get(approval_id)
+        run = (proposal["run_id"] if proposal else None) or "Human decisions"
+        unreviewed = "" if payload.get("verified_by_auditor") else \
+            " The Internal Auditor had not reviewed this proposal."
+        out.append({
+            "id": f"decision-{approval_id}", "run": run, "time": row["created_at"],
+            # The contract's agent vocabulary has no human in it. `actor` names who
+            # really decided; `agent` only says whose run the decision belongs to.
+            "agent": "cfo", "actor": actor,
+            "action": f"Human decision: {approval_id} {verdict}",
+            "summary": f"A person, not an agent, {verdict} this proposal.{unreviewed} {payload['note']}",
+            "tags": [],
+            "when": {"run": run, "step": "Approvals", "started": row["created_at"],
+                     "finished": row["created_at"],
+                     "trigger": proposal["title"] if proposal else approval_id},
+            # A person decided it. No tool was called, and claiming one would be a lie.
+            "how": [],
+            "why": "Recorded from the Approvals tab. SchoolTrace stores that the reviewer decided and "
+                   "when, not the reasoning behind it, so nothing further is claimed here.",
+            "alternatives": [
+                {"option": verdict, "reason": f"Chosen by {actor}.", "chosen": True},
+                {"option": "rejected" if verdict == "approved" else "approved",
+                 "reason": "The only other option this proposal offered.", "chosen": False},
+            ],
+            "memory_checks": [], "outcome": _OUTCOME[verdict].format(actor=actor),
+        })
+    return out
 
 
 # --------------------------------------------------------------------------- #

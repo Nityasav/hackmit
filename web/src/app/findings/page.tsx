@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
@@ -10,6 +11,10 @@ export default function FindingsPage() {
   const { bundle } = useData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = bundle.findings.find((f) => f.id === selectedId) ?? bundle.findings[0];
+  // Approvals link to their finding; the reverse link is derived from the same
+  // field rather than added to the contract, so navigation works both ways.
+  const proposal = selected && bundle.approvals.find((a) => a.finding_id === selected.id);
+  const approvalsOff = bundle.workspace.disabled_tabs.includes("approvals");
 
   return (
     <>
@@ -45,6 +50,15 @@ export default function FindingsPage() {
         {selected && (
           <Card>
             <EvidenceTrail key={selected.id} finding={selected} />
+            {proposal && !approvalsOff && (
+              <div className="mt-2 border-t border-line pt-2 text-[13px]">
+                <Link href="/approvals" className="text-ink underline">
+                  {proposal.status === "pending"
+                    ? `${proposal.id} is waiting on your decision →`
+                    : `${proposal.id} was ${proposal.status} by you →`}
+                </Link>
+              </div>
+            )}
           </Card>
         )}
       </div>

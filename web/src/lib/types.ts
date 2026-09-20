@@ -153,6 +153,8 @@ export interface Decision {
   run: string;
   time: string;
   agent: AgentId;
+  /** Set when a person took this decision rather than an agent; `agent` has no value for a human. */
+  actor?: string | null;
   action: string;
   summary: string;
   tags: { label: string; kind?: "mem" | "memx" }[];

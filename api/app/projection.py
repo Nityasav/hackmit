@@ -17,6 +17,7 @@ model never supplies a number that reaches this layer.
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 
 from fastapi import HTTPException
@@ -372,6 +373,70 @@ def _report(cov, findings, coordinator, comparisons, gate):
     }
 
 
+#: Which of a task's approvals `Task.approval_id` names when it has several. The
+#: contract carries one id, so it names the one that still needs a person:
+#: pending first, then a rejection whose work may have to be redone, and last an
+#: approval that is already settled.
+APPROVAL_URGENCY = {"pending": 0, "rejected": 1, "approved": 2}
+
+
+def _approval_note(linked):
+    """How a task's proposals stand, in one line.
+
+    A task with a single proposal reads exactly as it always did. A task with
+    several is counted instead, because one status cannot describe two different
+    outcomes, and an approved proposal beside a rejected one is not "approved".
+    """
+    if len(linked) == 1:
+        approval_id, status = linked[0]
+        return f"{approval_id} {status}"
+    counts = Counter(status for _, status in linked)
+    return ", ".join(f"{counts[s]} {s}" for s in ("pending", "approved", "rejected") if counts[s])
+
+
+def _link_approvals(tasks, task_approvals):
+    """Point every task at all of its proposals, not just the last one written."""
+    for task in tasks:
+        linked = task_approvals.get(task["id"])
+        if not linked:
+            continue
+        task["approval_id"] = min(linked, key=lambda item: APPROVAL_URGENCY[item[1]])[0]
+        decided = [item for item in linked if item[1] != "pending"]
+        if len(decided) < len(linked):
+            task["column"], task["note_tone"] = "needs_you", "warn"
+            # Anything already settled is named too, so a part-decided task does
+            # not read as though nothing has happened on it yet.
+            task["note"] = ("Waiting on your decision" if not decided
+                            else f"Waiting on your decision · {_approval_note(linked)}")
+        else:
+            # Every proposal is decided, so the task's own derived state is the
+            # honest column again. The note carries what was decided, and a
+            # rejection is an outcome the board must be able to show.
+            task["note"] = _approval_note(linked)
+            task["note_tone"] = "warn" if any(s == "rejected" for _, s in linked) else "info"
+
+
+def _note_decisions_on_findings(findings, approvals):
+    """Say on a finding that its proposal was decided, and how.
+
+    `Finding.status` is a closed vocabulary in the contract and none of its values
+    means "a human decided this", so the decision rides in the summary the same
+    way the auditor's verdict already does. Without it the Findings tab is
+    byte-identical before and after a decision.
+    """
+    decided = {}
+    for approval in approvals:
+        if approval["finding_id"] and approval["status"] != "pending":
+            decided.setdefault(approval["finding_id"], []).append(
+                (approval["id"], approval["status"]))
+    for finding in findings:
+        outcomes = decided.get(finding["id"])
+        if outcomes:
+            finding["summary"] = ("Your decision: "
+                                  + "; ".join(f"{i} {s}" for i, s in outcomes)
+                                  + ". ") + finding["summary"]
+
+
 def _disabled_tabs(workspace):
     """Which tabs this workspace has no business showing.
 
@@ -440,8 +505,10 @@ def _derived(ws):
         coordinator = _load_runs(connection, ws, snapshot_id)
 
     tasks, findings, decisions = [], [], []
+    triage_findings = {}
     for saved in triage:
         t, f, d = _triage_projection(saved)
+        triage_findings[saved["id"]] = f
         tasks.extend(t); findings.extend(f); decisions.extend(d)
 
     # Verdicts are attached only to their exact preparer-run finding IDs. Rerunning a
@@ -459,17 +526,27 @@ def _derived(ws):
 
     # A completed run's proposals are written once, then owned by the approvals
     # table: a rerun cannot silently un-decide something a human already decided.
+    # Triage candidates propose too, but only whether to pursue them: they carry no
+    # independent review and no calculation, so they can never move money.
+    for saved in triage:
+        approvals_module.sync_triage(ws, saved["id"], snapshot_id, triage_findings[saved["id"]])
     if coordinator:
         records = financial_records(ws)["records"]
         for run in coordinator:
             if run["status"] not in {"queued", "planning", "running"}:
                 approvals_module.sync(ws, run, records)
     with db.connect() as connection:
-        pending_approvals = approvals_module.listing(connection, ws)
-        task_approval = {f"{row['run_id']}-{row['task_id']}": (row["id"], row["status"])
-                         for row in connection.execute(
-                             "SELECT id, run_id, task_id, status FROM approvals"
-                             " WHERE ws=? AND task_id IS NOT NULL", (ws,))}
+        approval_rows = approvals_module.listing(connection, ws, snapshot_id)
+        human_decisions = approvals_module.decisions(connection, ws)
+        # A task may raise several proposals, so every one is kept. Keying by task
+        # alone let the second approval overwrite the first, which hid whichever
+        # outcome happened to be written last.
+        task_approvals = {}
+        for row in connection.execute(
+                "SELECT id, run_id, task_id, status FROM approvals"
+                " WHERE ws=? AND task_id IS NOT NULL ORDER BY rowid", (ws,)):
+            task_approvals.setdefault(f"{row['run_id']}-{row['task_id']}", []).append(
+                (row["id"], row["status"]))
 
     cited = {source_id for run in coordinator for accepted in run["accepted"]
              for source_id in accepted["claim"]["evidence_ids"]}
@@ -512,23 +589,17 @@ def _derived(ws):
     used += sum(run["tool_calls"] for run in coordinator)
     total = 12 * len(triage) + sum(run["request"]["limits"]["max_tool_calls"] for run in coordinator)
 
-    # A task that is waiting on a decision says so, and links to the decision.
-    for task in tasks:
-        linked = task_approval.get(task["id"])
-        if not linked:
-            continue
-        approval_id, status = linked
-        task["approval_id"] = approval_id
-        if status == "pending":
-            task["column"], task["note"], task["note_tone"] = "needs_you", "Waiting on your decision", "warn"
-        elif status == "approved":
-            task["column"], task["progress"] = "done", 100
-            task["note"], task["note_tone"] = f"{approval_id} approved", "info"
+    # Everything a decision touches, once the proposals and findings both exist.
+    _link_approvals(tasks, task_approvals)
+    _note_decisions_on_findings(findings, approval_rows)
+    # A person's own decisions are the log's most important entries, so they land
+    # after the agents' — the run happened first, the decision on it came later.
+    decisions.extend(human_decisions)
 
     workflows = [_coordinator_workflow(run) for run in coordinator]
-    comparisons, gate = approvals_module.comparisons(pending_approvals, findings)
+    comparisons, gate = approvals_module.comparisons(approval_rows, findings)
     report = _report(cov, findings, coordinator, comparisons, gate)
-    waiting = sum(1 for a in pending_approvals if a["status"] == "pending")
+    waiting = sum(1 for a in approval_rows if a["status"] == "pending")
     actions = []
     if findings:
         actions.append({"label": "Review findings", "href": "findings", "primary": True})
@@ -557,7 +628,7 @@ def _derived(ws):
             "actions": actions,
         },
         "kpis": _kpis(cov, findings, triage, coordinator),
-        "workflows": workflows, "tasks": tasks, "findings": findings, "approvals": pending_approvals,
+        "workflows": workflows, "tasks": tasks, "findings": findings, "approvals": approval_rows,
         "decisions": decisions,
         # Owned by the Learning workstream; this layer must keep emitting them unchanged.
         "playbooks": [], "ablation": None,

@@ -25,7 +25,11 @@ export async function intakeApi<T>(path: string, init: RequestInit = {}): Promis
 function empty(ws: string, info?: IntakeWorkspace): Bundle {
   return { workspace: { id: ws, name: info?.name || "Your institution", kind: info?.kind || "synthetic",
     period: info ? `${info.start} — ${info.end}` : "Loading", mode: "not_started",
-    snapshot_id: "No records loaded", disabled_tabs: ["workflows", "approvals", "learning"],
+    // Mirrors projection._disabled_tabs: a public-documents workspace holds no
+    // transactions, everything else only waits on the Learning workstream. A
+    // placeholder that disables more than the API does flickers tabs off then on.
+    snapshot_id: "No records loaded",
+    disabled_tabs: info?.kind === "public" ? ["workflows", "approvals", "learning"] : ["learning"],
     model: "Not configured", run_budget: { used: 0, total: 0 }, intake: true },
     agents: [], briefing: { generated_at: "—", text: "Upload records to get started. No investigation has run.", actions: [] },
     kpis: [], workflows: [], tasks: [], findings: [], approvals: [], decisions: [], playbooks: [], ablation: null,

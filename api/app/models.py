@@ -206,6 +206,10 @@ class Decision(BaseModel):
     run: str
     time: str
     agent: AgentId
+    #: Set when a person took this decision rather than an agent. `agent` has no
+    #: value that means "a human", and a human approval is the decision the log
+    #: most needs to carry, so the reviewer is named here instead of faked there.
+    actor: str | None = None
     action: str
     summary: str
     tags: list[Tag]

@@ -6,6 +6,7 @@ its own run page. These tests pin the mapping and the rules that keep it honest.
 """
 
 import asyncio
+from itertools import count
 import json
 
 import pytest
@@ -37,8 +38,17 @@ def _claim(claim_id="ap-1", disposition="substantiated", evidence=("s1",), calcu
                  proposed_action="Obtain the receipt before payment.")
 
 
+#: Every snapshot id starts with "snapshot-", so the old `snapshot_id[:6]` gave
+#: every run in the suite the same id, "CFO-test-snapsh". `cfo_runs.id` is a
+#: primary key over the whole database, so a test holding two runs kept neither:
+#: the second save overwrote the first's payload but not its workspace column.
+#: Each test gets a fresh data directory, which is the only reason it stayed hidden.
+_RUN_SEQUENCE = count(1)
+
+
 def _run(workspace, snapshot_id, *, accepted=(), tasks=(), status="completed", sources=("s1",)):
-    run = Run(id="CFO-test-" + snapshot_id[:6], request=RunRequest(workspace=workspace, mode="live"),
+    run_id = f"CFO-test-{workspace.rsplit('-', 1)[-1][:6]}-{next(_RUN_SEQUENCE)}"
+    run = Run(id=run_id, request=RunRequest(workspace=workspace, mode="live"),
               status=status, briefing="Coordinator briefing.", model_label="test-model",
               report_markdown="# CFO review\n\nPublished by the run.\n")
     run.scope = Scope(workspace=workspace, snapshot_id=snapshot_id, institution="Fictional school",
@@ -325,3 +335,86 @@ def test_only_the_projection_module_builds_a_bundle():
     # main.py declares the response type on its route; it delegates the building.
     assert offenders == ["main.py"], offenders
     assert "projection.bundle(ws)" in (root / "main.py").read_text(encoding="utf-8")
+
+
+def _two_claims_on_one_task(ws, snapshot):
+    """One task, two substantiated claims: two proposals a human must decide separately."""
+    return _run(ws, snapshot, accepted=[
+        AcceptedClaim(task_id="ap-task", role="ap", claim=_claim("ap-1"),
+                      review=Review(verdict="accept", rationale="Reperformed.")),
+        AcceptedClaim(task_id="ap-task", role="ap", claim=_claim("ap-2"),
+                      review=Review(verdict="accept", rationale="Reperformed.")),
+    ])
+
+
+def test_a_task_with_several_proposals_reflects_all_of_them(client):
+    """Keying the mapping by task alone let the second proposal overwrite the first.
+
+    A task that raised two proposals then showed whichever one happened to be
+    written last, so an approval could hide a rejection on the same task.
+    """
+    ws = commit_pack(client, later=True)
+    RunRepository().save(_two_claims_on_one_task(ws, _snapshot_id(ws)))
+
+    before = client.get(f"/api/workspaces/{ws}/bundle").json()
+    first, second = [a["id"] for a in before["approvals"]]
+    assert (first, second) == tuple(f"ACK-{a['finding_id']}" for a in before["approvals"])
+    task = next(t for t in before["tasks"] if t["id"].endswith("ap-task"))
+    # Two pending proposals: the task points at one but waits on the person either way.
+    assert task["column"] == "needs_you"
+    assert task["approval_id"] == first
+
+    client.post(f"/api/approvals/{first}/decision", json={"workspace": ws, "decision": "approved"})
+    part = next(t for t in client.get(f"/api/workspaces/{ws}/bundle").json()["tasks"]
+                if t["id"].endswith("ap-task"))
+    # One decided, one not: still the human's, and the note says where it stands.
+    assert part["column"] == "needs_you"
+    assert part["approval_id"] == second, "the id names the proposal still waiting"
+    assert part["note"] == "Waiting on your decision · 1 pending, 1 approved"
+
+    client.post(f"/api/approvals/{second}/decision", json={"workspace": ws, "decision": "rejected"})
+    done = next(t for t in client.get(f"/api/workspaces/{ws}/bundle").json()["tasks"]
+                if t["id"].endswith("ap-task"))
+    assert done["note"] == "1 approved, 1 rejected", "one status cannot describe two outcomes"
+    assert done["note_tone"] == "warn"
+    assert done["approval_id"] == second, "a rejection is more actionable than a settled approval"
+
+
+def test_a_rejected_proposal_is_visible_on_the_task_that_raised_it(client):
+    """Rejection is a real outcome; a blank note cannot be told from nothing happening."""
+    ws = commit_pack(client, later=True)
+    RunRepository().save(_run(ws, _snapshot_id(ws), accepted=[AcceptedClaim(
+        task_id="ap-task", role="ap", claim=_claim(),
+        review=Review(verdict="accept", rationale="Reperformed."))]))
+    approval_id = client.get(f"/api/workspaces/{ws}/bundle").json()["approvals"][0]["id"]
+
+    after = client.post(f"/api/approvals/{approval_id}/decision",
+                        json={"workspace": ws, "decision": "rejected"}).json()
+    task = next(t for t in after["tasks"] if t["approval_id"] == approval_id)
+    assert task["note"] == f"{approval_id} rejected"
+    assert task["note_tone"] == "warn"
+    assert task["column"] == "done", "the task's own state is honest again once nothing is pending"
+
+
+def test_a_human_decision_reaches_the_reasoning_log(client):
+    """'You can see why' has to cover the person's own decisions, not only the agents'."""
+    ws = commit_pack(client, later=True)
+    RunRepository().save(_two_claims_on_one_task(ws, _snapshot_id(ws)))
+    bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
+    before = bundle["decisions"]
+    first, second = [a["id"] for a in bundle["approvals"]]
+
+    client.post(f"/api/approvals/{first}/decision", json={"workspace": ws, "decision": "approved"})
+    after = client.post(f"/api/approvals/{second}/decision",
+                        json={"workspace": ws, "decision": "rejected"}).json()["decisions"]
+    assert len(after) == len(before) + 2
+
+    human = [d for d in after if d["actor"]]
+    assert [d["action"] for d in human] == [f"Human decision: {first} approved",
+                                            f"Human decision: {second} rejected"]
+    approved = human[0]
+    assert approved["actor"] == "local-reviewer", "the contract's agents are all machines"
+    assert approved["how"] == [], "a person called no tools, and claiming one would be a lie"
+    assert approved["when"]["trigger"] == "Decide how to resolve: Invoice lacks a receipt"
+    assert "No payment, posting or payroll change was executed" in approved["outcome"]
+    assert human[1]["outcome"].startswith("Rejected by local-reviewer.")
