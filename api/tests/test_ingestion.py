@@ -284,3 +284,36 @@ def test_subcent_values_are_never_rounded_by_decimal_context():
     assert parse_minor_units("1", "minor") == 1
     with pytest.raises(ValueError):
         parse_minor_units("9000000000.00000000000000000001")
+
+
+# --------------------------------------------------------------------------- #
+# The vocabulary the browser reads
+# --------------------------------------------------------------------------- #
+
+def test_the_record_vocabulary_is_served_for_every_role(client):
+    """`/api/roles` is how the browser works out what an uploaded file is.
+
+    It had no test, and a merge left three document kinds in `DOCUMENT_ROLES` with no
+    entry in `LABELS`. The endpoint raised KeyError, which does not degrade to "that one
+    kind is unlabelled" — it takes the whole response down, so source detection failed
+    for every file. One missing label, and a person sets twenty-three roles by hand.
+    """
+    from app import roles as role_registry
+
+    response = client.get("/api/roles")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {r["id"] for r in body["roles"]} == set(role_registry.FIELDS)
+    assert {d["id"] for d in body["documents"]} == set(role_registry.DOCUMENT_ROLES)
+    for entry in body["roles"] + body["documents"]:
+        assert entry["label"].strip(), entry["id"]
+
+
+def test_every_role_the_registry_knows_has_a_label():
+    """Asserted against the registry itself, so this fails on import rather than on a
+    request. Two tables describing the same roles will drift; the question is only
+    whether anyone finds out before a person does."""
+    from app import roles as role_registry
+
+    assert not (set(role_registry.FIELDS) | role_registry.DOCUMENT_ROLES) - set(role_registry.LABELS)

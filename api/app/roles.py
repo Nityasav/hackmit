@@ -159,8 +159,20 @@ LABELS: dict[str, str] = {
     "tax_registrations": "Tax registrations",
     "contract": "Contracts",
     "policy": "Policies",
+    "invoice": "Invoice documents",
+    "service": "Service agreements",
+    "budget": "Budget documents",
     "document": "Other documents",
 }
+
+#: Two registries that describe the same roles will eventually disagree, and the way
+#: this one disagreed was a document kind with no label: `/api/roles` raised KeyError
+#: and the browser lost source detection for every file, not just the unlabelled kind.
+#: Checked at import so the next one to add a kind finds out here rather than there.
+_unlabelled = sorted((set(FIELDS) | DOCUMENT_ROLES) - set(LABELS))
+if _unlabelled:
+    raise AssertionError(
+        "Every role needs a label a person can read. Missing: " + ", ".join(_unlabelled))
 
 ACCOUNT_TYPES: frozenset[str] = frozenset({"asset", "liability", "equity", "revenue", "expense"})
 DIRECTIONS: frozenset[str] = frozenset({"in", "out"})
