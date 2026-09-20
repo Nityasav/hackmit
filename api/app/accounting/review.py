@@ -58,6 +58,28 @@ def checks(records, config):
             missing or invoices, action="Supply purchase orders and receiving records; have a reviewer match quantities, rates and totals.")
 
     chart = {r["payload"]["account"]: r for r in by_role["chart"]}
+    if not chart or not by_role["opening"] or not by_role["ledger"]:
+        add("management-inputs", "Management balances need records", "py", "gap",
+            "Supply a chart of accounts, opening trial balance and ledger.")
+    else:
+        balances = defaultdict(int)
+        for row in by_role["opening"] + by_role["ledger"]:
+            p = row["payload"]
+            balances[p["account"]] += p["debit_cents"] - p["credit_cents"]
+        for account, definition in sorted(chart.items()):
+            rows = [r for r in by_role["opening"] + by_role["ledger"] if r["payload"]["account"] == account]
+            add("management-account-" + account, f"Closing balance · {account} · {definition['payload']['name']}",
+                "py", "pass", "Opening balance plus supplied period activity. Positive is debit; negative is credit. Not a completeness or audit conclusion.",
+                [definition] + rows, balances[account], "Review the supplied account balance against your books.")
+        difference = sum(balances.values())
+        add("management-trial-balance", "Closing trial balance", "py", "attention" if difference else "pass",
+            "Sum of opening balances and period debits less credits. Zero means supplied balances tie; omitted balanced transactions cannot be detected.",
+            by_role["opening"] + by_role["ledger"], difference)
+        activity = [r for r in by_role["ledger"] if chart.get(r["payload"]["account"], {}).get("payload", {}).get("type") in {"revenue", "expense"}]
+        surplus = sum(r["payload"]["credit_cents"] - r["payload"]["debit_cents"] for r in activity)
+        add("management-period-result", "Period revenue less expenses", "py", "pass",
+            "Net supplied revenue and expense activity; positive is surplus, negative is deficit. Excludes opening balances. This is a management summary, not statutory financial statements.",
+            activity + by_role["chart"], surplus, "Confirm period coverage and account classifications before reporting.")
     budgets = defaultdict(list)
     for row in by_role["budget"]:
         p = row["payload"]

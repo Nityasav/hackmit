@@ -1,6 +1,7 @@
 "use client";
 
 import { displayLabel } from "@/lib/format";
+import { detectSource } from "@/lib/source-detection";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -44,7 +45,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   const [creating, setCreating] = useState(false);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [history, setHistory] = useState<{ id: string; status: string; created_at: string }[]>([]);
-  const [files, setFiles] = useState<{ file: File; options: SourceOptions }[]>([]);
+  const [files, setFiles] = useState<{ file: File; options: SourceOptions; note: string }[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const selection = useRef(0);
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
@@ -136,7 +139,18 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
         <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No school yet — create one to add records.")}</span>
         {coverage && <span>· {coverage.workspace.currency}</span>}
-        <button disabled={busy} className={button} onClick={() => act(refresh)}>Refresh sources</button>
+        <button disabled={busy} className={button} onClick={() => act(async () => {
+          await refresh();
+          if (batch && batch.status !== "committed") {
+            setMessage("Sources refreshed. Finish or review the current import before detecting saved files.");
+            return;
+          }
+          const result = await intakeApi<{ batch: ImportBatch | null; detected: number }>(base + "/sources/detect", { method: "POST" });
+          if (result.batch) {
+            showBatch(result.batch);
+            setMessage(`Detected types for ${result.detected} saved files. Review the import below and confirm to update coverage.`);
+          } else setMessage("Sources refreshed. No additional structured file types detected. Missing items need supporting records.");
+        })}>Refresh sources</button>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {coverage?.capabilities.map((c) => <div key={c.id} className="border border-line p-3">
@@ -144,6 +158,20 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-amber-50 text-amber-800"}`}>{displayLabel(c.status)}</span>
           {c.missing.length > 0 && <p className="mt-1 text-xs">Missing: {c.missing.map((r) => ROLES[r as SourceRole] || r).join(", ")}</p>}
           <p className="mt-1 text-[11px] text-ink-dim">{c.note}</p>
+          {c.runnable && <button className={`${button} mt-3`} disabled={busy} onClick={() => act(async () => {
+            await intakeApi(base + "/review/scans", { method: "POST" });
+            await refresh();
+            await refreshBundle();
+            setMessage("Record checks completed. Expand results below. No model calls were made.");
+          })}>{busy ? "Working…" : c.results?.length ? "Run checks again" : "Run checks"}</button>}
+          {!!c.results?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">View results ({c.results.length})</summary>
+            <div className="mt-2 space-y-3">{c.results.map((r) => <div key={r.id} className="border-t border-line pt-2">
+              <p className="font-semibold">{r.title} · {displayLabel(r.status)}</p>
+              {r.amount_cents !== null && <p className="mt-1 tabular-nums">{new Intl.NumberFormat("en-US", { style: "currency", currency: coverage.workspace.currency }).format(r.amount_cents / 100)}</p>}
+              <p className="mt-1 text-ink-dim">{r.explanation}</p><p className="mt-1">{r.action}</p>
+              <div className="mt-1 flex flex-wrap gap-2">{r.evidence.map((e) => <button key={`${e.source_id}:${e.line}`} className="underline" onClick={() => act(() => viewSource(e.source_id, e.line))}>{coverage.sources.find((s) => s.id === e.source_id)?.name || "Source"} · line {e.line}</button>)}</div>
+            </div>)}</div>
+          </details>}
         </div>)}
       </div>
       <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
@@ -153,16 +181,42 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
         <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
-        <input className="mt-4 block" ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
-          onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
+        {/* macOS file-type associations can incorrectly disable CSVs when an
+            accept filter is present. Validate names here; the API independently
+            validates extensions, UTF-8 content, sizes and record schemas. */}
+        <input className="mt-4 block" ref={fileInput} aria-label="Choose CSV, TXT or Markdown files" type="file" multiple disabled={busy || detecting || !coverage}
+          onChange={async (e) => {
+            const selected = Array.from(e.target.files || []);
+            const unsupported = selected.filter((file) => !/\.(csv|txt|md)$/i.test(file.name));
+            if (unsupported.length) {
+              setError(`Choose CSV, TXT or Markdown files. Unsupported: ${unsupported.map((file) => file.name).join(", ")}`);
+              e.target.value = "";
+              return;
+            }
+            if (selected.length > 20 || selected.some(f => f.size > 10 * 1024 * 1024) || selected.reduce((sum, f) => sum + f.size, 0) > 50 * 1024 * 1024) {
+              setError("Upload exceeds file or batch limits"); e.target.value = ""; return;
+            }
+            setError("");
+            setDetecting(true);
+            const id = ++selection.current;
+            try {
+              const detected = await Promise.all(selected.map(async file => {
+                const result = detectSource(file.name, await file.slice(0, 65536).text(), coverage?.workspace.kind === "public");
+                return { file, options: { ...defaults(result.role), mapping: result.mapping }, note: result.note };
+              }));
+              if (selection.current === id) setFiles(detected);
+            } catch { setError("Could not read the selected files. Please select them again."); }
+            finally { if (selection.current === id) setDetecting(false); }
+          }} />
+        {detecting && <p role="status" className="mt-2 text-xs">Detecting file types…</p>}
         {files.map((f, i) => <div key={i} className="mt-3 grid items-end gap-3 border border-line p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)_80px]">
-          <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
-          <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
+          <span className="min-w-0 self-center break-words text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB<small className="mt-1 block text-ink-dim">{f.note}</small></span>
+          <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, note: "Manually selected", options: { ...x.options, mapping: {}, role: e.target.value as SourceRole } } : x))}>
             {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}
           </select>
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
-        <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
+        <button disabled={busy || detecting || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
           if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
           const form = new FormData();
           files.forEach((f) => form.append("files", f.file));

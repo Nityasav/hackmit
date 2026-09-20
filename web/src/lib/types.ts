@@ -198,7 +198,7 @@ export interface EvidenceRequest {
 export interface Coverage {
   workspace: IntakeWorkspace; snapshot: { id: string; revision: number; created_at: string } | null;
   counts: Record<string, number>;
-  capabilities: { id: string; label: string; status: string; missing: string[]; note: string }[];
+  capabilities: { id: string; label: string; status: string; missing: string[]; note: string; runnable?: boolean; results?: { id: string; title: string; status: string; explanation: string; amount_cents: number | null; action: string; evidence: {source_id: string; line: number}[] }[] }[];
   sources: { id: string; name: string; sha256: string; role: SourceRole; active: boolean }[];
   requests: EvidenceRequest[]; coverage_verified: boolean; note: string;
 }

@@ -189,6 +189,11 @@ def coverage(ws: str):
     return ingestion.coverage(ws)
 
 
+@app.post("/api/workspaces/{ws}/sources/detect")
+def detect_saved_sources(ws: str):
+    return ingestion.detect_saved_sources(ws)
+
+
 @app.get("/api/workspaces/{ws}/sources/{sid}")
 def source(ws: str, sid: str, start: int = Query(default=1, ge=1), limit: int = Query(default=100, ge=1, le=200)):
     return ingestion.source_view(ws, sid, start, limit)

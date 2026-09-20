@@ -563,6 +563,49 @@ def source_bytes(ws, sid):
         return source["name"], bytes(source["original"])
 
 
+def detect_saved_sources(ws):
+    """Prepare a normal validated import; never relabel evidence as accounting.
+
+    Historical originals remain intact. A committed structured copy with the
+    same bytes prevents repeat recovery, including after later supersession.
+    """
+    with db.connect() as connection:
+        config = workspace(connection, ws)
+        if config["kind"] == "public":
+            return {"batch": None, "detected": 0}
+        active_ids = {r["source_id"] for r in active_records(connection, ws)}
+        sources = list(connection.execute("SELECT * FROM sources WHERE ws=? AND committed=1 ORDER BY rowid", (ws,)))
+        represented = {s["sha256"] for s in sources if json.loads(s["options"])["role"] in FIELDS}
+        uploads = []
+        for source in sources:
+            options = FileOptions.model_validate_json(source["options"])
+            if source["id"] not in active_ids or options.role != "document" or source["sha256"] in represented:
+                continue
+            if PurePath(source["name"]).suffix.lower() != ".csv":
+                continue
+            content = bytes(source["original"])
+            try:
+                columns = next(csv.reader(io.StringIO(content.decode("utf-8-sig")), strict=True))
+            except (UnicodeError, csv.Error, StopIteration):
+                continue
+            normalized = [re.sub(r"[ -]+", "_", c.strip().lower()) for c in columns]
+            if len(set(normalized)) != len(columns):
+                continue
+            matches = [role for role, fields in FIELDS.items() if set(fields) <= set(normalized)]
+            if len(matches) != 1:
+                continue
+            options.role = matches[0]
+            allowed = set(FIELDS[options.role]) | set(OPTIONAL_FIELDS)
+            options.mapping = {key: value for key, value in zip(normalized, columns) if key in allowed}
+            uploads.append((source["name"], content, options))
+            represented.add(source["sha256"])
+        if not uploads:
+            return {"batch": None, "detected": 0}
+        # Apply standard limits and all row/accounting validation, atomically.
+        batch = stage_in_transaction(connection, ws, uploads)
+        return {"batch": batch, "detected": len(uploads)}
+
+
 def coverage(ws):
     with db.connect() as connection:
         config = workspace(connection, ws)
@@ -570,6 +613,12 @@ def coverage(ws):
         roles = {r["role"] for r in records}
         counts = {role: sum(r["role"] == role for r in records) for role in FIELDS | dict.fromkeys(DOCUMENT_ROLES)}
         docs = roles & DOCUMENT_ROLES
+        scan_row = connection.execute("SELECT payload FROM review_scans WHERE ws=? ORDER BY rowid DESC LIMIT 1", (ws,)).fetchone()
+        scan = json.loads(scan_row[0]) if scan_row else None
+        snapshot_row = connection.execute("SELECT id FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
+        current_scan = scan if scan and snapshot_row and scan["snapshot_id"] == snapshot_row[0] else None
+        prefixes = {"management_statements": ("management-",), "budget_variance": ("budget-",),
+                    "payroll_allocation_confirmation": ("payroll-", "grant-"), "collections_reconciliation": ("rc-",)}
         capabilities = []
         for key, label, required in [
             ("document_explanation", "Document evidence available", set()),
@@ -586,7 +635,7 @@ def coverage(ws):
             note = "Available for a bounded investigation; completeness of the full institution is unverified."
             if key in {"management_statements", "budget_variance"}:
                 status = "missing" if missing else "needs_review"
-                note = "Input presence is not statement readiness. Full coverage review and report calculation are not implemented."
+                note = "Supply the required records, then run the management checks. Results cover supplied records, not statutory financial statements."
             if key == "payroll_allocation_confirmation" and not missing:
                 status = "needs_review"
                 note = "Documents are supplied, not independently verified. Auditor review and allocation calculation are still required."
@@ -595,7 +644,19 @@ def coverage(ws):
                 note = "Receipts and deposits are supplied records, not a verified complete set. A difference between them is unreconciled, not evidence of loss."
             if config["kind"] == "public" and key != "document_explanation":
                 status, note = "unsupported", "Public-document workspace; no transaction accounting."
-            capabilities.append({"id": key, "label": label, "status": status, "missing": missing, "note": note})
+            results = [item for item in current_scan["checks"] if item["id"].startswith(prefixes.get(key, ("__none__",)))] if current_scan else []
+            runnable = key in prefixes and config["kind"] != "public" and bool(snapshot_row)
+            if runnable:
+                if results:
+                    status = "evidence_gaps" if missing or any(i["status"] == "gap" for i in results) else "differences_found" if any(i["status"] == "attention" for i in results) else "checks_passed"
+                    note = f"{len(results)} checks completed on the current snapshot. View results and source evidence."
+                elif not missing:
+                    status = "ready_to_check"
+                    note = "Records supplied. Run checks to calculate results."
+                else:
+                    note = "Run available checks now; missing evidence will remain unresolved."
+            capabilities.append({"id": key, "label": label, "status": status, "missing": missing, "note": note,
+                                 "runnable": runnable, "results": results})
         sources = []
         active_ids = {r["source_id"] for r in records}
         for f in connection.execute("SELECT id,name,sha256,options,committed FROM sources WHERE ws=? AND committed=1 ORDER BY rowid DESC", (ws,)):
