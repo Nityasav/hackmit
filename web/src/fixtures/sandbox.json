@@ -1,0 +1,843 @@
+{
+ "contract_version": 2,
+ "workspace": {
+  "id": "sandbox",
+  "name": "Sandbox University",
+  "kind": "synthetic",
+  "period": "2026-09-01 — 2026-09-30",
+  "mode": "recorded",
+  "snapshot_id": "snapshot-a00bea1f02324d32",
+  "disabled_tabs": [],
+  "model": "offline-stub",
+  "run_budget": {
+   "used": 24,
+   "total": 100
+  },
+  "source_url": null,
+  "intake": false,
+  "recorded_from": "run CFO-95ec4ff572d7 on 2026-09-19, model offline-stub (prose stubbed offline; amounts from the engine)",
+  "currency": "USD",
+  "profile": "DEMO_US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
+ },
+ "agents": [
+  {
+   "id": "cfo",
+   "name": "CFO Agent",
+   "short": "CFO",
+   "role": "Lead investigator / orchestrator",
+   "status": "idle",
+   "doing": "Candidate review saved; consult Auditor verdicts if available."
+  },
+  {
+   "id": "ap",
+   "name": "AP & Payments",
+   "short": "AP",
+   "role": "Invoices, POs, receipts and payment support",
+   "status": "idle",
+   "doing": "Candidate review saved; consult Auditor verdicts if available."
+  },
+  {
+   "id": "py",
+   "name": "Payroll & Budget",
+   "short": "PY",
+   "role": "Payroll tie-out and fund allocation",
+   "status": "idle",
+   "doing": "Candidate review saved; consult Auditor verdicts if available."
+  },
+  {
+   "id": "gr",
+   "name": "Grants & Compliance",
+   "short": "GR",
+   "role": "Restricted-funds specialist",
+   "status": "idle",
+   "doing": "Candidate review saved; consult Auditor verdicts if available."
+  },
+  {
+   "id": "au",
+   "name": "Internal Auditor",
+   "short": "AU",
+   "role": "Independent reviewer",
+   "status": "idle",
+   "doing": "Bounded review saved; see exact verdicts and scope."
+  }
+ ],
+ "briefing": {
+  "generated_at": "2026-09-20T03:40:46.195196+00:00",
+  "text": "Sandbox University — 2026-09-01 to 2026-09-30: 2 independently reviewed conclusions; 3 unresolved items. Run status: needs_evidence. No financial changes have been approved or applied by the CFO agent. ap-1 — exposure: $1,200.00; cash impact: $0.00. ap-1: Reviewed against the cited originals and the published calculation. py-1 — reclassification: $10,000.00; cash impact: $0.00. py-1: Reviewed against the cited originals and the published calculation.",
+  "actions": [
+   {
+    "label": "Decide 2 proposal(s)",
+    "href": "approvals",
+    "primary": true
+   },
+   {
+    "label": "Review findings",
+    "href": "findings",
+    "primary": false
+   },
+   {
+    "label": "Open the report",
+    "href": "reports",
+    "primary": false
+   }
+  ]
+ },
+ "kpis": [
+  {
+   "label": "Sources committed",
+   "value": "7",
+   "note": "13 record(s) in the current snapshot",
+   "tone": "good"
+  },
+  {
+   "label": "Findings",
+   "value": "2",
+   "note": "2 independently reviewed",
+   "tone": "good"
+  },
+  {
+   "label": "Reviewed exposure",
+   "value": "$11,200.00",
+   "note": "across 2 of 2 finding(s) with a calculation",
+   "tone": "warn"
+  },
+  {
+   "label": "Evidence calls",
+   "value": "24",
+   "note": "1 run(s); 2 coordinator model call(s)",
+   "tone": "good"
+  }
+ ],
+ "workflows": [
+  {
+   "id": "CFO-95ec4ff572d7",
+   "name": "Review the September close, test every published calculation against the originals behind ",
+   "owner": "cfo",
+   "progress": 80,
+   "stages": [
+    {
+     "name": "Plan",
+     "state": "done"
+    },
+    {
+     "name": "AP ap",
+     "state": "done"
+    },
+    {
+     "name": "PY py",
+     "state": "done"
+    },
+    {
+     "name": "GR gr",
+     "state": "human"
+    },
+    {
+     "name": "Report",
+     "state": "done"
+    }
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "id": "CFO-95ec4ff572d7-ap",
+   "agent": "ap",
+   "title": "Review the ap evidence in this snapshot and test it against the award terms and the deterministic calculations published",
+   "workflow": "CFO-95ec4ff572d7",
+   "column": "needs_you",
+   "progress": 100,
+   "eta_s": null,
+   "started_at": "2026-09-20T03:40:44.370216+00:00",
+   "tool_calls": {
+    "used": 10,
+    "budget": 12
+   },
+   "steps": [
+    {
+     "title": "Review the ap evidence in this snapshot and test it against the award terms and the deterministic calculations published for it.",
+     "detail": null,
+     "state": "done",
+     "memory": false
+    },
+    {
+     "title": "Specialist result",
+     "detail": "Reperformed the published calculations against the retrieved originals.",
+     "state": "done",
+     "memory": false
+    },
+    {
+     "title": "1 claim(s) accepted by the Internal Auditor",
+     "detail": "Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-number group(s)",
+     "state": "done",
+     "memory": false
+    }
+   ],
+   "todos": [],
+   "rationale": "Split the close by domain so each specialist reads only what it is responsible for, and the auditor re-reads every cited original.",
+   "note": "Waiting on your decision",
+   "note_tone": "warn",
+   "approval_id": "ACK-CFO-95ec4ff572d7-ap-1"
+  },
+  {
+   "id": "CFO-95ec4ff572d7-py",
+   "agent": "py",
+   "title": "Review the py evidence in this snapshot and test it against the award terms and the deterministic calculations published",
+   "workflow": "CFO-95ec4ff572d7",
+   "column": "needs_you",
+   "progress": 100,
+   "eta_s": null,
+   "started_at": "2026-09-20T03:40:44.370216+00:00",
+   "tool_calls": {
+    "used": 10,
+    "budget": 12
+   },
+   "steps": [
+    {
+     "title": "Review the py evidence in this snapshot and test it against the award terms and the deterministic calculations published for it.",
+     "detail": null,
+     "state": "done",
+     "memory": false
+    },
+    {
+     "title": "Specialist result",
+     "detail": "Reperformed the published calculations against the retrieved originals.",
+     "state": "done",
+     "memory": false
+    },
+    {
+     "title": "1 claim(s) accepted by the Internal Auditor",
+     "detail": "Restricted payroll allocation with no service record of any kind in the snapshot to support it. Basis: No service record",
+     "state": "done",
+     "memory": false
+    }
+   ],
+   "todos": [],
+   "rationale": "Split the close by domain so each specialist reads only what it is responsible for, and the auditor re-reads every cited original.",
+   "note": "Waiting on your decision",
+   "note_tone": "warn",
+   "approval_id": "EV-CFO-95ec4ff572d7-py-1"
+  },
+  {
+   "id": "CFO-95ec4ff572d7-gr",
+   "agent": "gr",
+   "title": "Review the gr evidence in this snapshot and test it against the award terms and the deterministic calculations published",
+   "workflow": "CFO-95ec4ff572d7",
+   "column": "needs_you",
+   "progress": 0,
+   "eta_s": null,
+   "started_at": "2026-09-20T03:40:44.370216+00:00",
+   "tool_calls": {
+    "used": 4,
+    "budget": 12
+   },
+   "steps": [
+    {
+     "title": "Review the gr evidence in this snapshot and test it against the award terms and the deterministic calculations published for it.",
+     "detail": null,
+     "state": "todo",
+     "memory": false
+    },
+    {
+     "title": "Specialist result",
+     "detail": "The evidence was read and every published calculation reperformed; nothing in this domain is unsupported.",
+     "state": "done",
+     "memory": false
+    }
+   ],
+   "todos": [
+    "Grants & Compliance evidence was read but supported no reviewable conclusion; supply the records named in the summary."
+   ],
+   "rationale": "Split the close by domain so each specialist reads only what it is responsible for, and the auditor re-reads every cited original.",
+   "note": "Missing evidence",
+   "note_tone": "warn",
+   "approval_id": null
+  }
+ ],
+ "findings": [
+  {
+   "id": "CFO-95ec4ff572d7-ap-1",
+   "agent": "ap",
+   "title": "Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-number group(s)",
+   "summary": "The calculation reperforms against the cited originals and is not supported by any further record in this snapshot. Internal Auditor accepted this claim: Re-read the cited originals and reperformed the calculation; both agree. Human approval remains separate.",
+   "status": "substantiated",
+   "amount_cents": 120000,
+   "amount_note": "exposure; cash impact 0 cents",
+   "verified_by": "au",
+   "evidence": [
+    {
+     "label": "invoices.csv",
+     "kind": "doc",
+     "tone": "neutral",
+     "edge": null,
+     "locator": "invoices.csv (sha256 3e8c244e5615)",
+     "source_preview": "record_id,vendor_id,invoice_number,service_date,amount,po_id,receipt_id,award_id\nINV-1,V-1,A-100,2026-09-08,1200.00,PO-1,GR-1,\nINV-2,V-1,A-100,2026-09-22,1200.00,,,\nINV-3,V-2,B-200,2026-09-20,850.00,PO-2,,GRANT-1"
+    },
+    {
+     "label": "Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-number group(s) occur more than once.",
+     "kind": "calc",
+     "tone": "neutral",
+     "edge": null,
+     "locator": "ap-duplicate-exposure · reperformed by the Internal Auditor",
+     "source_preview": null
+    }
+   ]
+  },
+  {
+   "id": "CFO-95ec4ff572d7-py-1",
+   "agent": "py",
+   "title": "Restricted payroll allocation with no service record of any kind in the snapshot to support it. Basis: No service record",
+   "summary": "The calculation reperforms against the cited originals and is not supported by any further record in this snapshot. Internal Auditor accepted this claim: Re-read the cited originals and reperformed the calculation; both agree. Human approval remains separate.",
+   "status": "substantiated",
+   "amount_cents": 1000000,
+   "amount_note": "reclassification; cash impact 0 cents",
+   "verified_by": "au",
+   "evidence": [
+    {
+     "label": "payroll.csv",
+     "kind": "doc",
+     "tone": "neutral",
+     "edge": null,
+     "locator": "payroll.csv (sha256 d8a3bd824f44)",
+     "source_preview": "record_id,employee_id,service_start,service_end,pay_date,gross,deductions,net,employer_cost,award_id,award_amount,ledger_entry_id,ledger_line_id\nPAY-1,EMP-01,2026-09-01,2026-09-30,2026-09-15,10000.00,0.00,10000.00,0.00,GRANT-1,10000.00,PAY-1,1"
+    },
+    {
+     "label": "Restricted payroll allocation with no service record of any kind in the snapshot to support it. Basis: No service record is committed, leaving 1 allocated payroll record(s) unsupported.",
+     "kind": "calc",
+     "tone": "neutral",
+     "edge": null,
+     "locator": "payroll-unsupported-by-service-evidence · reperformed by the Internal Auditor",
+     "source_preview": null
+    }
+   ]
+  }
+ ],
+ "approvals": [
+  {
+   "id": "ACK-CFO-95ec4ff572d7-ap-1",
+   "agent": "ap",
+   "kind": "decision",
+   "title": "Decide how to resolve: Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-number group(s)",
+   "summary": "The calculation reperforms against the cited originals and is not supported by any further record in this snapshot. No deterministic calculation backs an amount, so no journal is proposed. Approving records your decision to act on it.",
+   "verified": true,
+   "status": "pending",
+   "journal": null,
+   "effects": null,
+   "finding_id": "CFO-95ec4ff572d7-ap-1"
+  },
+  {
+   "id": "EV-CFO-95ec4ff572d7-py-1",
+   "agent": "py",
+   "kind": "evidence",
+   "title": "Provide a structured allocation record for Restricted payroll allocation with no service record of any kind in the snapshot to support it. Basis: No service record",
+   "summary": "$10,000.00 is unsupported per payroll-unsupported-by-service-evidence, but the committed records do not name a destination fund, so no journal can be proposed from them. A structured allocation record would settle the split.",
+   "verified": true,
+   "status": "pending",
+   "journal": null,
+   "effects": null,
+   "finding_id": "CFO-95ec4ff572d7-py-1"
+  }
+ ],
+ "decisions": [
+  {
+   "id": "decision-CFO-95ec4ff572d7-1",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:44.494146+00:00",
+   "agent": "cfo",
+   "actor": null,
+   "action": "Plan the investigation",
+   "summary": "3 task(s) delegated across the specialist agents.",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "plan.accepted",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:44.494146+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [],
+   "why": "Split the close by domain so each specialist reads only what it is responsible for, and the auditor re-reads every cited original.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "Plan accepted; specialists dispatched."
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-2",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:45.124573+00:00",
+   "agent": "gr",
+   "actor": null,
+   "action": "Finish gr",
+   "summary": "Task ended in state: needs_evidence.",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "task.finished",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:45.124573+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [
+    {
+     "tool": "read_source",
+     "input": "source-ce58511d06ce4dbf",
+     "output": "award-terms.md lines 1-5 of 5; sha256=7ea2d6ae35b00bfeb6b0eaa7839a11eef9e6281e66769fb37ff4a682202804ae"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-b54511889c0942f4",
+     "output": "grants.csv lines 1-2 of 2; sha256=70370e1df6cbc490732eb2e0e22dd7f22ee2799a09a9489c03a750dba4c3493b"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-0aafad2f5a38462c",
+     "output": "ledger.csv lines 1-3 of 3; sha256=defaa09c501388d6238b1407be6e2f6eba9b04063c1f15271b5cf88c1fe1bd34"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-4678e79c46db42ae",
+     "output": "opening.csv lines 1-3 of 3; sha256=150152a486f3f22e04b1be7129edac96888ed617c37c3ab44314f9a1bff6ad7c"
+    }
+   ],
+   "why": "Cite retrieved originals and a published calculation, or state what is missing.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "needs_evidence"
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-3",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:45.499206+00:00",
+   "agent": "au",
+   "actor": null,
+   "action": "Review ap-1: accept",
+   "summary": "Re-read the cited originals and reperformed the calculation; both agree. ",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "review.accept",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:45.499206+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [
+    {
+     "tool": "read_source",
+     "input": "source-e9b57126b2be46a1",
+     "output": "invoices.csv lines 1-4 of 4; sha256=f9e4794c2f36d8a02d31d9f45cc24db0ea10b34f986b01ccd95164d1b9ed1c7d"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-ce58511d06ce4dbf",
+     "output": "award-terms.md lines 1-5 of 5; sha256=7ea2d6ae35b00bfeb6b0eaa7839a11eef9e6281e66769fb37ff4a682202804ae"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-0aafad2f5a38462c",
+     "output": "ledger.csv lines 1-3 of 3; sha256=defaa09c501388d6238b1407be6e2f6eba9b04063c1f15271b5cf88c1fe1bd34"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-4678e79c46db42ae",
+     "output": "opening.csv lines 1-3 of 3; sha256=150152a486f3f22e04b1be7129edac96888ed617c37c3ab44314f9a1bff6ad7c"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-duplicate-exposure",
+     "output": "{\"id\":\"ap-duplicate-exposure\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-nu"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-invoiced-total",
+     "output": "{\"id\":\"ap-invoiced-total\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":325000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total invoiced across the committed invoice records. Basis: 3 invoice record(s) in this snapshot.\"}"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-without-goods-receipt",
+     "output": "{\"id\":\"ap-without-goods-receipt\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":205000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoiced amount with no goods-receipt reference recorded on the invoice. Basis: 2 of 3 invoice(s) refere"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-without-purchase-order",
+     "output": "{\"id\":\"ap-without-purchase-order\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoiced amount with no purchase-order reference recorded on the invoice. Basis: 1 of 3 invoice(s) refe"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-e9b57126b2be46a1",
+     "output": "invoices.csv lines 1-4 of 4; sha256=f9e4794c2f36d8a02d31d9f45cc24db0ea10b34f986b01ccd95164d1b9ed1c7d"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-duplicate-exposure",
+     "output": "{\"id\":\"ap-duplicate-exposure\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-nu"
+    }
+   ],
+   "why": "Independent reperformance against freshly retrieved originals.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "Verdict accept."
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-4",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:45.513038+00:00",
+   "agent": "ap",
+   "actor": null,
+   "action": "Finish ap",
+   "summary": "Task ended in state: done.",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "task.finished",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:45.513038+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [
+    {
+     "tool": "read_source",
+     "input": "source-e9b57126b2be46a1",
+     "output": "invoices.csv lines 1-4 of 4; sha256=f9e4794c2f36d8a02d31d9f45cc24db0ea10b34f986b01ccd95164d1b9ed1c7d"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-ce58511d06ce4dbf",
+     "output": "award-terms.md lines 1-5 of 5; sha256=7ea2d6ae35b00bfeb6b0eaa7839a11eef9e6281e66769fb37ff4a682202804ae"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-0aafad2f5a38462c",
+     "output": "ledger.csv lines 1-3 of 3; sha256=defaa09c501388d6238b1407be6e2f6eba9b04063c1f15271b5cf88c1fe1bd34"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-4678e79c46db42ae",
+     "output": "opening.csv lines 1-3 of 3; sha256=150152a486f3f22e04b1be7129edac96888ed617c37c3ab44314f9a1bff6ad7c"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-duplicate-exposure",
+     "output": "{\"id\":\"ap-duplicate-exposure\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-nu"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-invoiced-total",
+     "output": "{\"id\":\"ap-invoiced-total\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":325000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total invoiced across the committed invoice records. Basis: 3 invoice record(s) in this snapshot.\"}"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-without-goods-receipt",
+     "output": "{\"id\":\"ap-without-goods-receipt\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":205000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoiced amount with no goods-receipt reference recorded on the invoice. Basis: 2 of 3 invoice(s) refere"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-without-purchase-order",
+     "output": "{\"id\":\"ap-without-purchase-order\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoiced amount with no purchase-order reference recorded on the invoice. Basis: 1 of 3 invoice(s) refe"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-e9b57126b2be46a1",
+     "output": "invoices.csv lines 1-4 of 4; sha256=f9e4794c2f36d8a02d31d9f45cc24db0ea10b34f986b01ccd95164d1b9ed1c7d"
+    },
+    {
+     "tool": "calculate",
+     "input": "ap-duplicate-exposure",
+     "output": "{\"id\":\"ap-duplicate-exposure\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-e9b57126b2be46a1\"],\"amount_cents\":120000,\"cash_delta_cents\":0,\"category\":\"exposure\",\"description\":\"Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-nu"
+    }
+   ],
+   "why": "Cite retrieved originals and a published calculation, or state what is missing.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "done"
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-5",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:46.086923+00:00",
+   "agent": "au",
+   "actor": null,
+   "action": "Review py-1: accept",
+   "summary": "Re-read the cited originals and reperformed the calculation; both agree. ",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "review.accept",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:46.086923+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [
+    {
+     "tool": "read_source",
+     "input": "source-ce58511d06ce4dbf",
+     "output": "award-terms.md lines 1-5 of 5; sha256=7ea2d6ae35b00bfeb6b0eaa7839a11eef9e6281e66769fb37ff4a682202804ae"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-519ef09c90494292",
+     "output": "payroll.csv lines 1-2 of 2; sha256=43a875289be1a3b96619dfc242c2c39ec175bea4406bf78890a866f739451e59"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-0aafad2f5a38462c",
+     "output": "ledger.csv lines 1-3 of 3; sha256=defaa09c501388d6238b1407be6e2f6eba9b04063c1f15271b5cf88c1fe1bd34"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-4678e79c46db42ae",
+     "output": "opening.csv lines 1-3 of 3; sha256=150152a486f3f22e04b1be7129edac96888ed617c37c3ab44314f9a1bff6ad7c"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-award-allocation",
+     "output": "{\"id\":\"payroll-award-allocation\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total payroll cost allocated to restricted awards across the committed payroll records. Basis: 1 of 1 payro"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-gross-to-net",
+     "output": "{\"id\":\"payroll-gross-to-net\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":0,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Aggregate payroll gross pay less employee deductions, compared with recorded net pay. Basis: 1 payroll records reconc"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-total-expense",
+     "output": "{\"id\":\"payroll-total-expense\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total payroll expense: gross compensation plus employer costs. Net salary payments are not the expense. Basis:"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-unsupported-by-service-evidence",
+     "output": "{\"id\":\"payroll-unsupported-by-service-evidence\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"reclassification\",\"description\":\"Restricted payroll allocation with no service record of any kind in the snapshot"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-519ef09c90494292",
+     "output": "payroll.csv lines 1-2 of 2; sha256=43a875289be1a3b96619dfc242c2c39ec175bea4406bf78890a866f739451e59"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-unsupported-by-service-evidence",
+     "output": "{\"id\":\"payroll-unsupported-by-service-evidence\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"reclassification\",\"description\":\"Restricted payroll allocation with no service record of any kind in the snapshot"
+    }
+   ],
+   "why": "Independent reperformance against freshly retrieved originals.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "Verdict accept."
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-6",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:46.102022+00:00",
+   "agent": "py",
+   "actor": null,
+   "action": "Finish py",
+   "summary": "Task ended in state: done.",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "task.finished",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:46.102022+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [
+    {
+     "tool": "read_source",
+     "input": "source-ce58511d06ce4dbf",
+     "output": "award-terms.md lines 1-5 of 5; sha256=7ea2d6ae35b00bfeb6b0eaa7839a11eef9e6281e66769fb37ff4a682202804ae"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-519ef09c90494292",
+     "output": "payroll.csv lines 1-2 of 2; sha256=43a875289be1a3b96619dfc242c2c39ec175bea4406bf78890a866f739451e59"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-0aafad2f5a38462c",
+     "output": "ledger.csv lines 1-3 of 3; sha256=defaa09c501388d6238b1407be6e2f6eba9b04063c1f15271b5cf88c1fe1bd34"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-4678e79c46db42ae",
+     "output": "opening.csv lines 1-3 of 3; sha256=150152a486f3f22e04b1be7129edac96888ed617c37c3ab44314f9a1bff6ad7c"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-award-allocation",
+     "output": "{\"id\":\"payroll-award-allocation\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total payroll cost allocated to restricted awards across the committed payroll records. Basis: 1 of 1 payro"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-gross-to-net",
+     "output": "{\"id\":\"payroll-gross-to-net\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":0,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Aggregate payroll gross pay less employee deductions, compared with recorded net pay. Basis: 1 payroll records reconc"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-total-expense",
+     "output": "{\"id\":\"payroll-total-expense\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"none\",\"description\":\"Total payroll expense: gross compensation plus employer costs. Net salary payments are not the expense. Basis:"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-unsupported-by-service-evidence",
+     "output": "{\"id\":\"payroll-unsupported-by-service-evidence\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"reclassification\",\"description\":\"Restricted payroll allocation with no service record of any kind in the snapshot"
+    },
+    {
+     "tool": "read_source",
+     "input": "source-519ef09c90494292",
+     "output": "payroll.csv lines 1-2 of 2; sha256=43a875289be1a3b96619dfc242c2c39ec175bea4406bf78890a866f739451e59"
+    },
+    {
+     "tool": "calculate",
+     "input": "payroll-unsupported-by-service-evidence",
+     "output": "{\"id\":\"payroll-unsupported-by-service-evidence\",\"snapshot_id\":\"snapshot-a00bea1f02324d32\",\"source_ids\":[\"source-519ef09c90494292\"],\"amount_cents\":1000000,\"cash_delta_cents\":0,\"category\":\"reclassification\",\"description\":\"Restricted payroll allocation with no service record of any kind in the snapshot"
+    }
+   ],
+   "why": "Cite retrieved originals and a published calculation, or state what is missing.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "done"
+  },
+  {
+   "id": "decision-CFO-95ec4ff572d7-7",
+   "run": "CFO-95ec4ff572d7",
+   "time": "2026-09-20T03:40:46.195176+00:00",
+   "agent": "cfo",
+   "actor": null,
+   "action": "Publish the run outcome",
+   "summary": "Report status: needs_evidence; no financial changes applied.",
+   "tags": [],
+   "when": {
+    "run": "CFO-95ec4ff572d7",
+    "step": "report.published",
+    "started": "2026-09-20T03:40:44.370216+00:00",
+    "finished": "2026-09-20T03:40:46.195176+00:00",
+    "trigger": "Review the September close, test every published calculation against the originals behind it, and prepare a CFO briefing."
+   },
+   "how": [],
+   "why": "Only independently reviewed claims may enter the report.",
+   "alternatives": [],
+   "memory_checks": [],
+   "outcome": "Run status: needs_evidence."
+  }
+ ],
+ "playbooks": [
+  {
+   "id": "PB-05",
+   "title": "Same vendor + amount, different receipts → clear",
+   "source": "from F-08 · by AP & Payments",
+   "proposed_by": "ap",
+   "replay": {
+    "passed": true,
+    "new_false_positives": 0,
+    "months": [
+     "Aug",
+     "Sep"
+    ]
+   },
+   "uses": "4× in Oct",
+   "status": "active"
+  },
+  {
+   "id": "PB-07",
+   "title": "Service records beat budget sheets for grant payroll",
+   "source": "from F-07 + F-03 · by CFO Agent",
+   "proposed_by": "cfo",
+   "replay": {
+    "passed": true,
+    "new_false_positives": 0,
+    "months": [
+     "Aug",
+     "Sep"
+    ]
+   },
+   "uses": "—",
+   "status": "needs_approval"
+  },
+  {
+   "id": "PB-03",
+   "title": "Transport 60/40 split (contract A)",
+   "source": "valid Sep 1–30 · by Payroll & Budget",
+   "proposed_by": "py",
+   "replay": {
+    "passed": true,
+    "new_false_positives": 0,
+    "months": [
+     "Sep"
+    ]
+   },
+   "uses": "0× in Oct",
+   "status": "retired",
+   "status_note": "contract B superseded A"
+  },
+  {
+   "id": "PB-06",
+   "title": "Auto-clear 100% allocation for dedicated staff",
+   "source": "by Payroll & Budget",
+   "proposed_by": "py",
+   "replay": {
+    "passed": false,
+    "new_false_positives": 1,
+    "months": [
+     "Aug",
+     "Sep"
+    ]
+   },
+   "uses": "—",
+   "status": "blocked",
+   "status_note": "1 false clear on replay"
+  }
+ ],
+ "ablation": {
+  "example": true,
+  "rows": [
+   {
+    "metric": "Questions to you",
+    "without": 9,
+    "with": 4
+   },
+   {
+    "metric": "Tool calls",
+    "without": 88,
+    "with": 63
+   },
+   {
+    "metric": "Minutes to close",
+    "without": 6.8,
+    "with": 4.2
+   },
+   {
+    "metric": "False positives",
+    "without": 1,
+    "with": 1
+   }
+  ],
+  "note": "Same books, same model, same budget. Only reviewed memory differs."
+ },
+ "report": {
+  "title": "CFO review — Sandbox University",
+  "sections": [
+   "Reviewed conclusions (2)",
+   "Unresolved matters (3)",
+   "Limitations"
+  ],
+  "comparisons": [
+   {
+    "label": "Decisions outstanding",
+    "before": "2",
+    "after": "2"
+   },
+   {
+    "label": "Reviewed exposure",
+    "before": "$11,200.00",
+    "after": "$11,200.00"
+   },
+   {
+    "label": "Cash",
+    "before": "unchanged",
+    "after": "unchanged"
+   }
+  ],
+  "markdown": "# CFO review — Sandbox University — 2026-09-01 to 2026-09-30\n\nRun: CFO-95ec4ff572d7\nMode: live; model: offline-stub\nSnapshot: snapshot-a00bea1f02324d32\n\nSandbox University — 2026-09-01 to 2026-09-30: 2 independently reviewed conclusions; 3 unresolved items. Run status: needs_evidence. No financial changes have been approved or applied by the CFO agent.\n\n## Reviewed conclusions\n\n### ap-1: Invoice amount repeating a vendor's invoice number, beyond the first occurrence. Basis: 1 vendor/invoice-number group(s)\n\nThe calculation reperforms against the cited originals and is not supported by any further record in this snapshot.\nDisposition: substantiated. Reviewed by Internal Auditor.\nEvidence: source-e9b57126b2be46a1\nCalculation ap-duplicate-exposure: exposure: $1,200.00; cash impact: $0.00.\nCFO commentary (model-authored): Reviewed against the cited originals and the published calculation.\nProposed next step: Decide how to resolve this before the close is finalised.\nProposed owner: ap; proposed action: Resolve before the close is finalised.\nDependency: authorized human review before any financial change. Due date: not agreed.\n\n### py-1: Restricted payroll allocation with no service record of any kind in the snapshot to support it. Basis: No service record\n\nThe calculation reperforms against the cited originals and is not supported by any further record in this snapshot.\nDisposition: substantiated. Reviewed by Internal Auditor.\nEvidence: source-519ef09c90494292\nCalculation payroll-unsupported-by-service-evidence: reclassification: $10,000.00; cash impact: $0.00.\nCFO commentary (model-authored): Reviewed against the cited originals and the published calculation.\nProposed next step: Decide how to resolve this before the close is finalised.\nProposed owner: py; proposed action: Resolve before the close is finalised.\nDependency: authorized human review before any financial change. Due date: not agreed.\n\n## Unresolved matters\n\n- Payroll / grant evidence: missing service.\n- Budget versus actual: missing budget.\n- gr: Grants & Compliance evidence was read but supported no reviewable conclusion; supply the records named in the summary.\n\n## Limitations\n\n- This is an internal review, not an external audit opinion.\n- Reviewer acceptance is not human approval. No ledger entries or payments were applied.\n- Citations and calculation provenance are checked in code; semantic claim accuracy still depends on the reviewer.\n- CFO model calls: 2; observed evidence tool calls: 24.\n- CFO tokens: 0 input, 0 output. Specialist model tokens are tracked by specialist adapters.\n",
+  "applies_approval": null,
+  "before_label": "As reported",
+  "after_label": "After approved decisions"
+ }
+}

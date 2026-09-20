@@ -1,7 +1,7 @@
 [project]
 name = "schooltrace-api"
 version = "0.1.0"
-description = "SchoolTrace API: accounting engine and bundle endpoints"
+description = "Sherlock API: accounting engine and bundle endpoints"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -11,10 +11,20 @@ dependencies = [
     "openai>=2.0",
     "jsonschema>=4.23",
     "python-dotenv>=1.0",
+    "pypdfium2>=5.13.0",
+    "pillow>=12.3.0",
+    "httpx>=0.28.1",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [project.optional-dependencies]
 cfo = ["openai"]
+extractor = [
+    "accelerate>=1.15.0",
+    "peft>=0.21.0",
+    "torch>=2.14.0",
+    "transformers>=5",
+]
 
 [dependency-groups]
 dev = ["pytest>=8.3", "httpx>=0.28"]

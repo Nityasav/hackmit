@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from ..accounting.ap import calculations as ap_calculations
 from ..accounting.grants import calculations as grants_calculations
 from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
+from ..accounting.review import checks
 from ..cfo.schemas import Calculation, CalculationSpec, Scope, Source, SourceSpan
 from ..ingestion import coverage, financial_records
 
@@ -59,6 +60,18 @@ async def _engine_calculations(workspace: str, available: set[str]) -> list[Payr
     published = (payroll_calculations(records, service_present)
                  + ap_calculations(records)
                  + grants_calculations(records))
+    known = {calculation.id for calculation in published}
+    for item in checks(records, {}):
+        if (item["amount_cents"] is not None
+                and item["id"].startswith(("ap-duplicate-", "budget-"))
+                and item["id"] not in known):
+            published.append(PayrollCalculation(
+                id=item["id"], description=item["title"],
+                source_ids=tuple(sorted({e["source_id"] for e in item["evidence"]})),
+                amount_cents=item["amount_cents"], cash_delta_cents=0,
+                category="exposure" if item["status"] == "attention" else "none",
+                basis=item["explanation"],
+            ))
     return [c for c in published if c.source_ids and set(c.source_ids).issubset(available)]
 
 
@@ -96,6 +109,8 @@ class IntakeDataSource:
             if missing:
                 gaps.append("Deterministic amounts are published for " + ", ".join(domains)
                             + " only; " + ", ".join(missing) + " amounts cannot be confirmed in this run.")
+            if any(c.id.startswith(("ap-duplicate-", "budget-")) for c in engine):
+                gaps.append("Amount inventory includes exact-key invoice duplicate candidates and expense budget variance where supplied. No payment confirmation, full three-way matching, statutory accounts or full-population grant compliance is implied.")
         else:
             gaps.append("No deterministic calculation inventory is published for this workspace; "
                         "amounts cannot be confirmed in this run.")

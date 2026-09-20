@@ -1,4 +1,5 @@
 "use client";
+import { SherlockMark } from "@/components/SherlockMark";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -7,9 +8,11 @@ import { motion } from "framer-motion";
 import {
   Bot,
   Brain,
+  Settings,
   FileSearch,
   FileText,
   LayoutDashboard,
+  LogOut,
   type LucideIcon,
   ScrollText,
   SquareKanban,
@@ -33,7 +36,7 @@ const ICON: Record<TabId, LucideIcon> = {
   learning: Brain,
 };
 
-export function AppSidebar() {
+export function AppSidebar({ userEmail }: { userEmail: string }) {
   const [open, setOpen] = useState(false);
 
   // Keeps `open` true only while the cursor is actually over the rail. The component's
@@ -64,13 +67,13 @@ export function AppSidebar() {
   return (
     <Sidebar open={open} setOpen={setOpen}>
       <SidebarBody data-sidebar-rail className="justify-between gap-10">
-        <SidebarContent />
+        <SidebarContent userEmail={userEmail} />
       </SidebarBody>
     </Sidebar>
   );
 }
 
-function SidebarContent() {
+function SidebarContent({ userEmail }: { userEmail: string }) {
   const { open, setOpen } = useSidebar();
   const { bundle, ws, setWs, intakeWorkspaces } = useData();
   const pathname = usePathname();
@@ -85,14 +88,15 @@ function SidebarContent() {
   ];
   const current = workspaces.find((workspace) => workspace.id === ws) ?? { id: ws, name: bundle.workspace.name, short: initials(bundle.workspace.name) };
 
-  const links = TABS.map((tab) => ({
+  const primaryTabs = [TABS[0], { id: "workflows" as const, label: "Scan", href: "/scan" }, TABS[3], { ...TABS[4], label: "Follow-up" }, TABS[5]];
+  const links = primaryTabs.map((tab) => ({
     id: tab.id,
     label: tab.label,
     href: tab.href,
     icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
     active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id),
-    badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
+    disabled: tab.href !== "/scan" && bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows", "learning"].includes(tab.id)),
+    badge: tab.id === "approvals" && !bundle.workspace.intake && pending > 0 ? String(pending) : undefined,
   }));
 
   return (
@@ -114,11 +118,11 @@ function SidebarContent() {
                 onChange={(event) => {
                   const next = event.target.value;
                   if (next === "__new") {
-                    router.push("/#new-institution");
+                    router.push("/command#new-institution");
                     window.dispatchEvent(new Event("schooltrace:new-institution"));
                   } else {
                     setWs(next);
-                    router.push("/");
+                    router.push("/command");
                   }
                   setOpen(false);
                 }}
@@ -160,7 +164,7 @@ function SidebarContent() {
                   {link.badge}
                 </motion.span>
               )}
-              {link.id === "approvals" && pending > 0 && !open && (
+              {link.id === "approvals" && !bundle.workspace.intake && pending > 0 && !open && (
                 <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-none bg-ink ring-2 ring-surface-2" />
               )}
             </div>
@@ -168,14 +172,43 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-col gap-1">
+        <SidebarLink link={{ label: "Documents & model tools", href: "/documents", icon: <Brain className="h-7 w-7 shrink-0 p-1 text-ink-dim" /> }} />
+        <SidebarLink link={{ label: "Access & data", href: "/access", icon: <Settings className="h-7 w-7 shrink-0 p-1 text-ink-dim" /> }} />
         <SidebarLink
           link={{
-            label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
-            href: "/board",
+            label: bundle.workspace.intake ? "Five-agent review & activity" : `${bundle.agents.length} agents · ${bundle.workspace.model}`,
+            href: bundle.workspace.intake ? "/cfo" : "/board",
             icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
           }}
         />
+
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            title={`Sign out ${userEmail}`}
+            className={cn(
+              "group/sidebar flex w-full cursor-pointer items-center gap-2 py-2 transition-colors hover:bg-surface-3",
+              open ? "justify-start px-2" : "justify-center px-0",
+            )}
+          >
+            <LogOut className="h-7 w-7 flex-shrink-0 p-1 text-ink-dim" />
+            <motion.span
+              animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
+              className="min-w-0 truncate text-sm text-ink-dim transition duration-150 group-hover/sidebar:translate-x-1"
+            >
+              Sign out
+            </motion.span>
+          </button>
+        </form>
+
+        <motion.div
+          animate={{ display: open ? "block" : "none", opacity: open ? 1 : 0 }}
+          className="truncate px-2 pb-1 font-accent text-[12px] text-ink-faint"
+          title={userEmail}
+        >
+          {userEmail}
+        </motion.div>
       </div>
     </>
   );
@@ -204,13 +237,13 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={28} />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="whitespace-pre font-medium text-ink"
+        className="whitespace-nowrap text-xl font-semibold leading-none tracking-[-0.035em] text-ink"
       >
-        SchoolTrace
+        Sherlock
       </motion.span>
     </Link>
   );
@@ -220,9 +253,10 @@ export const LogoIcon = () => {
   return (
     <Link
       href="/"
+      aria-label="Sherlock home"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={28} />
     </Link>
   );
 };

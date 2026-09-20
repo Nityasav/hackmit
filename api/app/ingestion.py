@@ -367,27 +367,31 @@ def revalidate(connection, ws, batch_id):
 
 
 def stage(ws, uploads: list[tuple[str, bytes, FileOptions]]):
+    with db.connect() as connection:
+        return stage_in_transaction(connection, ws, uploads)
+
+
+def stage_in_transaction(connection, ws, uploads):
     if not 1 <= len(uploads) <= MAX_FILES or sum(len(b) for _, b, _ in uploads) > MAX_BATCH:
         fail("batch_limit", "Upload 1–20 files with a combined size of at most 50 MB", 413)
-    with db.connect() as connection:
-        config = workspace(connection, ws)
-        bid = db.uid("import")
-        connection.execute("INSERT INTO batches(id,ws,status,base_revision,created_at) VALUES(?,?,?,?,?)",
-                           (bid, ws, "parsing", config["revision"], db.now()))
-        for name, content, options in uploads:
-            if not name or len(name) > 200 or "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
-                fail("invalid_filename", "Use a simple filename without directories or control characters")
-            if PurePath(name).suffix.lower() not in {".csv", ".txt", ".md"}:
-                fail("unsupported_format", "Supported formats: CSV, UTF-8 TXT and Markdown. PDF/OCR and spreadsheets are not enabled.", 415)
-            if not content or len(content) > MAX_FILE:
-                fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
-            connection.execute(
-                "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
-                (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),
-            )
-        revalidate(connection, ws, bid)
-        db.event(connection, ws, "import_staged", {"batch_id": bid})
-    return get_batch(ws, bid)
+    config = workspace(connection, ws)
+    bid = db.uid("import")
+    connection.execute("INSERT INTO batches(id,ws,status,base_revision,created_at) VALUES(?,?,?,?,?)",
+                       (bid, ws, "parsing", config["revision"], db.now()))
+    for name, content, options in uploads:
+        if not name or len(name) > 200 or "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
+            fail("invalid_filename", "Use a simple filename without directories or control characters")
+        if PurePath(name).suffix.lower() not in {".csv", ".txt", ".md"}:
+            fail("unsupported_format", "This intake accepts CSV/TXT/Markdown. Use the Document lab for PDF/image extraction.", 415)
+        if not content or len(content) > MAX_FILE:
+            fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
+        connection.execute(
+            "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
+            (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),
+        )
+    revalidate(connection, ws, bid)
+    db.event(connection, ws, "import_staged", {"batch_id": bid})
+    return batch_view(connection, ws, bid)
 
 
 def batch_view(connection, ws, bid):
@@ -448,6 +452,16 @@ def commit(ws, bid, body: CommitRequest):
             fail("stale_preview", "Workspace or mappings changed. Revalidate the preview before committing.", 409)
         if batch["status"] != "ready_to_commit":
             fail("validation_blocked", "Resolve or explicitly exclude invalid files before committing", 409)
+        # Corrections can change after a document-derived preview was staged.
+        # Never commit a stale transcription or superseded review as current facts.
+        from . import extraction
+        for staged in extraction.items(connection, ws, "staging"):
+            if staged["batch_id"] == bid:
+                correction = extraction.get(connection, ws, staged["correction_id"], "correction")
+                document = extraction.document(connection, ws, correction["document_id"])
+                latest = [x for x in extraction.items(connection, ws, "correction") if x["document_id"] == document["id"]][-1]
+                if latest["id"] != correction["id"] or correction["text_sha256"] != document["text_sha256"]:
+                    fail("stale_extraction", "Extraction correction changed; stage the latest reviewed version", 409)
         files = connection.execute("SELECT * FROM sources WHERE ws=? AND batch_id=?", (ws, bid)).fetchall()
         current, additions, issues, _ = candidate_records(connection, ws, files)
         issues += ledger_issues(current, config)
@@ -498,7 +512,17 @@ def source_view(ws, sid, start=1, limit=100):
             lines = bytes(source["original"]).decode("utf-8-sig").splitlines()
         except UnicodeDecodeError:
             lines = ["[Not readable UTF-8; original preserved for download]"]
+        origin = None
+        from . import extraction
+        for staged in extraction.items(connection, ws, "staging"):
+            if staged["batch_id"] == source["batch_id"]:
+                corrected = extraction.get(connection, ws, staged["correction_id"], "correction")
+                doc = extraction.document(connection, ws, staged["document_id"])
+                origin = {"document_id": doc["id"], "name": doc["name"], "sha256": doc["sha256"],
+                          "correction_id": corrected["id"], "has_images": doc["suffix"] not in {".txt", ".md"},
+                          "pages": sorted({v["page"] for r in corrected["output"]["records"] for v in r.values() if v["status"] == "present"})}
         return {"id": sid, "name": source["name"], "sha256": source["sha256"],
+                "extraction_origin": origin,
                 "committed": bool(source["committed"]), "options": json.loads(source["options"]),
                 "line_count": len(lines), "lines": [{"number": i + 1, "text": line} for i, line in enumerate(lines) if start <= i + 1 < start + limit]}
 

@@ -25,6 +25,7 @@ class RunRepository:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.execute(TABLE)
+        Path(self.path).chmod(0o600)
 
     @contextmanager
     def _connect(self):

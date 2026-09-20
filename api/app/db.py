@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -82,6 +82,32 @@ CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
 CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
 CREATE INDEX IF NOT EXISTS workspace_cfo_runs ON cfo_runs(workspace, created_at);
 CREATE INDEX IF NOT EXISTS workspace_approvals ON approvals(ws, status);
+CREATE TABLE IF NOT EXISTS review_scans (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS review_actions (
+    ws TEXT NOT NULL REFERENCES workspaces(id), snapshot_id TEXT NOT NULL,
+    finding_id TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL,
+    PRIMARY KEY(ws, snapshot_id, finding_id)
+);
+CREATE TABLE IF NOT EXISTS demo_sessions (
+    ws TEXT PRIMARY KEY REFERENCES workspaces(id), evidence_added INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS extraction_items (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS extraction_workspace ON extraction_items(ws, kind);
+CREATE TABLE IF NOT EXISTS extraction_documents (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    name TEXT NOT NULL, sha256 TEXT NOT NULL, original BLOB NOT NULL,
+    payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(ws, sha256)
+);
+CREATE TABLE IF NOT EXISTS extraction_active (
+    ws TEXT PRIMARY KEY REFERENCES workspaces(id), model_id TEXT NOT NULL,
+    version INTEGER NOT NULL, evaluation_id TEXT NOT NULL
+);
 """ + f"PRAGMA user_version = {SCHEMA_VERSION};"
 
 
@@ -101,7 +127,9 @@ def encode(value) -> str:
 def connect():
     root = Path(os.environ.get("SCHOOLTRACE_DATA_DIR", Path(__file__).resolve().parents[1] / "data"))
     root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
     connection = sqlite3.connect(root / "schooltrace.sqlite3", timeout=15)
+    (root / "schooltrace.sqlite3").chmod(0o600)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]

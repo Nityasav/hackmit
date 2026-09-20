@@ -1,4 +1,10 @@
-# SchoolTrace
+# Sherlock
+
+Brand: Sherlock — follow the evidence. The magnifying-glass mark is shared by the
+site header, sidebar, login and favicon. Existing `SCHOOLTRACE_*` environment
+variables, database filenames, reviewer header, session cookie and extraction
+schema IDs remain compatibility identifiers; renaming the product does not reset
+saved workspaces or break the partner model contract.
 
 An **Office of the CFO for schools, run by AI agents.** Our project for [HackMIT 2026](https://hackmit.org)
 (Maximor track).
@@ -6,7 +12,7 @@ An **Office of the CFO for schools, run by AI agents.** Our project for [HackMIT
 ## What it does
 
 Schools lose track of money across payroll, purchasing and grants, and only find out at audit time.
-SchoolTrace puts a team of five AI agents on the books: they investigate, cite their evidence, re-check each
+Sherlock puts a team of five AI agents on the books: they investigate, cite their evidence, re-check each
 other, and hand you a decision. You approve, and every affected report updates at once.
 
 - **CFO Agent** plans the work and writes the briefing and the close pack
@@ -50,6 +56,23 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 
 ## What's implemented
 
+### Laptop-first guided demo
+
+Open **http://localhost:3000/** and choose **Try the guided financial scan**. This
+creates and commits a fresh fictional September workspace, runs actual deterministic
+record checks and opens a guided review. Inspect the repeated invoice, open source
+lines, assign follow-up, add the withheld service memo, rescan and export the director
+briefing. No API call is made by this button. Optional live five-agent review is a
+separate, clearly labelled action on `/cfo`; its accepted claims flow into the same
+Findings/Reports view. Standalone candidates remain explicitly unverified.
+
+New uploaded-workspace pages use the shared snapshot review feed. Fixed example
+workspaces remain labelled demonstrations. Proposal approval records a human decision
+only: it does not post a journal, release a payment or certify compliance.
+
+See [DEMO_IMPLEMENTATION.md](DEMO_IMPLEMENTATION.md) for test results, the demo script,
+optional role/workspace access configuration and remaining production gates.
+
 Document intake is backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
 review column mappings and validation issues, commit an immutable snapshot, inspect original source
 lines, and track missing evidence. New workspaces start empty and never inherit demo findings.
@@ -67,10 +90,16 @@ Approvals. A finding carries an amount only when `app/accounting/` produced one 
 reperformed it; a proposal contains a journal only when the committed records name both funds.
 Approving one recomputes the report's before and after in exact cents.
 
-Not implemented: the Learning tab's playbooks and replay gate, full financial statements, and any
-posting of an approved change to a real system — an approval records a decision, it does not move
-money. Input availability is not an audit conclusion. PDF extraction/OCR, Excel files and live
-financial connectors remain deferred.
+The dashboard also includes clearly labelled fixed demo workspaces. Connected five-agent
+investigation, invoice duplicate candidates, expense budget variance, payroll/grant checks and
+human follow-up work within the fictional profile. The document lab preserves PDF/image originals,
+supports bounded local preprocessing and human-reviewed extraction, and stages approved results
+back through normal intake validation.
+
+Not implemented: automatic playbook learning and replay gates, full financial statements,
+structured three-way matching, model training, or posting an approved change to a real system — an
+approval records a decision, it does not move money. Input availability is not an audit conclusion.
+Excel files and live financial connectors remain deferred.
 
 ## Getting started
 
@@ -215,4 +244,26 @@ reports state. Measured numbers come from the evaluator, never from a slide.
 
 ## Team
 
+### Web login configuration
+
+The web dashboard requires Supabase sign-in. Set `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` in ignored `web/.env.local`, then restart the web
+server (rebuild for production). Use the publishable/anon key, never a service-role
+key. Without configuration, the app returns a setup message with HTTP 503 and
+does not bypass authentication. Supabase web login and the optional local API
+accounts are separate; this is still a laptop demo, not end-to-end hosted tenant
+authorization.
+
 - [Nityasav](https://github.com/Nityasav) · [hppddub](https://github.com/hppddub) · Maxim · Stanley
+## Documents, continuous updates, and partner model training
+
+Use **Records & overview → Keep this institution up to date** to append files to an
+existing institution, inspect snapshot changes and rescan. For PDFs/images use
+**Documents & model improvement** (`/documents`, or Learning for an intake workspace).
+Originals, document versions, OCR revisions, corrections and source citations are
+preserved. Accepted extraction remains staged until a human commits validated intake.
+
+The Document lab also freezes authorized training/evaluation datasets, exports JSONL
+and manifests, benchmarks local model candidates and gates human promotion/rollback.
+Your partner supplies the trained weights and local inference endpoint; none are
+silently installed or trained. Full handoff: `EXTRACTION_IMPLEMENTATION.md`.

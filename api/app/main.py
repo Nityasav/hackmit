@@ -1,4 +1,4 @@
-"""SchoolTrace API.
+"""Sherlock API.
 
 Run: uv run uvicorn app.main:app --reload --port 8000
 Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -23,30 +23,45 @@ from . import approvals, ingestion, projection, store
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
+from .reviews import router as review_router
+from . import security
+from .extraction import router as extraction_router
+from .updates import router as updates_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .extraction import interrupt_jobs
+    interrupt_jobs()
     yield
     if hasattr(app.state, "cfo_runtime"):
         await app.state.cfo_runtime.close()
 
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
+app.include_router(review_router)
+app.include_router(security.router)
+app.include_router(extraction_router)
+app.include_router(updates_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
+    try:
+        await security.guard(request)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     # /api/approvals is a write path into intake data too, now that a decision on an
     # intake workspace is recorded rather than refused.
     guarded = ("/api/workspaces", "/api/approvals")
@@ -61,7 +76,10 @@ async def intake_write_guard(request: Request, call_next):
             oversized = True
         if oversized:
             return JSONResponse(status_code=413, content={"detail": {"code": "batch_limit", "message": "Request exceeds 51 MB including upload metadata"}})
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/api/health")
@@ -94,8 +112,9 @@ def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
 
 
 @app.get("/api/workspaces")
-def workspaces():
-    return ingestion.list_workspaces()
+def workspaces(request: Request):
+    user = request.state.user
+    return [ws for ws in ingestion.list_workspaces() if user["role"] == "admin" or ws["id"] in user["workspaces"]]
 
 
 @app.post("/api/workspaces", status_code=201)

@@ -1,17 +1,17 @@
-# Research behind SchoolTrace's CFO coordinator
+# Research behind Sherlock's CFO coordinator
 
 Research reviewed September 19, 2026. These sources motivate design choices;
-their benchmark results are not SchoolTrace's measured results.
+their benchmark results are not Sherlock's measured results.
 
 ## References and implementation choices
 
-| Source | Relevant result or pattern | SchoolTrace application |
+| Source | Relevant result or pattern | Sherlock application |
 | --- | --- | --- |
 | Anthropic, [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents), December 2024 | Orchestrator-workers decomposes and delegates work; evaluator-optimizer uses feedback to improve a result. The article recommends simple, composable implementations. | CFO plans a task DAG; specialist results pass independent auditor review; a rejected claim receives a bounded follow-up. Implemented directly in Python, without a required agent framework. |
 | Anthropic, [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system), June 2025 | Lead-agent planning, focused subagent assignments, and independent parallel exploration can help breadth-first research. Coordination and token costs are substantial. | Delegate only independent tasks, cap concurrency at two, pass scoped inventories and dependency results rather than broadcasting full conversations. This is an engineering case study, not a financial-controls benchmark. |
 | Wu et al., [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155v2), 2023 | Customizable agents combine models, tools, and human input through programmable interaction patterns. | Typed specialist and auditor interfaces, explicit handoffs, and a separate human approval boundary. We reference the pattern; we do not claim to use the AutoGen library. |
 | Kim et al., [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296v3), revised April 2026 | Controlled comparisons find that architecture-task fit matters: decomposable work can benefit, sequential planning can degrade, and coordination adds overhead. Central verification can reduce error propagation. | Small task plans, explicit dependencies, centralized validation, independent review, and bounded execution instead of an unrestricted group conversation. The cited version is v3; older versions report different experimental counts. |
-| Żywot et al., [Can Small Agents Collaborate to Beat a Single Large Language Model?](https://arxiv.org/abs/2601.11327v2), revised April 2026 | Their tool-intensive benchmark results emphasize orchestrator capacity and reasoning; additional reasoning in workers offers limited or negative benefits in their setup. | Spend initial model capability on the CFO, evaluate smaller specialist/planner alternatives empirically, and avoid assuming that adding more small models improves results. This does not establish a particular model as best for SchoolTrace. |
+| Żywot et al., [Can Small Agents Collaborate to Beat a Single Large Language Model?](https://arxiv.org/abs/2601.11327v2), revised April 2026 | Their tool-intensive benchmark results emphasize orchestrator capacity and reasoning; additional reasoning in workers offers limited or negative benefits in their setup. | Spend initial model capability on the CFO, evaluate smaller specialist/planner alternatives empirically, and avoid assuming that adding more small models improves results. This does not establish a particular model as best for Sherlock. |
 
 ## OpenAI versus local Qwen
 
@@ -32,7 +32,7 @@ calls, independently repeated calculation results, and report citation membershi
 
 ## Presentation wording
 
-> SchoolTrace uses a research-informed orchestrator-worker architecture. The CFO
+> Sherlock uses a research-informed orchestrator-worker architecture. The CFO
 > delegates bounded financial investigations, an independent auditor checks original
 > evidence and calculations, and the CFO follows up on rejected claims. Deterministic
 > software enforces scope, budgets, and the human approval boundary.

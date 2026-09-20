@@ -1,4 +1,4 @@
-# SchoolTrace — Product and Technical Specification
+# Sherlock — Product and Technical Specification
 
 Version: 1.0 | Date: 2026-09-19 | Status: implementation-ready hackathon design
 
@@ -16,7 +16,7 @@ Educational institutions can have substantial finance and compliance teams and s
 
 The product hypothesis is that these disconnected records and unresolved exceptions create preventable audit-readiness problems. Consequences can include rework, repayment exposure, distorted spending decisions, and disruption to services students depend on. Funding and financing consequences are possible, not automatic. Do not claim all schools mismanage money or invent prevalence statistics. See [SOURCES.md](SOURCES.md).
 
-SchoolTrace collects financial records, establishes a traceable accounting baseline, and coordinates agents to answer: **What is wrong, what evidence proves it, what remains uncertain, and what action would resolve it?**
+Sherlock collects financial records, establishes a traceable accounting baseline, and coordinates agents to answer: **What is wrong, what evidence proves it, what remains uncertain, and what action would resolve it?**
 
 It supports internal preparation for an external audit. Its auditor agent is an independent review role within the application, not a licensed external auditor or an audit opinion.
 
@@ -235,11 +235,25 @@ fresh Auditor reads/reperformance, bounded retries and stale-snapshot rejection.
 No payment or posting tools are exposed. Clients/budgets are invocation-local.
 
 This is a bounded investigation workflow, not the full benchmark implementation.
-AP/Grants observations are supported, but confirmed financial amounts are limited
-to the intake engine's existing payroll calculations. Results are persisted in CFO
-runs and displayed on `/cfo`; standalone findings are not silently imported or
-marked verified. Model training, generalized AP calculations, a global dollar-cost
-ceiling and held-out accuracy measurement remain future work.
+AP/Grants observations are supported. The laptop director workflow now additionally
+publishes exact-key invoice duplicate candidate amounts and expense budget variance
+through the deterministic evidence gateway. These are bounded checks, not complete
+AP/payment or grant eligibility assurance.
+
+The new home page offers a one-click fictional scan. `/scan`, Findings, Follow-up,
+Reports and the uploaded-workspace overview share a snapshot-aware review feed:
+rules checks, latest standalone candidates and final Auditor-accepted central claims
+are labelled separately. A human may assign an owner, request evidence and decide
+a proposed correction; version checks and history preserve the distinction between
+proposal acceptance and financial execution. Source commits invalidate applicability
+of older decisions. Reports export current evidence and explicit gaps.
+
+Laptop safeguards include loopback/origin restrictions, optional account sessions,
+role/workspace permissions, protected local file permissions and admin-confirmed
+logical deletion. This does not establish enterprise privacy compliance, encrypted
+storage or an Ontario accounting profile. Model training, complete PO/receipt matching,
+statutory statements, a global dollar-cost ceiling and held-out model accuracy remain
+future work. `DEMO_IMPLEMENTATION.md` documents the demo, tests and deployment gates.
 
 Five roles, shown in the UI as an Office of the CFO:
 
@@ -486,3 +500,22 @@ Recovery behaviors: quarantine malformed imports; show OCR uncertainty; keep con
 | Own measure of better | Hidden issue detection plus false positives, consistency, interventions, and memory ablation |
 
 Supporting documents: [accounting](ACCOUNTING_CONTROLS.md), [evaluation](DATA_AND_EVALUATION.md), [implementation](IMPLEMENTATION_PLAN.md), [role prompts](AGENT_PROMPTS.md), [handoff](BUILD_PROMPT.md), [demo](DEMO.md), [sources](SOURCES.md).
+# Implementation checkpoint: document lifecycle and incremental updates
+
+The `max` implementation now includes a laptop-local document/extraction review
+pipeline and a benchmark-gated release workflow; see `EXTRACTION_IMPLEMENTATION.md`
+for the precise interface, thresholds, limitations and partner training handoff.
+PDF/image originals are retained; local preprocessing produces page text, and
+reviewed extracted fields link back to original pages. OCR and field corrections
+are versioned. Only human-approved fields enter staged intake; normal validation
+and explicit commit still apply. Uploaded files can be appended or versioned in
+an existing institution. The dashboard shows snapshot changes and offers explicit
+rules-only or live five-agent rescans. No unseen file silently triggers paid calls.
+
+The improvement workflow supports permissioned correction datasets, frozen train
+and held-out splits, immutable model manifests, paired benchmark jobs, promotion,
+rollback and retirement. It does not train weights: partner models implement the
+versioned local page-text extraction contract. Thresholds are engineering gates,
+not measured accuracy. Promotion requires benchmark results and admin approval;
+model output never becomes training truth automatically. No recursive weight
+updates, automatic drift detector or hosted multi-tenant security is claimed.

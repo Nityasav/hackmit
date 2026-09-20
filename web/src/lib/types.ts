@@ -257,6 +257,7 @@ export interface Coverage {
 export interface SourceDetail {
   id: string; name: string; sha256: string; committed: boolean; options: SourceOptions;
   line_count: number; lines: { number: number; text: string }[];
+  extraction_origin?: { document_id: string; name: string; sha256: string; correction_id: string; has_images: boolean; pages: number[] } | null;
 }
 export interface AgentCitation { source_id: string; line: number; quote: string }
 export interface AgentRun {

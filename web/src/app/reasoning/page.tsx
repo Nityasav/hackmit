@@ -6,6 +6,7 @@ import { useData } from "@/lib/data";
 import type { AgentId, Decision } from "@/lib/types";
 import { AGENT_NAME, PageHeader } from "@/components/ui";
 import { DecisionCard } from "@/components/reasoning/DecisionCard";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 export default function ReasoningPage() {
   return (
@@ -36,6 +37,8 @@ function Reasoning() {
   const grouped = runs
     .map((r) => ({ run: r, items: filtered.filter((d) => d.run === r) }))
     .filter((g) => g.items.length > 0);
+
+  if (bundle.workspace.intake) return <ReviewWorkspace />;
 
   return (
     <>

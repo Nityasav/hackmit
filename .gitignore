@@ -24,3 +24,7 @@ api/data/
 schooltrace/package-lock.json
 bun.lockb
 .gstack/
+
+# macOS/iCloud duplicates ("file 2.ts"). They shadow real files and break
+# typecheck, because lint and tsconfig exceptions target the real names.
+* [0-9].*

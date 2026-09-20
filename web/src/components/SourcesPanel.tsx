@@ -5,7 +5,8 @@ import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 import type { IntakeUiProgress } from "@/lib/workflow";
-import sample from "../../../contracts/fixtures/intake.json";
+import { FileUpdates } from "@/components/FileUpdates";
+import sample from "@/fixtures/intake.json";
 
 const ROLES: Record<SourceRole, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
@@ -135,6 +136,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     {message && <p role="status" className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-800">{message}</p>}
 
     {isIntake && <>
+      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span>{coverage?.workspace.scope || "Loading scope…"}</span>
         <span>· {coverage?.workspace.currency}</span><span>· {coverage?.workspace.profile}</span>
@@ -282,7 +284,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         </div>
         {startedRun && (
           <p className="mt-2 text-xs">
-            <Link href={`/cfo?run=${encodeURIComponent(startedRun)}`} className="font-semibold text-teal-700 underline">
+            <Link href="/cfo" className="font-semibold text-teal-700 underline">
               Follow run {startedRun} →
             </Link>
           </p>
@@ -384,8 +386,13 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     </Modal>}
     {source && <Modal title={source.name} close={() => setSource(null)}>
       <p className="break-all font-mono text-[10px] text-slate-400">SHA-256 {source.sha256}</p>
-      <p className="my-2 text-xs">{source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
-      <a className="text-xs text-teal-700 underline" href={API_URL + base + "/sources/" + source.id + "/download"}>Download unchanged original</a>
+      <p className="my-2 text-xs">{source.extraction_origin ? "Human-reviewed extraction (derived from the original below)" : source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
+      <a className="text-xs text-teal-700 underline" href={API_URL + base + "/sources/" + source.id + "/download"}>{source.extraction_origin ? "Download reviewed extraction" : "Download unchanged original"}</a>
+      {source.extraction_origin && <div className="my-2 text-xs">
+        <p>This record was extracted and reviewed. The original document remains preserved separately.</p>
+        <a className="text-teal-700 underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin.document_id}/original`}>Download original: {source.extraction_origin.name}</a>
+        {source.extraction_origin.has_images && source.extraction_origin.pages.map((page) => <a key={page} target="_blank" rel="noreferrer" className="ml-3 text-teal-700 underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin!.document_id}/pages/${page}`}>Original page {page}</a>)}
+      </div>}
       <div className="my-3 max-h-[50vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-3">
         {source.lines.map((l) => <div key={l.number} className="flex gap-3 font-mono text-xs"><span className="w-10 flex-none select-none text-right text-slate-400">{l.number}</span><pre className="whitespace-pre-wrap break-all">{l.text || " "}</pre></div>)}
       </div>

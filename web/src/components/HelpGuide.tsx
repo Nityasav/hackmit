@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { HelpCircle, X } from "lucide-react";
 import { useData } from "@/lib/data";
 
-const SEEN_KEY = "schooltrace.help.seen.v1";
+const SEEN_KEY = "sherlock.help.seen.v1";
 
 export function HelpGuide() {
   const { bundle } = useData();
@@ -36,13 +36,13 @@ export function HelpGuide() {
       <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-10 shrink-0 items-center gap-2 border border-line bg-surface px-3 text-[13px] font-semibold hover:bg-surface-2" aria-haspopup="dialog">
         <HelpCircle aria-hidden="true" className="h-4 w-4" /> <span className="hidden sm:inline">Help</span>
       </button>
-      <dialog ref={dialog} aria-labelledby="schooltrace-help-title" onCancel={(event) => { event.preventDefault(); close(); }} onClick={(event) => { if (event.target === event.currentTarget) close(); }} className="m-auto max-h-[90vh] w-[min(760px,calc(100vw-2rem))] overflow-auto border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-ink/40">
+      <dialog ref={dialog} aria-labelledby="sherlock-help-title" onCancel={(event) => { event.preventDefault(); close(); }} onClick={(event) => { if (event.target === event.currentTarget) close(); }} className="m-auto max-h-[90vh] w-[min(760px,calc(100vw-2rem))] overflow-auto border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-ink/40">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-4">
-          <div><p className="font-num text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">SchoolTrace guide</p><h2 id="schooltrace-help-title" className="mt-1 text-xl font-bold">From records to a reviewable CFO report</h2></div>
+          <div><p className="font-num text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">Sherlock guide</p><h2 id="sherlock-help-title" className="mt-1 text-xl font-bold">From records to a reviewable CFO report</h2></div>
           <button type="button" onClick={close} className="grid h-10 w-10 place-items-center border border-line hover:bg-surface-2" aria-label="Close help"><X aria-hidden="true" className="h-4 w-4" /></button>
         </div>
         <div className="space-y-6 p-5 text-[14px] leading-6">
-          <p>SchoolTrace turns a committed set of finance records into cited agent work. It keeps source files, investigation results, human decisions, and reports connected so you can trace every claim.</p>
+          <p>Sherlock turns a committed set of finance records into cited agent work. It keeps source files, investigation results, human decisions, and reports connected so you can trace every claim.</p>
           <div className="grid gap-px border border-line bg-line sm:grid-cols-2">
             <div className="bg-surface p-4"><b>Recorded examples</b><p className="mt-1 text-ink-dim">Sandbox University and MIT FY2025 are saved demonstrations. Browse them safely; nothing is running and their controls do not change live records.</p></div>
             <div className="bg-surface p-4"><b>Institution workspaces</b><p className="mt-1 text-ink-dim">A workspace you create starts empty. You choose sources, validate them, commit a snapshot, and explicitly start any model call.</p></div>
