@@ -1,0 +1,4 @@
+customer_id,name,country,payment_terms_days
+CUST-001,Riverside Parent Council,US,30
+CUST-002,Lakeside Community Trust,US,30
+CUST-003,Hilltop Athletics Booster,US,60

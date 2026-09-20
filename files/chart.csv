@@ -1,0 +1,10 @@
+account,name,type,report_mapping,effective_from
+1000,Operating bank,asset,balance_sheet,2026-01-01
+1200,Accounts receivable,asset,balance_sheet,2026-01-01
+2000,Accounts payable,liability,balance_sheet,2026-01-01
+3000,Retained earnings,equity,balance_sheet,2026-01-01
+4000,Program revenue,revenue,income_statement,2026-01-01
+5000,Supplies and materials,expense,income_statement,2026-01-01
+5100,Facilities and grounds,expense,income_statement,2026-01-01
+5200,Technology services,expense,income_statement,2026-01-01
+6000,Salaries and wages,expense,income_statement,2026-01-01

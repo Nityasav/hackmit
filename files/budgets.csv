@@ -1,0 +1,4 @@
+record_id,account,period,amount,approval_reference
+BUD-1,5000,2026-09,9000.00,BOARD-2026-09
+BUD-2,5100,2026-09,5000.00,BOARD-2026-09
+BUD-3,5200,2026-09,2000.00,BOARD-2026-09
