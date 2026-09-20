@@ -2,6 +2,7 @@
 
 import { Section } from "@/components/ui";
 
+import { AgentBoard } from "./AgentBoard";
 import { AgentTeam } from "./AgentTeam";
 import { BeforeAnyRun, RunProgress, StartInvestigation } from "./CfoRun";
 import { describeRun } from "./agents";
@@ -48,6 +49,10 @@ export function Investigation({ ws }: { ws: string }) {
 
       <Section title={run ? "What is happening" : "What a run does"}>
         {run ? <RunProgress run={run} running={running} /> : <BeforeAnyRun />}
+      </Section>
+
+      <Section title="Where each task sits">
+        <AgentBoard />
       </Section>
 
       {run && (

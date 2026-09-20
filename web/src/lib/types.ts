@@ -14,7 +14,6 @@ export interface Workspace {
    *  bundle built by ingestion.bundle(), which emits these two. */
   mode: "live" | "not_started";
   snapshot_id: string;
-  disabled_tabs: TabId[];
   model: string;
   run_budget: { used: number; total: number };
   source_url?: string;

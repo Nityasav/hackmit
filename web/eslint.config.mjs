@@ -13,16 +13,6 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
-  {
-    // Vendored third-party components are kept byte-for-byte as published, so
-    // their lint exceptions live here rather than as edits inside the files.
-    files: ["src/components/ui/kanban.tsx", "src/components/ui/line-graph-statistics.tsx"],
-    rules: {
-      // KanbanOverlay measures the dragged node in an effect to size the ghost;
-      // line-graph-statistics resets its animation phase the same way.
-      "react-hooks/set-state-in-effect": "off",
-    },
-  },
 ]);
 
 export default eslintConfig;

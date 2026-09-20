@@ -85,6 +85,15 @@ export function Figure({ label, value, note }: { label: string; value: React.Rea
   );
 }
 
+/** How far through its steps a task is, as the run reports it. */
+export function ProgressBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
+  return (
+    <div className={`overflow-hidden bg-surface-2 ${className}`}>
+      <div className="h-full bg-ink transition-[width] duration-700" style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+
 /** Three tones, because a status is either bad, fine, or neither. */
 type Tone = "red" | "green" | "gray";
 

@@ -33,7 +33,6 @@ const workspaceSchema = z.object({
   period: z.string(),
   mode: z.enum(["live", "not_started"]),
   snapshot_id: z.string(),
-  disabled_tabs: z.array(tabIdSchema),
   model: z.string(),
   run_budget: z.object({ used: z.number(), total: z.number() }),
   source_url: optional(z.string()),
