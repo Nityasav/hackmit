@@ -41,7 +41,7 @@ export interface GuidedWorkflow {
 }
 
 const STEPS = [
-  ["Add the school", "Enter the institution and review period."],
+  ["Add the company", "Enter the company and review period."],
   ["Add the records", "Upload the files for this review."],
   ["Check the import", "Confirm columns and resolve flagged rows."],
   ["Commit the records", "Save the validated records for review."],
@@ -66,7 +66,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
       title: "Add an institution",
       detail: "Enter its name, currency and review period.",
       action: "create",
-      actionLabel: "Add a school",
+      actionLabel: "Add a company",
       steps: withCurrent(0),
     };
   }
@@ -116,7 +116,7 @@ export function deriveGuidedWorkflow(bundle: Bundle, intake?: IntakeUiProgress |
   if (!hasSnapshot) {
     return {
       eyebrow: "Step 2 of 6",
-      title: "Add this school's records",
+      title: "Add this company's records",
       detail: "Upload CSV, text or Markdown files to begin.",
       action: "records",
       actionLabel: "Add records",

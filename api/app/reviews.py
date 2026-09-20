@@ -7,14 +7,13 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from . import db, ingestion
-from .accounting.review import checks
-from .cfo.api import runtime
+from .accounting.controls import checks
 
 router = APIRouter(prefix="/api", tags=["Director review"])
 ACTIVE = {"queued", "planning", "running"}
 LIMITATIONS = [
     "Supplied records only; no assurance of completeness, fraud determination or audit opinion.",
-    "USD management accounting profile, not an Ontario/TDSB statutory accounting adapter.",
+    "USD accrual profile for a single operating entity; not a statutory or consolidated adapter.",
     "Amounts can overlap across checks. Do not add them together or call them savings.",
     "Human decisions are proposals and follow-up records. No ledger, payment or grant submission is changed.",
 ]
@@ -34,7 +33,7 @@ def scan(ws):
         if not snapshot:
             raise HTTPException(409, "Commit source records before scanning.")
         if config["kind"] != "synthetic" or config["currency"] != "USD":
-            raise HTTPException(409, "Transaction checks require the USD management accounting profile.")
+            raise HTTPException(409, "Transaction checks require the USD accrual profile.")
         rows = ingestion.active_records(c, ws)
         found = checks(rows, config)
         payload = dict(id=db.uid("scan"), workspace=ws, snapshot_id=snapshot, created_at=db.now(),
@@ -57,46 +56,43 @@ def review(ws: str, request: Request):
         scans = [json.loads(r[0]) for r in c.execute("SELECT payload FROM review_scans WHERE ws=? ORDER BY rowid DESC LIMIT 2", (ws,))]
         actions = [json.loads(r[0]) | {"snapshot_id": r[1]} for r in c.execute("SELECT payload,snapshot_id FROM review_actions WHERE ws=?", (ws,))]
         history = [dict(r) | {"payload": json.loads(r["payload"])} for r in c.execute("SELECT * FROM events WHERE ws=? AND kind LIKE 'review.%' ORDER BY rowid DESC LIMIT 100", (ws,))]
-        standalone = [dict(row) for agent in ("cfo", "grants_compliance") if (row := c.execute(
-            "SELECT * FROM agent_runs WHERE ws=? AND agent=? AND status='completed' ORDER BY created_at DESC LIMIT 1", (ws, agent)).fetchone())]
-        audit_rows = c.execute("SELECT output FROM agent_runs WHERE ws=? AND agent='internal_auditor' AND status='completed' ORDER BY created_at DESC LIMIT 20", (ws,)).fetchall()
-    latest = runtime(request).repository.latest(ws)
-    live = latest.model_dump() if latest else None
+        # Agent conclusions now live in `agent_decisions`, written by the graph.
+        decisions = [dict(row) for row in c.execute(
+            "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT 50", (ws,))]
     findings = []
     if scans:
-        findings.extend(dict(item, snapshot_id=scans[0]["snapshot_id"], stale=scans[0]["snapshot_id"] != snapshot) for item in scans[0]["checks"])
-    verdicts = {}
-    for row in audit_rows:
-        for verdict in json.loads(row[0]).get("analysis", {}).get("reviews", []):
-            verdicts.setdefault(verdict["finding_id"], verdict)
-    for saved in standalone:
-        for i, candidate in enumerate(json.loads(saved["output"]).get("analysis", {}).get("findings", []), 1):
-            identifier = f"{saved['id']}-finding-{i}"
-            verdict = verdicts.get(identifier)
-            findings.append(dict(id=identifier, title=candidate["title"], role="cfo" if saved["agent"] == "cfo" else "gr",
-                status="attention", explanation=candidate["summary"], amount_cents=None,
-                action="Review the candidate and its exact sources; no independently confirmed amount is asserted here.",
-                origin="standalone_candidate", review=(f"Bounded Auditor verdict: {verdict['verdict']} — {verdict['rationale']}" if verdict else "Independent review pending. This is a candidate, not a verified financial conclusion."),
-                evidence=[dict(source_id=e["source_id"], line=e["line"]) for e in candidate.get("citations", [])],
-                snapshot_id=saved["snapshot_id"], stale=saved["snapshot_id"] != snapshot))
-    if latest and latest.scope:
-        # Never surface intermediate acceptances as a completed report.
-        if latest.status not in ACTIVE | {"failed", "interrupted", "stale"}:
-            for accepted in latest.accepted:
-                claim = accepted.claim
-                findings.append(dict(id=latest.id + ":" + claim.id, title=claim.title, role=accepted.role,
-                    status="pass" if claim.disposition == "cleared" else "attention", explanation=claim.conclusion,
-                    amount_cents=accepted.calculation.amount_cents if accepted.calculation else None,
-                    action=claim.proposed_action, origin="live_agent", review=accepted.review.rationale,
-                    evidence=[dict(source_id=s, line=1) for s in claim.evidence_ids],
-                    snapshot_id=latest.scope.snapshot_id, stale=latest.scope.snapshot_id != snapshot))
+        findings.extend(dict(item, snapshot_id=scans[0]["snapshot_id"],
+                             stale=scans[0]["snapshot_id"] != snapshot)
+                        for item in scans[0]["checks"])
+    # What the agents concluded, read from the decision trail they wrote as they worked.
+    # An escalated decision needs attention whatever the agent called it, because the
+    # threshold that escalated it is the workspace's and not the agent's.
+    for decision in decisions:
+        reviewed = decision["reviewer"]
+        findings.append(dict(
+            id=decision["id"], title=decision["action"], role=decision["agent"],
+            status="attention" if decision["escalated"] else "pass",
+            explanation=decision["summary"], amount_cents=None,
+            action=decision["why"] or "Review the cited evidence.",
+            origin="agent",
+            review=("Reviewed by " + str(reviewed) + ": " + str(decision["review_verdict"]))
+            if reviewed else
+            ("Independent review pending. This is an agent conclusion, not a verified "
+             "financial result."),
+            evidence=[dict(source_id=e.get("source_id", ""), line=e.get("line") or 1)
+                      for e in json.loads(decision["evidence"] or "[]")],
+            confidence=decision["confidence"],
+            snapshot_id=snapshot, stale=False))
+    live = {"decisions": len(decisions),
+            "escalated": sum(1 for d in decisions if d["escalated"]),
+            "spend_cents": sum(d["cost_cents"] for d in decisions)} if decisions else None
     for item in findings:
         item["follow_up"] = next((a for a in actions if a["finding_id"] == item["id"] and a["snapshot_id"] == item["snapshot_id"]), None)
     prior = {i["id"]: i for i in scans[1]["checks"]} if len(scans) > 1 else {}
     changes = [dict(id=i["id"], title=i["title"], before=prior[i["id"]]["explanation"], after=i["explanation"])
                for i in scans[0]["checks"] if i["id"] in prior and (i["status"], i["amount_cents"], i["explanation"]) != (prior[i["id"]]["status"], prior[i["id"]]["amount_cents"], prior[i["id"]]["explanation"])] if scans else []
-    return dict(workspace=config, snapshot_id=snapshot, scan=scans[0] if scans else None, live=live,
-                live_stale=bool(latest and latest.scope and latest.scope.snapshot_id != snapshot),
+    return dict(workspace=config, snapshot_id=snapshot, scan=scans[0] if scans else None,
+                live=live, live_stale=False,
                 findings=findings, changes=changes, history=history, limitations=LIMITATIONS)
 
 
@@ -178,32 +174,22 @@ class DeleteWorkspace(BaseModel):
 
 @router.delete("/workspaces/{ws}")
 def delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
-    # Prevent a coordinator run starting between the active check and deletion.
-    with runtime(request).mutation_lock:
-        return _delete_workspace(ws, body, request)
-
-
-def _delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
     if request.state.user["role"] != "admin":
         raise HTTPException(403, "Admin role required.")
     if body.confirmation != ws:
         raise HTTPException(422, "Confirm the exact workspace ID.")
-    rt = runtime(request)
-    if ws in rt.active_workspaces:
-        raise HTTPException(409, "Wait for the active investigation before deleting.")
     with db.connect() as c:
         ingestion.workspace(c, ws)
-        if c.execute("SELECT 1 FROM agent_runs WHERE ws=? AND status='running'", (ws,)).fetchone():
-            raise HTTPException(409, "Wait for the active standalone review before deleting.")
         for row in c.execute("SELECT payload FROM extraction_items WHERE ws=? AND kind='benchmark_job'", (ws,)):
             if json.loads(row[0]).get("status") in {"queued", "running"}:
                 raise HTTPException(409, "Wait for the extraction benchmark before deleting.")
-        if rt.repository.path is None:
-            c.execute("DELETE FROM cfo_runs WHERE workspace=?", (ws,))
-        else:
-            c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
-            c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
-        for table in ("extraction_active", "extraction_items", "extraction_documents", "review_actions", "review_scans", "agent_requests", "agent_runs", "evidence_requests", "approvals", "precedents", "records", "snapshots", "sources", "batches", "events"):
+        # Children before parents: decisions and links reference the events, and the
+        # events reference the workspace.
+        for table in ("extraction_active", "extraction_items", "extraction_documents",
+                      "review_actions", "review_scans", "agent_decisions", "links",
+                      "economic_events", "agent_requests", "agent_runs",
+                      "evidence_requests", "approvals", "precedents", "records",
+                      "snapshots", "sources", "batches", "events"):
             c.execute(f"DELETE FROM {table} WHERE ws=?", (ws,))
         c.execute("DELETE FROM workspaces WHERE id=?", (ws,))
     return {"deleted": ws, "note": "Logical deletion completed. OS backups and recoverable filesystem remnants are outside this operation."}

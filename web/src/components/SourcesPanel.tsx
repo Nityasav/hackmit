@@ -1,11 +1,13 @@
 "use client";
 
 import { displayLabel } from "@/lib/format";
-import { detectSource } from "@/lib/source-detection";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { IntakeUiProgress } from "@/lib/workflow";
+import { DataRequirements } from "@/components/DataRequirements";
+import { FileUpdates } from "@/components/FileUpdates";
+import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 
@@ -13,18 +15,18 @@ import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOption
 // money-in roles are offered here as soon as it accepts them.
 const ROLES: Record<string, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
-  payroll: "Payroll", grants: "Grant register", budget: "Budget", invoice: "Invoices",
-  fees: "Student fees", collections: "Collections (money received)", deposits: "Bank deposits",
-  sponsorships: "Sponsorships & pledges",
-  policy: "Award terms / policy", service: "Service evidence", document: "Other document",
+  vendors: "Vendors", purchase_orders: "Purchase orders", goods_receipts: "Goods receipts",
+  vendor_invoices: "Vendor invoices", payments: "Vendor payments",
+  customers: "Customers", customer_invoices: "Customer invoices", remittances: "Customer remittances",
+  bank_transactions: "Bank transactions", processor_payouts: "Payment processor payouts",
+  payroll: "Payroll", expenses: "Employee expenses",
+  budgets: "Approved budget", forecasts: "Forecast", headcount: "Headcount",
+  approvals: "Approvals", period_locks: "Period locks", tax_registrations: "Tax registrations",
+  contract: "Contracts", policy: "Policies", document: "Other document",
 };
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
-// Keep essential form geometry on the controls, not dependent on native input
-// styling or the order in which global development CSS chunks arrive.
-const fieldLayout: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
-const fieldControl: React.CSSProperties = { boxSizing: "border-box", width: "100%", minWidth: 0, height: 34, padding: "6px 10px", border: "1px solid #d4d4d8", background: "white", lineHeight: "20px", outlineOffset: -2 };
 const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
@@ -45,13 +47,11 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
  */
 export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progress: IntakeUiProgress) => void }) {
   const { ws, bundle, setWs, refreshWorkspaces, refreshBundle, apiError } = useData();
-  const isIntake = Boolean(ws && bundle.workspace.intake);
+  const isIntake = Boolean(bundle.workspace.intake);
   const [creating, setCreating] = useState(false);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [history, setHistory] = useState<{ id: string; status: string; created_at: string }[]>([]);
-  const [files, setFiles] = useState<{ file: File; options: SourceOptions; note: string }[]>([]);
-  const [detecting, setDetecting] = useState(false);
-  const selection = useRef(0);
+  const [files, setFiles] = useState<{ file: File; options: SourceOptions }[]>([]);
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
@@ -70,7 +70,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   }, [base]);
   useEffect(() => {
     // Without a workspace the base URL is /api/workspaces/, which 404s. Nothing
-    // here is meaningful until someone has created a school.
+    // here is meaningful until someone has created a company.
     if (!isIntake || !ws) return;
     let mounted = true;
     const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports")])
@@ -121,7 +121,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   }
   const draftChanged = batch && batch.files.some((f) => JSON.stringify(f.options) !== JSON.stringify(draft[f.id]));
 
-  return <section className="min-w-0 border border-line bg-white p-5" aria-label="Upload records">
+  return <section className="mb-4 border border-line bg-white p-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-base font-semibold">Sources & coverage</h2>
         <p className="mt-1 text-xs text-ink-dim">Upload records and check their coverage.</p></div>
@@ -137,94 +137,42 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       </p>;
     })()}
     {message && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
-    {!isIntake && <p className="mt-5 text-sm text-ink-dim">Create an institution to upload its records.</p>}
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-        <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No school yet — create one to add records.")}</span>
-        {coverage && <span>· {coverage.workspace.currency}</span>}
-        <button disabled={busy} className={button} onClick={() => act(async () => {
-          await refresh();
-          if (batch && batch.status !== "committed") {
-            setMessage("Sources refreshed. Finish or review the current import before detecting saved files.");
-            return;
-          }
-          const result = await intakeApi<{ batch: ImportBatch | null; detected: number }>(base + "/sources/detect", { method: "POST" });
-          if (result.batch) {
-            showBatch(result.batch);
-            setMessage(`Detected types for ${result.detected} saved files. Review the import below and confirm to update coverage.`);
-          } else setMessage("Sources refreshed. No additional structured file types detected. Missing items need supporting records.");
-        })}>Refresh sources</button>
+        <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No company yet — create one to add records.")}</span>
+        <span>· {coverage?.workspace.currency}</span><span>· {coverage?.workspace.profile}</span>
+        <button disabled={busy} className={button} onClick={() => act(refresh)}>Refresh sources</button>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {coverage?.capabilities.map((c) => <div key={c.id} className="border border-line p-3">
-          <div className="font-semibold">{c.label}</div>
-          <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-amber-50 text-amber-800"}`}>{displayLabel(c.status)}</span>
-          {c.missing.length > 0 && <p className="mt-1 text-xs">Missing: {c.missing.map((r) => ROLES[r as SourceRole] || r).join(", ")}</p>}
-          <p className="mt-1 text-[11px] text-ink-dim">{c.note}</p>
-          {c.runnable && <button className={`${button} mt-3`} disabled={busy} onClick={() => act(async () => {
-            await intakeApi(base + "/review/scans", { method: "POST" });
-            await refresh();
-            await refreshBundle();
-            setMessage("Record checks completed. Expand results below. No model calls were made.");
-          })}>{busy ? "Working…" : c.results?.length ? "Run checks again" : "Run checks"}</button>}
-          {!!c.results?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">View results ({c.results.length})</summary>
-            <div className="mt-2 space-y-3">{c.results.map((r) => <div key={r.id} className="border-t border-line pt-2">
-              <p className="font-semibold">{r.title} · {displayLabel(r.status)}</p>
-              {r.amount_cents !== null && <p className="mt-1 tabular-nums">{new Intl.NumberFormat("en-US", { style: "currency", currency: coverage.workspace.currency }).format(r.amount_cents / 100)}</p>}
-              <p className="mt-1 text-ink-dim">{r.explanation}</p><p className="mt-1">{r.action}</p>
-              <div className="mt-1 flex flex-wrap gap-2">{r.evidence.map((e) => <button key={`${e.source_id}:${e.line}`} className="underline" onClick={() => act(() => viewSource(e.source_id, e.line))}>{coverage.sources.find((s) => s.id === e.source_id)?.name || "Source"} · line {e.line}</button>)}</div>
-            </div>)}</div>
-          </details>}
-        </div>)}
-      </div>
+      {coverage && <DataRequirements ws={ws} coverage={coverage} onSaved={refresh} />}
       <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
 
+      <div className="mt-5 border border-line bg-surface-2 p-4">
+        <h3 className="font-semibold">Running the agents</h3>
+        <p className="mt-1 max-w-prose text-xs text-ink-dim">
+          Books is where the records go in. The agents are started from Investigation, so
+          there is one place a paid run can begin rather than two.
+        </p>
+        <Link href="/investigation" className="mt-3 inline-block text-sm font-semibold text-ink underline">
+          Open the investigation &rarr;
+        </Link>
+      </div>
 
+      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
 
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
         <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
-        {/* macOS file-type associations can incorrectly disable CSVs when an
-            accept filter is present. Validate names here; the API independently
-            validates extensions, UTF-8 content, sizes and record schemas. */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" className={primary} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy || detecting || !coverage} onClick={() => fileInput.current?.click()}>Choose files</button>
-          <span className="text-xs text-ink-dim" aria-live="polite">{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "No files selected"}</span>
-        </div>
-        <input style={{ display: "none" }} ref={fileInput} aria-label="Choose CSV, TXT or Markdown files" type="file" multiple disabled={busy || detecting || !coverage}
-          onChange={async (e) => {
-            const selected = Array.from(e.target.files || []);
-            const unsupported = selected.filter((file) => !/\.(csv|txt|md)$/i.test(file.name));
-            if (unsupported.length) {
-              setError(`Choose CSV, TXT or Markdown files. Unsupported: ${unsupported.map((file) => file.name).join(", ")}`);
-              e.target.value = "";
-              return;
-            }
-            if (selected.length > 20 || selected.some(f => f.size > 10 * 1024 * 1024) || selected.reduce((sum, f) => sum + f.size, 0) > 50 * 1024 * 1024) {
-              setError("Upload exceeds file or batch limits"); e.target.value = ""; return;
-            }
-            setError("");
-            setDetecting(true);
-            const id = ++selection.current;
-            try {
-              const detected = await Promise.all(selected.map(async file => {
-                const result = detectSource(file.name, await file.slice(0, 65536).text(), coverage?.workspace.kind === "public");
-                return { file, options: { ...defaults(result.role), mapping: result.mapping }, note: result.note };
-              }));
-              if (selection.current === id) setFiles(detected);
-            } catch { setError("Could not read the selected files. Please select them again."); }
-            finally { if (selection.current === id) setDetecting(false); }
-          }} />
-        {detecting && <p role="status" className="mt-2 text-xs">Detecting file types…</p>}
-        {files.map((f, i) => <div key={i} className="mt-3 grid items-end gap-3 border border-line p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)_80px]">
-          <span className="min-w-0 self-center break-words text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB<small className="mt-1 block text-ink-dim">{f.note}</small></span>
-          <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, note: "Manually selected", options: { ...x.options, mapping: {}, role: e.target.value as SourceRole } } : x))}>
+        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
+          onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
+        {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
+          <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
+          <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
             {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}
           </select>
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
-        <button disabled={busy || detecting || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
+        <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
           if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
           const form = new FormData();
           files.forEach((f) => form.append("files", f.file));
@@ -294,28 +242,49 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         </div> : <p className="mt-3 font-mono text-xs text-ink">Saved snapshot: {batch.snapshot_id}</p>}
       </div>}
 
-      <div className="mt-6 border-t border-line pt-5">
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div><h3 className="font-semibold">Committed sources</h3>
           {!coverage?.sources.length && <p className="mt-2 text-xs text-ink-dim">No committed sources yet.</p>}
           {coverage?.sources.map((s) => <button key={s.id} className="mt-2 flex w-full justify-between gap-2 border border-line p-2 text-left text-xs hover:bg-surface-2" onClick={() => act(() => viewSource(s.id))}>
             <span>{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
           </button>)}
         </div>
+        <div><h3 className="font-semibold">Missing evidence requests</h3>
+          <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>
+          <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
+            act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
+            <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
+            <select name="role" defaultValue="service" aria-label="Requested evidence role" className={input}>{Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}</select>
+            <button disabled={busy} className={button}>Add request</button>
+          </form>
+          {coverage?.requests.map((r) => <div key={r.id} className="mt-3 border border-line p-3">
+            <b>{r.title}</b><span className="ml-2 text-xs text-ink-dim">{displayLabel(r.status)}</span>
+            <select aria-label={`Attach evidence for ${r.title}`} disabled={busy} className={input + " mt-2"} value="" onChange={(e) => {
+              const id = e.target.value; if (!id) return;
+              act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests/" + r.id + "/responses", {
+                method: "POST", body: { source_id: id, expected_version: r.version },
+              })); setMessage("Evidence linked. A resumption event is saved for the future agent runtime; review is still required."); });
+            }}><option value="">Attach a committed {ROLES[r.role].toLowerCase()} source…</option>
+              {coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {r.source_id && <button className="mt-1 text-xs text-ink underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
+          </div>)}
+        </div>
       </div>
     </>}
 
     {creating && <Modal title="Create an institution workspace" close={() => !busy && setCreating(false)}>
-      <form className="institution-form grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
-        <label style={fieldLayout} className="text-xs">Institution name<input style={fieldControl} name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
-        <label style={fieldLayout} className="text-xs">Institution type<select style={fieldControl} name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label style={fieldLayout} className="text-xs">Data origin<select style={fieldControl} name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
-        <label style={fieldLayout} className="text-xs">Currency<select style={fieldControl} name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label style={fieldLayout} className="text-xs">Period start<input style={fieldControl} type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
-        <label style={fieldLayout} className="text-xs">Period end<input style={fieldControl} type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
-        <label style={fieldLayout} className="text-xs">Jurisdiction<input style={fieldControl} name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
-        <label style={fieldLayout} className="text-xs">Scope<input style={fieldControl} name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
+        <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
+        <label className="text-xs">Entity type<select name="entity_type" className={input}>{["company", "subsidiary", "group"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label className="text-xs">Data origin<select name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
+        <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label className="text-xs">Period start<input type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
+        <label className="text-xs">Period end<input type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
+        <label className="text-xs">Jurisdiction<input name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
+        <label className="text-xs">Scope<input name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
         <p className="text-xs text-ink-dim sm:col-span-2">The current accounting checks use the USD management profile. Other currencies are available for public-document exploration.</p>
         {error && <p role="alert" className="text-red-700 sm:col-span-2">{error}</p>}
         <button disabled={busy} className={primary}>{busy ? "Creating…" : "Create workspace"}</button>

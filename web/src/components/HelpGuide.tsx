@@ -15,7 +15,7 @@ const SCREENS: Record<string, string> = {
 };
 
 const HOW = [
-  "Add a school and the period its records cover.",
+  "Add a company and the period its records cover.",
   "Add the institution's CSV, text or Markdown files.",
   "Check how each file was read, and fix anything flagged.",
   "Commit the records, so the agents work from one fixed set.",
@@ -92,7 +92,7 @@ export function HelpGuide() {
             </ol>
           </div>
           <p className="text-[12px] text-ink-dim">
-            {ws ? <>Current school: <b className="text-ink">{bundle.workspace.name}</b> · {bundle.workspace.period}.</> : "No school has been added yet."} Books shows the next step.
+            {ws ? <>Current company: <b className="text-ink">{bundle.workspace.name}</b> · {bundle.workspace.period}.</> : "No company has been added yet."} Books shows the next step.
           </p>
           <button type="button" onClick={close} className="min-h-10 bg-ink px-4 text-[13px] font-semibold text-white hover:bg-ink-dim">Start</button>
         </div>

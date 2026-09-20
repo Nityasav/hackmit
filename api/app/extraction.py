@@ -21,10 +21,62 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, B
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import db, ingestion, document_processing
+from . import db, document_processing, ingestion, roles
 
 router = APIRouter(prefix="/api/workspaces/{ws}/extraction", tags=["Document extraction"])
 SCHEMA_VERSION = "schooltrace.extraction.v1"
+
+# Extraction has its own vocabulary. These are *document types*, not intake roles: a
+# document type describes what a person can read off a page, while an intake role
+# describes a validated record. They used to be one thing, by way of `ingestion.FIELDS`
+# and `ingestion.MONEY_FIELDS`, which meant adding a ledger column silently moved the
+# promotion gates — `critical_ok` is scored over CRITICAL_FIELDS below, so a vocabulary
+# change altered a published model metric without anyone touching a model. The two are
+# related here by one explicit mapping and nothing else.
+
+#: Which intake role an extracted document may be staged into, once a human has
+#: reviewed it. `None` means the document type has no structured equivalent: its text
+#: is still staged as evidence, but it can never become a financial record, because
+#: there is no validated shape for it to take.
+INTAKE_ROLE: dict[str, str | None] = {
+    "invoice": "vendor_invoices",
+    "payroll": "payroll",
+    "budget": "budgets",
+    "grants": None,
+    "service": "document",
+    "policy": "policy",
+    "document": "document",
+}
+
+#: A stageable document type extracts exactly the columns its intake role requires.
+#: Deriving this rather than restating it is what stops extraction from producing a
+#: CSV that intake then rejects — the two agree by construction.
+BASE_FIELDS = {
+    document_type: list(roles.FIELDS.get(INTAKE_ROLE[document_type] or "", []))
+    for document_type in ("invoice", "grants", "payroll", "budget", "service", "policy", "document")
+}
+#: Fields whose exactness the promotion policy scores. A wrong amount, date or
+#: identifier is a different kind of error from a wrong description, and the gate has
+#: always treated it that way.
+CRITICAL_FIELDS = frozenset({
+    "amount", "subtotal", "tax", "ceiling", "gross", "deductions", "net",
+    "employer_cost", "award_amount", "hours", "threshold",
+    "invoice_date", "service_date", "service_start", "service_end", "pay_date",
+    "valid_from", "valid_to", "effective_from", "effective_to", "date", "period",
+    "invoice_number",
+})
+#: Optional columns an extracted record may also carry through to staging.
+CARRY_FIELDS = ["currency", "department", "entity", "memo", "po_id", "receipt_id",
+                "vendor_id", "customer_id", "employee_id", "award_id", "account"]
+#: Which extracted strings `normalize_for_intake` may reshape. Normalization is
+#: conservative by design: an unrecognized format is left exactly as written and
+#: quarantined rather than guessed at, because a misread amount is worse than a
+#: rejected one.
+MONEY_LIKE = frozenset({"amount", "subtotal", "tax", "ceiling", "gross", "deductions",
+                        "net", "employer_cost", "award_amount", "threshold"})
+DATE_LIKE = frozenset({"invoice_date", "service_date", "service_start", "service_end",
+                       "pay_date", "valid_from", "valid_to", "effective_from",
+                       "effective_to", "date", "charge_date", "due_date"})
 EXTRA_FIELDS = {
     "invoice": ["invoice_date", "subtotal", "tax", "description"],
     "grants": ["funder", "allowed_expenses", "prohibited_expenses", "reporting_obligations", "amendment"],
@@ -43,7 +95,7 @@ def digest(value):
 
 
 def schema(role):
-    return sorted(set(ingestion.FIELDS.get(role, []) + EXTRA_FIELDS[role] + ingestion.OPTIONAL_FIELDS))
+    return sorted(set(BASE_FIELDS[role] + EXTRA_FIELDS[role] + CARRY_FIELDS))
 
 
 class Strict(BaseModel):
@@ -448,7 +500,7 @@ def score(gold, predicted):
             if g and not gp:
                 counts["absent"] += 1
                 counts["abstained"] += int(p.get("status") == g.get("status"))
-            if gp and (key in ingestion.MONEY_FIELDS | ingestion.DATE_FIELDS or key.endswith("_id") or key == "invoice_number"):
+            if gp and (key in CRITICAL_FIELDS or key.endswith("_id")):
                 counts["critical"] += 1; counts["critical_ok"] += int(exact)
     return counts
 
@@ -675,20 +727,21 @@ def stage(ws: str, body: Stage, request: Request):
     lineage = doc.get("lineage_id", doc["id"])
     evidence_role = doc["role"] if doc["role"] in ingestion.DOCUMENT_ROLES else "document"
     uploads = [("reviewed-evidence.txt", "\n".join(lines).encode(), ingestion.FileOptions(role=evidence_role, source_system="reviewed-extraction", external_id=lineage, source_version=revision))]
-    if body.include_records and doc["role"] in ingestion.FIELDS:
-        required = ingestion.FIELDS[doc["role"]]
+    intake_role = INTAKE_ROLE[doc["role"]]
+    if body.include_records and intake_role and intake_role not in ingestion.DOCUMENT_ROLES:
+        required = list(roles.FIELDS[intake_role])
         rows = []
         for i, record in enumerate(correction["output"]["records"]):
-            row = {key: obs["value"] for key, obs in record.items() if obs["status"] == "present" and key in required + ingestion.OPTIONAL_FIELDS}
+            row = {key: obs["value"] for key, obs in record.items() if obs["status"] == "present" and key in required + CARRY_FIELDS}
             row = {key: normalize_for_intake(key, value, row.get("currency")) for key, value in row.items()}
             # An internal ingestion ID isn't an extracted fact; namespace it explicitly.
             if "record_id" in required and not row.get("record_id"):
                 row["record_id"] = f"{lineage}:{i+1}"
             rows.append(row)
         buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=required + [x for x in ingestion.OPTIONAL_FIELDS if x not in required])
+        writer = csv.DictWriter(buf, fieldnames=required + [x for x in CARRY_FIELDS if x not in required])
         writer.writeheader(); writer.writerows(rows)
-        uploads.append(("reviewed-records.csv", buf.getvalue().encode(), ingestion.FileOptions(role=doc["role"], source_system="reviewed-extraction", source_version=revision)))
+        uploads.append(("reviewed-records.csv", buf.getvalue().encode(), ingestion.FileOptions(role=intake_role, source_system="reviewed-extraction", source_version=revision)))
     with db.connect() as c:
         latest = [x for x in items(c, ws, "correction") if x["document_id"] == doc["id"]][-1]
         if latest["id"] != correction["id"] or document(c, ws, doc["id"])["text_sha256"] != doc["text_sha256"]:
@@ -708,13 +761,13 @@ def _corrections(ws):
 def normalize_for_intake(key, value, currency=None):
     """Conservative deterministic normalization; unknown formats stay quarantined."""
     text = value.strip()
-    if key in ingestion.MONEY_FIELDS:
+    if key in MONEY_LIKE:
         if text.startswith("$") and currency in {"USD", "CAD"}:
             text = text[1:].strip()
         if re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d{1,2})?", text):
             text = text.replace(",", "")
         return text
-    if key in ingestion.DATE_FIELDS:
+    if key in DATE_LIKE:
         for pattern in ("%B %d, %Y", "%b %d, %Y"):
             try:
                 return datetime.strptime(text, pattern).date().isoformat()

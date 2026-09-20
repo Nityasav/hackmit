@@ -56,7 +56,7 @@ def reviewed_workspace(client):
     return ws
 
 
-def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 service 2026-09-01 currency USD", role="invoice"):
+def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 dated 2026-09-01 due 2026-10-01 currency USD", role="invoice"):
     response = client.post(path(ws) + "/documents", files={"file": ("invoice.txt", text.encode(), "text/plain")}, data={"role": role})
     assert response.status_code == 201, response.text
     return response.json()
@@ -65,7 +65,8 @@ def upload(client, ws, text="Invoice A-101 vendor V-1 amount 1200.00 service 202
 def output(doc):
     record = {key: {"status": "missing", "value": None, "page": None, "start": None, "end": None} for key in ex.schema(doc["role"])}
     text = doc["pages"][0]["text"]
-    for key, value in {"invoice_number": "A-101", "vendor_id": "V-1", "amount": "1200.00", "service_date": "2026-09-01", "currency": "USD"}.items():
+    for key, value in {"invoice_number": "A-101", "vendor_id": "V-1", "amount": "1200.00",
+                             "invoice_date": "2026-09-01", "due_date": "2026-10-01", "currency": "USD"}.items():
         if key in record and value in text:
             start = text.index(value)
             record[key] = {"status": "present", "value": value, "page": 1, "start": start, "end": start + len(value)}
@@ -252,13 +253,20 @@ def test_failed_inference_and_wrong_artifact_are_persisted(client, monkeypatch):
 
 
 def test_score_penalizes_wrong_missing_and_extra_records():
-    doc = {"role": "invoice", "pages": [{"text": "A-101 V-1 1200.00 2026-09-01 USD"}]}
+    doc = {"role": "invoice", "pages": [{"text": "A-101 V-1 1200.00 2026-09-01 2026-10-01 USD"}]}
     gold = output(doc)
     predicted = copy.deepcopy(gold); predicted["records"].append(copy.deepcopy(gold["records"][0]))
+    # Derived, not written down: the count is however many fields the fixture text
+    # actually supplies, so widening the invoice schema does not fail this test for a
+    # reason that has nothing to do with scoring.
+    present = sum(1 for o in gold["records"][0].values() if o["status"] == "present")
+    assert present, "the fixture must extract something for this to measure"
+
     counts = ex.score(gold, predicted)
-    assert counts["tp"] == 5 and counts["fp"] == 5
+    # The duplicate record is entirely false positives; the original is entirely true.
+    assert counts["tp"] == present and counts["fp"] == present
     counts = ex.score(gold, None)
-    assert counts["fn"] == 5 and counts["abstained"] == 0
+    assert counts["fn"] == present and counts["abstained"] == 0
 
 
 def test_actual_png_ocr_and_pdf_render(client):
@@ -300,10 +308,13 @@ def test_viewer_cannot_review_and_cross_workspace_denied(client, monkeypatch):
 def test_incremental_updates_preserve_previous_records(client):
     ws = reviewed_workspace(client)
     before = client.get(f"/api/workspaces/{ws}/updates").json()
-    assert before["total_records"] == 13
+    # What matters is that a later upload *adds* to what is there, not the size of the
+    # starting pack, which moves whenever the sample records change.
+    assert before["total_records"] > 0
     commit_files(client, ws, [withheld_service_record()])
     after = client.get(f"/api/workspaces/{ws}/updates").json()
-    assert after["total_records"] == 14 and len(after["added_or_revised"]) == 1
+    assert after["total_records"] == before["total_records"] + 1
+    assert len(after["added_or_revised"]) == 1
     assert not after["rules_scan_current"]
     assert client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": before["snapshot_id"]}).status_code == 409
     scanned = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": after["snapshot_id"]})
@@ -326,7 +337,7 @@ def test_document_revision_supersedes_evidence_not_history(client):
     staged = client.post(path(ws) + "/stage", json={"correction_id": label["id"]}).json()
     batch = ingestion.get_batch(ws, staged["batch_id"])
     ingestion.commit(ws, batch["id"], ingestion.CommitRequest(expected_version=batch["version"], idempotency_key="v1"))
-    response = client.post(path(ws) + "/documents", files={"file": ("revised.txt", b"Revised A-101 V-1 1200.00 2026-09-01 USD")}, data={"role": "invoice", "replaces_id": first["id"]})
+    response = client.post(path(ws) + "/documents", files={"file": ("revised.txt", b"Revised A-101 V-1 1200.00 2026-09-01 2026-10-01 USD")}, data={"role": "invoice", "replaces_id": first["id"]})
     assert response.status_code == 201
     second = response.json(); assert second["version"] == 2 and second["lineage_id"] == first["lineage_id"]
     revised = correction(client, ws, second)
@@ -360,8 +371,8 @@ def test_benchmark_job_persistence_and_restart(client, monkeypatch):
     ("amount", "$1,200.50", "USD", "1200.50"),
     ("amount", "$1,200.50", None, "$1,200.50"),
     ("amount", "1,20.50", "USD", "1,20.50"),
-    ("service_date", "September 1, 2026", None, "2026-09-01"),
-    ("service_date", "09/01/26", None, "09/01/26"),
+    ("invoice_date", "September 1, 2026", None, "2026-09-01"),
+    ("invoice_date", "09/01/26", None, "09/01/26"),
 ])
 def test_conservative_normalization(key, value, currency, expected):
     assert ex.normalize_for_intake(key, value, currency) == expected
@@ -390,22 +401,47 @@ def test_analyst_cannot_approve_or_export_labels(client, monkeypatch):
     assert client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).status_code == 403
 
 
-def test_incremental_five_agent_scan_is_explicit_and_idempotent(client, monkeypatch):
-    from types import SimpleNamespace
+def test_a_live_rescan_is_explicit_and_reuses_a_run_on_the_same_snapshot(client, monkeypatch):
+    """A paid rescan happens because someone asked, and only once per snapshot.
+
+    The evidence has not changed between two clicks, so neither would the answer;
+    repeating the run would only spend money to reprint it.
+    """
     from app import updates
     ws = reviewed_workspace(client)
     snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
-    requests = []
-    def start(request):
-        requests.append(request)
-        return SimpleNamespace(id="synthetic-five-agent-test")
-    fake = SimpleNamespace(start=start, repository=SimpleNamespace(get=lambda ident: SimpleNamespace(status="working")))
-    monkeypatch.setattr(updates, "runtime", lambda request: fake)
-    first = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    second = client.post(f"/api/workspaces/{ws}/updates/scan", json={"snapshot_id": snapshot, "live": True})
-    assert first.status_code == 200 and second.json()["reused"]
-    assert len(requests) == 1 and requests[0].workflow == "five_agent" and requests[0].mode == "live"
-    assert snapshot in requests[0].objective
+
+    started = []
+
+    async def fake_run(workspace, objective, **kwargs):
+        started.append((workspace, objective))
+        return {"thread_id": "thread-test", "status": "completed",
+                "spend": {"spent_cents": 0, "cap_cents": 1000, "remaining_cents": 1000}}
+
+    import app.graph as graph_module
+    monkeypatch.setattr(graph_module, "run_investigation", fake_run)
+
+    first = client.post(f"/api/workspaces/{ws}/updates/scan",
+                        json={"snapshot_id": snapshot, "live": True})
+    second = client.post(f"/api/workspaces/{ws}/updates/scan",
+                         json={"snapshot_id": snapshot, "live": True})
+
+    assert first.status_code == 200, first.text
+    assert second.json()["reused"] is True
+    assert len(started) == 1, "a second click must not start a second paid run"
+    assert snapshot in started[0][1]
+
+
+def test_a_rules_only_rescan_costs_nothing_and_starts_no_agent(client):
+    ws = reviewed_workspace(client)
+    snapshot = client.get(f"/api/workspaces/{ws}/updates").json()["snapshot_id"]
+
+    response = client.post(f"/api/workspaces/{ws}/updates/scan",
+                           json={"snapshot_id": snapshot, "live": False})
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] is None
+    assert response.json()["scan_id"]
 
 
 def test_local_runner_fingerprints_actual_artifacts(tmp_path, monkeypatch):

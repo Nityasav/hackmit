@@ -1,41 +1,68 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { detectSource } from "./source-detection";
+import { describe, it } from "node:test";
+
+import { detectSource } from "./source-detection.ts";
+
+/**
+ * Run with: node --experimental-strip-types --test src/lib/source-detection.test.ts
+ *
+ * The vocabulary is passed in rather than fetched, so these describe the *matching*
+ * rule and never depend on a running API. The columns below are the real ones from
+ * `api/app/roles.py`; if they drift, the API serves the truth at run time and only
+ * this fixture is stale.
+ */
+
+const vocab = {
+  optional: ["currency", "department", "memo", "event_ref", "po_id", "receipt_id"],
+  documents: [{ id: "document" as const, label: "Other documents" }],
+  roles: [
+    { id: "chart" as const, label: "Chart of accounts",
+      required: ["account", "name", "type", "report_mapping", "effective_from"] },
+    { id: "opening" as const, label: "Opening trial balance",
+      required: ["record_id", "account", "balance_date", "debit", "credit"] },
+    { id: "ledger" as const, label: "General ledger",
+      required: ["entry_id", "line_id", "date", "account", "debit", "credit"] },
+    { id: "vendors" as const, label: "Vendors",
+      required: ["vendor_id", "name", "country", "payment_terms_days"] },
+    { id: "vendor_invoices" as const, label: "Vendor invoices",
+      required: ["record_id", "vendor_id", "invoice_number", "invoice_date", "due_date", "amount"] },
+    { id: "bank_transactions" as const, label: "Bank transactions",
+      required: ["bank_id", "bank_account", "settlement_date", "direction", "amount", "description"] },
+    { id: "processor_payouts" as const, label: "Payment processor payouts",
+      required: ["payout_id", "processor", "payout_date", "gross", "fees", "refunds",
+                 "chargebacks", "net"] },
+  ],
+};
 
 describe("source detection", () => {
-  const headers = {
-    chart: "account,name,type,report_mapping,effective_from",
-    opening: "record_id,account,balance_date,debit,credit",
-    ledger: "entry_id,line_id,date,account,debit,credit",
-    payroll: "record_id,employee_id,service_start,service_end,pay_date,gross,deductions,net,employer_cost,award_id,award_amount",
-    grants: "award_id,name,ceiling,valid_from,valid_to",
-    budget: "record_id,account,amount,approval_reference",
-    invoice: "record_id,vendor_id,invoice_number,service_date,amount",
-    fees: "record_id,student_ref,fee_type,charge_date,amount",
-    collections: "record_id,collected_by,collection_date,method,amount",
-    deposits: "record_id,deposit_date,bank_reference,amount",
-    sponsorships: "record_id,sponsor_id,program,pledge_date,due_date,amount",
-  };
-  for (const [role, header] of Object.entries(headers)) it(`detects ${role} without filename hints`, () => {
-    assert.equal(detectSource("unknown.CSV", header + "\r\n").role, role);
+  for (const role of vocab.roles) {
+    it(`detects ${role.id} from its columns, with no filename hint`, () => {
+      const header = role.required.join(",");
+      assert.equal(detectSource("unknown.CSV", header + "\r\n", vocab).role, role.id);
+    });
+  }
+
+  it("normalizes quoted headers and a byte-order mark", () => {
+    const result = detectSource(
+      "x.csv", '﻿"Vendor ID","Name","Country","Payment Terms Days"\n', vocab);
+    assert.equal(result.role, "vendors");
+    assert.equal(result.mapping.payment_terms_days, "Payment Terms Days");
   });
-  it("maps normalized quoted headers and BOM", () => {
-    const result = detectSource("x.csv", '\uFEFF"Record ID","Account","Amount","Approval Reference"\n');
-    assert.equal(result.role, "budget");
-    assert.equal(result.mapping.approval_reference, "Approval Reference");
+
+  it("refuses a file whose name claims more than its columns do", () => {
+    // The whole point: a file called invoices.csv without an invoice's columns is
+    // not an invoice register, and importing it as one would be worse than asking.
+    assert.equal(detectSource("vendor_invoices.csv", "a,b,c\n", vocab).role, "document");
   });
-  it("does not guess from incomplete or ambiguous schemas", () => {
-    assert.equal(detectSource("payroll.csv", "employee_id,amount").role, "document");
-    assert.equal(detectSource("x.csv", "record_id,account,amount,approval_reference,vendor_id,invoice_number,service_date").role, "document");
-    assert.equal(detectSource("x.csv", headers.budget + ",Account").role, "document");
+
+  it("refuses duplicate headers rather than pick a mapping", () => {
+    assert.equal(detectSource("x.csv", "account,account,type\n", vocab).role, "document");
   });
-  it("keeps public files as documents", () => {
-    assert.equal(detectSource("x.csv", headers.payroll, true).role, "document");
-  });
-  it("suggests text roles conservatively", () => {
-    assert.equal(detectSource("x.txt", "Award ID: A. Award period: September. Only support is eligible.").role, "policy");
-    assert.equal(detectSource("x.md", "Employee: E. 160 hours total; service allocation 60%.").role, "service");
-    assert.equal(detectSource("x.txt", "SYN-EMP-01 / SYN-PAY-1: 160 hours total; 96 hours student support.").role, "service");
-    assert.equal(detectSource("payroll.txt", "Annual salary expense summary").role, "document");
+
+  it("keeps everything as evidence in a public-document workspace", () => {
+    const header = vocab.roles[0].required.join(",");
+    const result = detectSource("chart.csv", header + "\n", vocab, true);
+    assert.equal(result.role, "document");
+    assert.match(result.note, /reference evidence/);
   });
 });

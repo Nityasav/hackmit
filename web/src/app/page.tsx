@@ -36,8 +36,8 @@ export default function BooksPage() {
 
       <GuidedWorkflow bundle={bundle} intake={intake} />
 
-      {/* Keyed so switching schools resets the upload draft rather than carrying
-          another institution's staged files across. */}
+      {/* Keyed so switching workspaces resets the upload draft rather than carrying
+          another company's staged files across. */}
       <SourcesPanel key={ws} onProgressChange={setIntake} />
 
       <section id="source-documents" className="scroll-mt-4">

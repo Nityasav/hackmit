@@ -5,8 +5,6 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from . import db, ingestion
-from .cfo.api import runtime
-from .cfo.schemas import RunRequest
 from .reviews import scan
 
 router = APIRouter(prefix="/api/workspaces/{ws}/updates", tags=["Ongoing file updates"])
@@ -49,11 +47,12 @@ async def rescan(ws: str, body: Rescan, request: Request):
             raise HTTPException(409, "New files were committed; reload the change summary before scanning")
         previous = [json.loads(r[0]) for r in c.execute("SELECT payload FROM events WHERE ws=? AND kind='updates.review'", (ws,))]
         if body.live:
-            prior = next((x for x in reversed(previous) if x["snapshot_id"] == body.snapshot_id and x.get("run_id")), None)
+            # A paid run already made against this exact snapshot is reused rather than
+            # repeated: the evidence has not changed, so neither would the answer.
+            prior = next((x for x in reversed(previous)
+                          if x["snapshot_id"] == body.snapshot_id and x.get("run_id")), None)
             if prior:
-                saved = runtime(request).repository.get(prior["run_id"])
-                if saved.status not in {"failed", "interrupted", "stale"}:
-                    return {**prior, "reused": True}
+                return {**prior, "reused": True}
     rules = scan(ws)
     if rules["snapshot_id"] != body.snapshot_id:
         raise HTTPException(409, "Snapshot changed while scanning; reload before starting paid agents")
@@ -65,8 +64,11 @@ async def rescan(ws: str, body: Rescan, request: Request):
                      f"{len(changes['added_or_revised'])} records were added/revised and {len(changes['superseded'])} superseded. "
                      "Investigate the new evidence and its effects using all five agents. Recheck related unchanged records; "
                      "do not assume earlier findings remain valid. Distinguish resolved gaps from unverified claims.")
-        run = runtime(request).start(RunRequest(workspace=ws, workflow="five_agent", mode="live", objective=objective))
-        result["run_id"] = run.id
+        from .graph import run_investigation
+        outcome = await run_investigation(ws, objective)
+        result["run_id"] = outcome["thread_id"]
+        result["status"] = outcome["status"]
+        result["spend"] = outcome["spend"]
     with db.connect() as c:
         db.event(c, ws, "updates.review", result, request.state.user["name"])
     return result
