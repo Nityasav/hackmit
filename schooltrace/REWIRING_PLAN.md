@@ -96,7 +96,18 @@ component.
 
 ---
 
-## Phase 1 — Unify the run stores *(keystone; everything else depends on it)*
+## Phase 1 — Unify the run stores *(keystone; everything else depends on it)* — **DONE**
+
+Steps 1 and 2 landed. Steps 3 and 4 were misplaced in this plan and moved:
+
+- **Step 3 (back `store.py` with SQLite) moved to Phase 4.** Phase 2 makes findings, tasks and
+  decisions *derived* from runs rather than stored, so tables for them would have been built and
+  immediately orphaned. The one collection that genuinely cannot be derived from a run is
+  **approvals**, because a human decision is not in the run — so that table is designed once, in
+  Phase 4. The likely outcome is that `store.py` shrinks rather than gains a backend.
+- **Step 4 (remove the `main.py` branch) moved into Phase 2**, where the projection exists to
+  absorb it.
+
 
 1. Move `cfo_runs` into `api/app/db.py`'s `SCHEMA`. Bump `PRAGMA user_version` to 3 and raise the
    guard in `db.connect()` accordingly.
@@ -116,7 +127,24 @@ EXISTS`), and add a test that opens a `user_version = 2` database and reads it w
 
 ---
 
-## Phase 2 — One projection layer
+## Phase 2 — One projection layer — **DONE**
+
+Landed as `api/app/projection.py`. `projection.bundle(ws)` is the single entry point and the only
+module that builds a `Bundle`; a test enforces that. `main.py`'s sandbox/MIT branch is gone, absorbed
+into the documented `RECORDED` seam that Phase 8 closes.
+
+Beyond the steps below, two things came out of the work:
+
+- **Evidence previews.** The plan only asked for a locator, but the UI's "open source" control then
+  opened onto an empty box — a dead end of exactly the kind this branch exists to remove. Cited
+  originals are now read once per bundle, deduplicated, and their first lines carried on the node.
+- **Failed and blocked tasks are decisions too.** The first pass only logged `task.finished`, which
+  made an abandoned task look like it had never run.
+
+Verified end to end: a five-agent engine run over a committed snapshot produces three
+auditor-verified findings on the Findings tab, with sha256-stamped locators and real excerpts, three
+tasks on the board with real tool-call counts, and eight decisions across all five agents.
+
 
 1. New `api/app/projection.py`. Move `_agent_projection` (`ingestion.py:611`) and `bundle`
    (`ingestion.py:650`) into it and delete them from `ingestion.py`.

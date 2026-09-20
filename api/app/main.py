@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import store, ingestion
+from . import ingestion, projection, store
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
@@ -70,7 +70,7 @@ def health() -> dict[str, str]:
 def get_bundle(ws: WorkspaceId) -> Bundle:
     """Everything the dashboard renders, in one payload. The web app polls this."""
     try:
-        return store.get_bundle(ws) if ws in {"sandbox", "mit"} else Bundle.model_validate(ingestion.bundle(ws))
+        return projection.bundle(ws)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"unknown workspace {ws}")
 
