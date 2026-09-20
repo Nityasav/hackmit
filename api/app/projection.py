@@ -22,7 +22,7 @@ import json
 
 from fastapi import HTTPException
 
-from . import approvals as approvals_module, db, store
+from . import approvals as approvals_module, db
 from .ingestion import coverage, financial_records, source_view
 from .models import Bundle
 
@@ -49,11 +49,6 @@ DISPOSITION = {"substantiated": "substantiated", "cleared": "cleared", "explaine
 MAX_RUNS = 20
 PREVIEW_LINES = 8
 PREVIEW_CHARS = 700
-
-#: Workspaces served from a recorded fixture rather than derived from runs.
-#: Phase 8 regenerates these by running the real pipeline, which closes this seam.
-RECORDED = {"sandbox", "mit"}
-
 
 # --------------------------------------------------------------------------- #
 # Snapshot triage runs
@@ -259,15 +254,22 @@ def _coordinator_decisions(run):
     events = run["events"]
     decisions = []
 
-    def add(event, agent, action, summary, why, outcome, how=None):
+    def add(event, agent, action, summary, why, outcome, how=None, memory_checks=None):
         decisions.append({
             "id": f"decision-{run['id']}-{len(decisions) + 1}", "run": run["id"], "time": event["at"],
             "agent": agent, "action": action, "summary": summary, "tags": [],
             "when": {"run": run["id"], "step": event["action"], "started": run["created_at"],
                      "finished": event["at"], "trigger": run["request"]["objective"]},
             "how": how or [], "why": why, "alternatives": [],
-            "memory_checks": [], "outcome": outcome,
+            "memory_checks": memory_checks or [], "outcome": outcome,
         })
+
+    # Precedent is weighed once, when the plan is formed, so it belongs on the
+    # planning decision rather than repeated onto every specialist's record.
+    plan_memory = [
+        {"text": f"{check['precedent_id']}: {check['reason']}", "ok": bool(check.get("applied"))}
+        for check in run.get("memory_checks", [])
+    ]
 
     specs = {state["spec"]["id"]: state["spec"] for state in run["tasks"]}
     for event in events:
@@ -275,7 +277,8 @@ def _coordinator_decisions(run):
         if action == "plan.accepted":
             add(event, "cfo", "Plan the investigation",
                 f"{len(run['tasks'])} task(s) delegated across the specialist agents.",
-                event["detail"], "Plan accepted; specialists dispatched.")
+                event["detail"], "Plan accepted; specialists dispatched.",
+                memory_checks=plan_memory)
         elif action.startswith("review."):
             verdict = action[len("review."):]
             if verdict in {"accept", "reject", "needs_evidence"}:
@@ -475,16 +478,8 @@ def _note_decisions_on_findings(findings, approvals):
 
 
 def _disabled_tabs(workspace):
-    """Which tabs this workspace has no business showing.
-
-    Learning belongs to another workstream. Approvals and Workflows depend on the
-    workspace: a public-documents workspace holds published reports and no
-    transactions, so there is nothing to decide and no close to run.
-    """
-    disabled = ["learning"]
-    if workspace["kind"] == "public":
-        disabled = ["workflows", "approvals", "learning"]
-    return disabled
+    """All current workspaces use the same streamlined three-screen navigation."""
+    return []
 
 
 def _load_runs(connection, ws, snapshot_id):
@@ -514,8 +509,6 @@ def _load_runs(connection, ws, snapshot_id):
 
 def bundle(ws) -> Bundle:
     """The single entry point. Every Bundle the API serves is built here."""
-    if ws in RECORDED:
-        return store.get_bundle(ws)
     return Bundle.model_validate(_derived(ws))
 
 

@@ -17,6 +17,6 @@ export interface NavItem {
 
 export const NAV: NavItem[] = [
   { id: "books", label: "Books", href: "/", hint: "Add this school's records" },
-  { id: "investigation", label: "Investigation", href: "/investigation", hint: "Watch the five agents check them" },
-  { id: "briefing", label: "Briefing", href: "/briefing", hint: "Hand the director the result" },
+  { id: "investigation", label: "Investigation", href: "/investigation", hint: "Run and review investigations" },
+  { id: "briefing", label: "Briefing", href: "/briefing", hint: "Review and export results" },
 ];

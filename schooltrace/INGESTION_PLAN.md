@@ -19,9 +19,9 @@ Project requirements:
 - [spec.md](spec.md) §§9–13: consistent reports, uncertainty, interface, failure handling, acceptance criteria.
 - [ACCOUNTING_CONTROLS.md](ACCOUNTING_CONTROLS.md) §§1–3: institution boundaries, invariants, no double counting.
 - [DATA_AND_EVALUATION.md](DATA_AND_EVALUATION.md) §§1–3: runtime input schema, synthetic data, private evaluation labels.
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), [WORKPLAN.md](../WORKPLAN.md), and [DEMO.md](DEMO.md): existing team split, time cuts, presentation.
+- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and [WORKPLAN.md](../WORKPLAN.md): existing team split and time cuts.
 
-This document records the approved design. Max subsequently authorized implementation and pushing to the current branch, with a preference for fewer folders. It does not change the approved demo. Implementation choices and remaining boundaries are recorded below.
+This document records the approved design. Max subsequently authorized implementation and pushing to the current branch, with a preference for fewer folders. Implementation choices and remaining boundaries are recorded below.
 
 ## 2. Do we need all of an institution's financials?
 
@@ -48,18 +48,18 @@ The product must support any school, district, board, or university. No specific
 4. Request chart of accounts/dimension definitions, export filters, row counts and control totals alongside each export. Request support required by the selected investigation, rather than unrelated personal information.
 5. Record centrally managed expenses, payroll, assets, funding, shared services, and transactions excluded from a school/campus-only extract. Do not allocate parent-organization totals to a school without an evidenced allocation rule.
 6. Keep consolidated reports labeled as consolidated. A school-level budget is not automatically school-level actual spending or a standalone balance sheet.
-7. If internal records are unavailable, offer public-document mode and a separately named fictional institution for the interactive demo. Invented transactions are always labeled synthetic.
+7. If internal records are unavailable, offer public-document mode. Invented transactions are restricted to private evaluation inputs and are always labeled synthetic.
 
 Suggested request pack: “For [entity/cost-centre], [start/end dates], and [investigation], please provide CSV exports of relevant ledger/transaction records with stable IDs, account/dimension definitions, currency, export filters, row counts and totals; applicable budgets/award terms/policies; and evidence for the transactions in scope. Please identify missing systems, central costs and exclusions.”
 
-No request is sent as part of this plan. Private institutional data is not assumed available. Institution type, jurisdiction, accounting basis and currency are explicit configuration: changing a name or currency does not make the demo management profile applicable to a real institution. Public/private universities and schools in different jurisdictions require separately reviewed accounting profiles (spec §3.1).
+No request is sent as part of this plan. Private institutional data is not assumed available. Institution type, jurisdiction, accounting basis and currency are explicit configuration: changing a name or currency does not make one management profile applicable to a different institution. Public/private universities and schools in different jurisdictions require separately reviewed accounting profiles (spec §3.1).
 
 ## 3. Recommended scope for the first build
 
 Build a **Sources & coverage** flow inside the existing Command center, with a shared evidence drawer reachable from Findings, Approvals, and the Agent board. Retain the eight top-level tabs.
 
 Three data contexts must remain separate:
-- **Synthetic investigation:** developer-created school records, the existing demo management profile, one month initially, two months for memory evaluation.
+- **Synthetic evaluation:** developer-created records used only by tests and held-out benchmarks.
 - **Public report exploration:** published reports and explicitly extracted statements; no invented underlying transactions or writable financial scenario.
 - **Authorized institutional investigation:** future pilot; requires actual access, an institution profile and appropriate handling of its records. Not part of the initial hackathon dataset.
 
@@ -86,7 +86,7 @@ Keep model calls out of deterministic financial import and validation. Later, an
 
 Coverage states: `missing`, `processing`, `needs_review`, `partial`, `ready_for_scope`, `unsupported`. Display required source types and periods plus accepted/rejected counts and control totals. Do not label a workspace “audit complete” from a file count or an opaque percentage.
 
-If the API is unavailable, real workspaces show offline/error state with any cached snapshot explicitly dated. They must never silently display Sandbox fixture data.
+If the API is unavailable, workspaces show an offline/error state with any cached snapshot explicitly dated. They must never substitute unrelated data.
 
 ## 5. First data pack and normalization contract
 
@@ -196,7 +196,7 @@ Use structured errors with `code`, `message`, `batch_id`, `source_id`, `locator`
 
 Existing `GET /api/workspaces/{ws}/bundle` stays the dashboard seam. Add compact coverage/source summaries and identifiers, not original document bytes or full raw payroll rows. Source detail is fetched on demand.
 
-Both current `WorkspaceId` definitions are restricted to `sandbox | mit`. Replace this with validated persisted workspace IDs when workspace creation lands; keep those demo IDs as compatibility aliases. Separate data origin (`synthetic/public/authorized` when enabled) from execution mode (`live/recorded/scripted`).
+Workspace IDs are validated persisted identifiers. Keep data origin (`synthetic/public/authorized` when enabled) separate from execution mode.
 
 Update `contracts/README.md`, `api/app/models.py`, `web/src/lib/types.ts` and representative fixtures together with explicit contract-version compatibility. Coordinate affected workstreams before merging; do not silently break other contributors' fixtures. New empty workspaces must display empty state, not recorded findings.
 
@@ -225,7 +225,7 @@ For the local synthetic/public MVP:
 - Treat document instructions as data. Uploaded text cannot change permissions, approve itself or access secrets/evaluator truth.
 - Source reads and downloads enforce workspace/snapshot scope; redact sensitive values from telemetry.
 - No automatic remote URL fetching in the first build. A user supplies the file and optional provenance URL.
-- Real private institutional data remains out of the local demo until access, storage/retention, reviewer authentication and any model transmission rules are agreed for that pilot.
+- Private institutional data remains out of local-only deployments until access, storage/retention, reviewer authentication and model-transmission rules are agreed for that pilot.
 
 These are import requirements from spec §12, not claims that the prototype is suitable for production school records.
 
@@ -277,7 +277,7 @@ Add focused parser/service/API tests and one meaningful browser walkthrough; ret
 3. **Use Sources & coverage within existing tabs.** No ninth top-level tab.
 4. **Add dynamic workspaces, persistent sources and SQLite now.** These extend the current two-workspace fixture contract and must be coordinated with the team.
 5. **Build source-to-evidence-to-investigation as the first complete feature.** Do not stop at an uploader; follow with a real specialist/auditor evidence-gap interaction.
-6. **Preserve separate identities/profile labels.** The spec's fictional district, Sandbox University presentation and any real institution are not interchangeable accounting entities. Retain the current display/demo names; label the supported synthetic accounting basis explicitly.
+6. **Preserve separate identities/profile labels.** Synthetic evaluation data and a real institution are not interchangeable accounting entities. Label the supported accounting basis explicitly.
 
 Review outcome: APPROVED by Max in the conversation.
 Approved scope / changes: implement intake and push to branch; keep code/folders compact.
@@ -293,7 +293,7 @@ Approved scope / changes: implement intake and push to branch; keep code/folders
 - Coverage indicates input availability; institutional completeness remains unverified. Full management statements and payroll allocation confirmation remain review-gated, even when the necessary source types exist.
 - Evidence requests and committed-source responses persist task/source/snapshot links and a resumption event. The future agent runtime must independently review and consume that event; this change does not run or resume an LLM.
 - Changed snapshots become stale, and evidence requests whose active source was replaced return to review. Report/calculation dependency invalidation awaits those unimplemented modules.
-- Existing fixed demos remain compatible. Intake workspaces never show their fixture findings, simulated approvals or reports.
+- Every workspace starts empty and only shows findings, approvals and reports derived from its own committed records.
 - The first pack supports the ingestion acceptance scenario; 60/40-versus-80/20 agent reasoning, report recomputation, private benchmarking and memory remain later milestones.
 
-Verification: 49 backend tests (including original accounting checks), TypeScript and production build, lint on changed frontend files, and a browser walkthrough of workspace creation, starter-pack preview, commit and original-line viewing. See the tracker for the latest verification/handoff state.
+Verification: backend tests (including accounting checks), TypeScript and production build, lint on changed frontend files, and a browser walkthrough of workspace creation, upload, commit and original-line viewing. See the tracker for the latest verification/handoff state.

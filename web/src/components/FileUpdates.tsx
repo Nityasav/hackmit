@@ -49,7 +49,7 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
       setChanges(await intakeApi<Changes>(base));
       setMessage(result.run_id
         ? `${result.reused ? "Existing" : "New"} five-agent investigation: ${result.run_id}. Open Investigation to follow it.`
-        : "Re-checked without a model. Open Investigation to read what changed.");
+        : "Record checks complete. Open Briefing for results.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -63,10 +63,10 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
 
   return (
     <section className="my-4 border border-line bg-surface-2 p-4">
-      <h3 className="text-[15px] font-semibold tracking-tight">More records arrived?</h3>
+      <h3 className="text-[15px] font-semibold tracking-tight">File updates</h3>
       <p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-        Add them below — you never need a second school. For a corrected record, keep the same source system and
-        record ID and raise its version. Commit the update, then re-check it here.
+        Upload new files to this workspace. For corrections, keep the record ID and source system,
+        increase the version, then commit and rescan.
       </p>
       <div className="flex flex-wrap gap-4 text-[13px]">
         <a className="underline" href="#source-records">Add CSV or text records</a>
@@ -89,14 +89,14 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
       )}
       <label className="my-3 flex items-start gap-2 text-[13px]">
         <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />
-        Also ask the five agents. This sends the selected records to the configured model provider and costs money.
+        Include an agent review. Selected records go to the model provider; API charges apply.
       </label>
       <button
         disabled={busy || !changes.snapshot_id}
         onClick={() => void scan()}
         className="bg-ink px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-40"
       >
-        {busy ? "Starting…" : live ? "Re-check and ask the agents" : "Re-check without a model"}
+        {busy ? "Starting…" : live ? "Scan and investigate" : "Run record checks"}
       </button>
       {error && <p role="alert" className="mt-2 text-[13px] text-accent-bad">{error}</p>}
       {message && <p role="status" className="mt-2 text-[13px]">{message}</p>}

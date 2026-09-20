@@ -29,18 +29,13 @@ class Workspace(BaseModel):
     name: str
     kind: Literal["synthetic", "public"]
     period: str
-    # Wider than the web contract on purpose: this model also validates the
-    # fixture bundles in contracts/fixtures, which declare "recorded".
-    mode: Literal["live", "recorded", "scripted", "not_started"]
+    mode: Literal["live", "not_started"]
     snapshot_id: str
     disabled_tabs: list[TabId]
     model: str
     run_budget: RunBudget
     source_url: str | None = None
     intake: bool = False
-    #: For a recorded workspace, what the recording is of: the run, when, and
-    #: with which model. Absent on a live workspace, which speaks for itself.
-    recorded_from: str | None = None
     currency: str = "USD"
     profile: str | None = None
 

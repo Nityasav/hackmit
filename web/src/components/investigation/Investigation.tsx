@@ -27,11 +27,10 @@ export function Investigation({ ws }: { ws: string }) {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">Investigation</p>
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-          Five agents check this school&rsquo;s books.
+          Review the records.
         </h1>
         <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-dim">
-          Each one has a single job. Everything they claim points back to a line in the files you uploaded, and the
-          Internal Auditor re-checks the others before any of it reaches you.
+          Set a question for the team. Follow the review and open the evidence behind each finding.
         </p>
         <p className="mt-4 font-accent text-[14px] text-ink-dim">{describeRun(run, running)}</p>
         {run?.scope && (
@@ -41,33 +40,33 @@ export function Investigation({ ws }: { ws: string }) {
         )}
       </header>
 
-      <Section title="First, the automatic checks">
+      <Section title="Record checks">
         <RecordChecks ws={ws} />
       </Section>
 
-      <Section title="Then ask the agents something">
+      <Section title="Review scope">
         <StartInvestigation state={state} />
       </Section>
 
-      <Section title="Who is on the team">
+      <Section title="Agent team">
         <AgentTeam run={run} running={running} />
       </Section>
 
-      <Section title={run ? "What is happening" : "What a run does"}>
+      <Section title={run ? "Progress" : "Review process"}>
         {run ? <RunProgress run={run} running={running} /> : <BeforeAnyRun />}
       </Section>
 
-      <Section title="Where each task sits">
+      <Section title="Agent tasks">
         <AgentBoard />
       </Section>
 
       {run && (
-        <Section title="What they found">
+        <Section title="Findings">
           <RunFindings ws={ws} run={run} running={running} />
         </Section>
       )}
 
-      <Section title="What they learned from you">
+      <Section title="Previous decisions">
         <Precedent />
       </Section>
     </div>

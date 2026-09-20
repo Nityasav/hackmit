@@ -68,7 +68,7 @@ def checks(records, config):
         account = dims[0]
         key = "budget-" + sha256(str(dims).encode()).hexdigest()[:12]
         if account not in chart or chart[account]["payload"]["type"] != "expense":
-            add(key, "Budget basis requires review", "py", "gap", "This check only compares expense accounts on the demo accrual profile.", rows)
+            add(key, "Budget basis requires review", "py", "gap", "This check only compares expense accounts on the configured accrual profile.", rows)
             continue
         if not by_role["ledger"]:
             continue

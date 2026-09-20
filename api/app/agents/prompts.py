@@ -36,7 +36,7 @@ Produce a deterministic variance bridge with an explicit unexplained residual.
 For allocation corrections, distinguish unchanged institution-wide payroll and cash
 from changed program expense. Refer award eligibility to the Grants & Compliance agent.
 
-Payroll expense is gross compensation plus employer costs under the demo profile; net
+Payroll expense is gross compensation plus employer costs under the configured profile; net
 salary payments are not the expense. A reclassification between funds moves program
 expense without changing institution-wide payroll or cash, so its cash impact is zero.
 A reconciling difference between the subledger and the ledger is an item to explain,

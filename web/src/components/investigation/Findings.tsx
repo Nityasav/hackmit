@@ -12,14 +12,14 @@ import type { AcceptedClaim, CFORun, RunCalculation } from "./run";
 
 const DISPOSITION: Record<string, { label: string; tone: "red" | "green" | "gray" }> = {
   substantiated: { label: "Needs your attention", tone: "red" },
-  cleared: { label: "Checked, nothing wrong", tone: "green" },
+  cleared: { label: "Cleared within scope", tone: "green" },
   explained: { label: "Explained", tone: "gray" },
 };
 
 const CATEGORY: Record<RunCalculation["category"], string> = {
-  reclassification: "Money recorded against the wrong pot",
+  reclassification: "Reclassification",
   exposure: "Money at risk",
-  potential_recovery: "Money that may be recoverable",
+  potential_recovery: "Potential recovery",
   none: "No exception in the numbers",
 };
 
@@ -51,8 +51,7 @@ export function RunFindings({ ws, run, running }: { ws: string; run: CFORun; run
 
       {run.accepted.length === 0 && !running && (
         <p className="mt-6 max-w-prose border border-line bg-surface p-5 text-[14px] leading-relaxed">
-          No claim passed the Internal Auditor in this run. That is not a clean bill of health. It means nothing
-          survived the re-check, and anything the agents raised is in the open questions below.
+          No findings were accepted in this run. Review any unresolved questions below.
         </p>
       )}
 
@@ -60,7 +59,7 @@ export function RunFindings({ ws, run, running }: { ws: string; run: CFORun; run
         <div className="mt-8 border-t border-line pt-8">
           <h3 className="text-[15px] font-semibold tracking-tight">Open questions</h3>
           <p className="mt-1.5 max-w-prose text-[13.5px] leading-relaxed text-ink-dim">
-            The Internal Auditor did not accept these. They are questions for a person, not conclusions.
+            These items need more evidence or further review.
           </p>
           <ul className="mt-4 max-w-3xl">
             {run.unresolved.map((item) => (
@@ -80,11 +79,11 @@ export function RunFindings({ ws, run, running }: { ws: string; run: CFORun; run
             target="_blank"
             rel="noreferrer"
           >
-            Open the CFO agent&rsquo;s full write-up
+            Open full report
           </a>
         )}
         <Link href="/briefing" className="underline">
-          Hand the result to the director
+          Open briefing
         </Link>
       </div>
     </>
@@ -129,14 +128,14 @@ function Claim({
         </div>
       ) : (
         <p className="mt-3.5 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-          No amount is confirmed here. The agent explains what it found; no calculation stands behind a figure.
+          No verified amount is available for this finding.
         </p>
       )}
 
       <p className="mt-3.5 max-w-prose text-[14.5px] leading-relaxed">{claim.conclusion}</p>
 
       <div className="mt-4 max-w-prose border-t border-line pt-3">
-        <h4 className="text-[13px] font-semibold">What the Internal Auditor said</h4>
+        <h4 className="text-[13px] font-semibold">Auditor review</h4>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-dim">{review.rationale}</p>
         {review.required_action && (
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-dim">Asked for: {review.required_action}</p>
@@ -144,12 +143,12 @@ function Claim({
       </div>
 
       <div className="mt-4 max-w-prose border-t border-line pt-3">
-        <h4 className="text-[13px] font-semibold">What to do next</h4>
+        <h4 className="text-[13px] font-semibold">Recommended action</h4>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-dim">{claim.proposed_action}</p>
       </div>
 
       <div className="mt-4 border-t border-line pt-3">
-        <h4 className="text-[13px] font-semibold">See it for yourself</h4>
+        <h4 className="text-[13px] font-semibold">Source evidence</h4>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {claim.evidence_ids.map((sourceId) => (
             <button
@@ -231,7 +230,7 @@ function SourceReader({ ws, sourceId }: { ws: string; sourceId: string }) {
       <p className="break-words text-[13px] font-medium">{view.name}</p>
       {origin && (
         <div className="mt-1.5 text-[12.5px] leading-relaxed text-ink-dim">
-          <p>Someone read this out of a document and checked it. The document is kept unchanged.</p>
+          <p>Reviewed extraction. The original document is preserved.</p>
           <a className="underline" href={`${documents}/${encodeURIComponent(origin.document_id)}/original`}>
             Open the original: {origin.name}
           </a>

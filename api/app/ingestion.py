@@ -24,7 +24,7 @@ MAX_FILE = 10 * 1024 * 1024
 MAX_BATCH = 50 * 1024 * 1024
 MAX_FILES = 20
 MAX_ROWS = 50_000
-PROFILE = "DEMO_US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
+PROFILE = "US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
 Role = Literal["chart", "opening", "ledger", "payroll", "grants", "budget", "invoice", "fees", "collections", "deposits", "sponsorships", "service", "policy", "document"]
 DOCUMENT_ROLES = {"service", "policy", "document"}
 # Money coming in: what a family or sponsor owes, what was received, and where it landed.
@@ -60,7 +60,7 @@ class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["synthetic", "public"] = "synthetic"
     entity_type: Literal["school", "district", "board", "university"] = "school"
-    jurisdiction: str = Field(default="Demo", min_length=1, max_length=100)
+    jurisdiction: str = Field(default="Unspecified", min_length=1, max_length=100)
     currency: Literal["USD", "CAD", "EUR", "GBP"] = "USD"
     start: date
     end: date
@@ -73,7 +73,7 @@ class WorkspaceCreate(BaseModel):
         if self.start > self.end:
             raise ValueError("Period start must not be after its end")
         if self.kind == "synthetic" and self.currency != "USD":
-            raise ValueError("The demo management profile supports USD only; other currencies are public-document mode")
+            raise ValueError("The current management accounting profile supports USD only; other currencies are public-document mode")
         return self
 
 
@@ -654,4 +654,3 @@ def respond(ws, rid, body: EvidenceResponse):
                                                     "source_id": body.source_id, "snapshot_id": snapshot["id"],
                                                     "next_action": "review_evidence_then_resume", "agent_runtime_available": False})
     return coverage(ws)
-

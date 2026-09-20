@@ -94,7 +94,15 @@ export const useDashboardStore = create<DashboardState>()(
           const bundle = parseOrThrow(bundleSchema, payload, `Workspace "${id}"`);
           set((s) => ({ bundles: { ...s.bundles, [id]: bundle }, error: null, loading: false }));
         } catch (e) {
-          set({ error: e instanceof Error ? e.message : "Could not load this workspace.", loading: false });
+          const message = e instanceof Error ? e.message : "Could not load this workspace.";
+          // A workspace may be deleted in another tab or by an administrator.
+          // Refresh the list so a removed selection cannot keep polling a 404.
+          if (/unknown workspace|not found/i.test(message)) {
+            await get().loadIntakeWorkspaces();
+            set({ error: null, loading: false });
+            return;
+          }
+          set({ error: message, loading: false });
         }
       },
     }),

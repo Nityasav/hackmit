@@ -8,7 +8,7 @@ from tests.conftest import FixtureData, StubAuditor, StubPlanner, StubSpecialist
 
 class IndependentPlan(StubPlanner):
     async def plan(self, objective, scope):
-        return Plan(rationale="Independent evidence checks can run concurrently.", tasks=[
+        return Plan(memory_checks=[], rationale="Independent evidence checks can run concurrently.", tasks=[
             TaskSpec(id=f"task-{i}", role=role, objective="Check award terms.", source_ids=["award"], success_criteria="Cite original evidence.")
             for i, role in enumerate(["ap", "py", "gr"])
         ])

@@ -3,10 +3,11 @@
 `cfo_runs` lives in the shared schema (`app/db.py`) so one transaction can read a
 coordinator run and the snapshot, records and triage runs it was derived from.
 Passing an explicit `path` keeps a run store isolated in a temporary file, which
-is how the tests and the scripted CLI demo use it.
+is how tests and command-line runs use it.
 """
 
 from contextlib import contextmanager
+import json
 from pathlib import Path
 import sqlite3
 
@@ -40,6 +41,26 @@ class RunRepository:
         finally:
             connection.close()
 
+    @staticmethod
+    def _load(payload: str) -> Run:
+        """Read a stored run, including ones written before a field existed.
+
+        `Plan.memory_checks` is deliberately required, so that a model cannot
+        omit it and have silence read as "I checked nothing". That strictness
+        is about model output; applied to stored history it would mean every
+        run persisted before the field shipped fails to validate — and since
+        `interrupt_pending()` reads every row at startup, one such row takes
+        the whole coordinator down with a 500. A run recorded before the
+        feature existed genuinely weighed no precedent, so an empty list is
+        the accurate value, not a convenient one.
+        """
+        data = json.loads(payload)
+        plan = data.get("plan")
+        if isinstance(plan, dict):
+            plan.setdefault("memory_checks", [])
+        data.setdefault("memory_checks", [])
+        return Run.model_validate(data)
+
     def save(self, run: Run) -> None:
         run.updated_at = now()
         with self._connect() as connection:
@@ -52,21 +73,21 @@ class RunRepository:
             row = connection.execute("SELECT payload FROM cfo_runs WHERE id=?", (run_id,)).fetchone()
         if row is None:
             raise KeyError(run_id)
-        return Run.model_validate_json(row[0])
+        return self._load(row[0])
 
     def latest(self, workspace: str) -> Run | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT payload FROM cfo_runs WHERE workspace=? ORDER BY created_at DESC LIMIT 1",
                 (workspace,)).fetchone()
-        return Run.model_validate_json(row[0]) if row else None
+        return self._load(row[0]) if row else None
 
     def interrupt_pending(self) -> None:
         """Call once at process startup, with one API worker owning this database."""
         with self._connect() as connection:
             rows = connection.execute("SELECT payload FROM cfo_runs").fetchall()
         for row in rows:
-            run = Run.model_validate_json(row[0])
+            run = self._load(row[0])
             if run.status in {"queued", "planning", "running"}:
                 run.status = "interrupted"
                 run.unresolved.append("Server restarted during this run. Start a new run against the current snapshot.")

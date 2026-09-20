@@ -30,7 +30,7 @@ export function StartInvestigation({ state }: { state: Investigation }) {
         What should the agents look into?
       </label>
       <p className="mt-1.5 max-w-prose text-[13.5px] leading-relaxed text-ink-dim">
-        Write it the way you would say it out loud. This is the question the CFO agent plans around.
+        Specify the period, transactions or concern to review.
       </p>
       <textarea
         id="objective"
@@ -45,8 +45,7 @@ export function StartInvestigation({ state }: { state: Investigation }) {
           {state.starting ? "Starting…" : state.running ? "Agents are working" : "Start the investigation"}
         </Button>
         <p className="max-w-md text-[13px] leading-relaxed text-ink-dim">
-          It reads this school&rsquo;s committed records and makes paid model calls. It never changes your books:
-          every money change is a proposal for you to decide on.
+          Selected records are sent to the model provider. API charges apply. Changes require your approval.
         </p>
       </div>
 
@@ -77,7 +76,7 @@ export function StartInvestigation({ state }: { state: Investigation }) {
 export function BeforeAnyRun() {
   return (
     <div className="border border-line bg-surface p-5 md:p-6">
-      <h3 className="text-[15px] font-semibold tracking-tight">When you press start</h3>
+      <h3 className="text-[15px] font-semibold tracking-tight">Review steps</h3>
       <ol className="mt-4 max-w-2xl space-y-3">
         {WHAT_HAPPENS.map((step, index) => (
           <li key={step} className="flex gap-3.5 text-[14px] leading-relaxed">
@@ -89,7 +88,7 @@ export function BeforeAnyRun() {
         ))}
       </ol>
       <p className="mt-5 border-t border-line pt-3 font-accent text-[13.5px] text-ink-dim">
-        Nothing appears on this page until an agent has actually done it.
+        Progress and findings appear here during the review.
       </p>
     </div>
   );
@@ -100,8 +99,8 @@ export function RunProgress({ run, running }: { run: CFORun; running: boolean })
   return (
     <>
       <div className="grid grid-cols-2 gap-y-5 border border-line bg-surface px-5 py-4 sm:grid-cols-4 sm:gap-y-0 sm:divide-x sm:divide-line">
-        <Figure label="Thinking steps" value={run.model_calls} note="calls the CFO agent paid for" />
-        <Figure label="Evidence opened" value={run.tool_calls} note="files read and sums run" />
+        <Figure label="CFO calls" value={run.model_calls} note="planning and reporting" />
+        <Figure label="Evidence checks" value={run.tool_calls} note="source reads and calculations" />
         <Figure label="Claims accepted" value={run.accepted.length} note="passed the Auditor's re-check" />
         <Figure label="Still unresolved" value={run.unresolved.length} note="questions left open" />
       </div>
@@ -113,7 +112,7 @@ export function RunProgress({ run, running }: { run: CFORun; running: boolean })
 
       {run.plan && (
         <div className="mt-6 border border-line bg-surface p-5 md:p-6">
-          <h3 className="text-[15px] font-semibold tracking-tight">Who was given what</h3>
+          <h3 className="text-[15px] font-semibold tracking-tight">Assigned tasks</h3>
           <p className="mt-2 max-w-prose text-[13.5px] leading-relaxed text-ink-dim">{run.plan.rationale}</p>
           <ul className="mt-4">
             {run.tasks.map((task) => {
@@ -146,7 +145,7 @@ export function RunProgress({ run, running }: { run: CFORun; running: boolean })
 
       {run.scope && run.scope.gaps.length > 0 && (
         <div className="mt-6 border border-line bg-surface p-5 md:p-6">
-          <h3 className="text-[15px] font-semibold tracking-tight">What this run cannot confirm</h3>
+          <h3 className="text-[15px] font-semibold tracking-tight">Missing evidence</h3>
           <ul className="mt-3 max-w-2xl space-y-2">
             {run.scope.gaps.map((gap) => (
               <li key={gap} className="border-t border-line pt-2 text-[13.5px] leading-relaxed text-ink-dim">
@@ -160,11 +159,11 @@ export function RunProgress({ run, running }: { run: CFORun; running: boolean })
       {run.events.length > 0 && (
         <div className="mt-6 border border-line bg-surface p-5 md:p-6">
           <h3 className="text-[15px] font-semibold tracking-tight">
-            Every step, newest first{" "}
+            Activity, newest first{" "}
             <span className="ml-1 font-num text-[13px] font-medium text-ink-dim">{run.events.length}</span>
           </h3>
           <p className="mt-1.5 text-[13.5px] text-ink-dim">
-            {running ? "This list grows while the agents work." : "The whole run, exactly as it happened."}
+            {running ? "Updates as the review progresses." : "Saved activity for this run."}
           </p>
           <ol className="mt-3 max-h-[28rem] overflow-y-auto">
             {[...run.events].reverse().map((event, index) => (

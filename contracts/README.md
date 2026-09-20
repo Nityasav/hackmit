@@ -2,15 +2,15 @@
 
 ## Intake contract v2
 
-The existing bundle remains compatible with `sandbox` and `mit`. New persisted workspace IDs are
-`ws-` plus 16 hexadecimal characters; they are validated by lookup, never treated as filesystem paths.
-Bundles add `contract_version: 2`, optional workspace `intake`, `recorded_from`, `currency`, `profile`, and execution mode
-`not_started`. New workspaces contain no demo findings/tasks. The TypeScript types in `web/src/lib/types.ts`
+Persisted workspace IDs are `ws-` plus 16 hexadecimal characters; they are validated by lookup,
+never treated as filesystem paths. Bundles add `contract_version: 2`, optional workspace `intake`,
+`currency`, `profile`, and execution mode `not_started`. New workspaces contain no findings or tasks.
+The TypeScript types in `web/src/lib/types.ts`
 describe intake responses; request models and validation live in the flat `api/app/ingestion.py` module.
 
 | Method/path | Payload / result |
 | --- | --- |
-| GET /api/workspaces | Persisted workspace configurations; fixed demos remain separate |
+| GET /api/workspaces | Persisted workspace configurations |
 | POST /api/workspaces | Name, synthetic/public kind, entity type, jurisdiction, currency, start/end, scope |
 | POST /api/workspaces/{ws}/imports | Multipart `files` plus JSON `metadata` array (one FileOptions per file) → persisted preview |
 | GET /api/workspaces/{ws}/imports | Recent saved imports |
@@ -44,14 +44,12 @@ Coverage states are source readiness only; full management statements and alloca
 exists. Evidence `supplied` is not `verified`; attachment saves a future-runtime resumption event, and a
 superseding source returns the request to `needs_review`.
 
-The small synthetic CSV/Markdown pack the intake tests upload lives in `api/tests/conftest.py`. It is
-test input only: the application ships no fixture file pack and no endpoint that loads one.
+Test inputs live under `api/tests/` and are unavailable to the running application.
 
 The seam between the four workstreams. **Change these three together:**
 
 | File | Owner of the change |
 | --- | --- |
-| `contracts/fixtures/*.json` | whoever adds the data |
 | `web/src/lib/types.ts` | UI |
 | `api/app/models.py` | Functionality |
 
@@ -59,12 +57,12 @@ If you change a field, say so in the team channel before you push. Everything el
 
 ## The bundle
 
-The dashboard renders **one JSON payload per workspace**: `GET /api/workspaces/{sandbox|mit}/bundle`.
-With no API running, the web app reads `contracts/fixtures/{ws}.json` directly, so the UI works offline.
+The dashboard renders **one JSON payload per persisted workspace**:
+`GET /api/workspaces/{ws}/bundle`.
 
 ```
 Bundle
-├─ workspace      id, name, kind (synthetic|public), period, mode (live|recorded|scripted),
+├─ workspace      id, name, kind (synthetic|public), period, mode (live|not_started),
 │                 snapshot_id, disabled_tabs[], model, run_budget
 ├─ agents[]       cfo | ap | py | gr | au — name, role, status, "doing" (drives the live strip)
 ├─ briefing       CFO Agent text (**bold** marks highlights) + action buttons

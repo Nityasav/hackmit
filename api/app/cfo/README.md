@@ -37,7 +37,7 @@ silently switches a requested live run to fixtures.
 
 ## Model configuration
 
-For the initial demo, use OpenAI for the CFO and evaluate local Qwen separately.
+Use OpenAI for the CFO and evaluate local Qwen separately before enabling it for workspace runs.
 No model ID is silently assumed: choose one available to your account that supports
 Responses structured output. Do not use the model string from the UI fixtures.
 

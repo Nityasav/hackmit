@@ -71,7 +71,7 @@ def run_task(model, *, sources=ALL_SOURCES, limits=None, feedback=None, data=Non
     data = data or FixtureData()
     request = RunRequest(limits=limits or Limits())
     run = Run(id="CFO-test", request=request)
-    scope = asyncio.run(data.snapshot("sandbox"))
+    scope = asyncio.run(data.snapshot("test-workspace"))
     run.scope = scope
     spec = TaskSpec(id="allocation", role="py", objective="Check payroll allocation against service evidence.",
                     source_ids=list(sources), success_criteria="Return a cited deterministic calculation or an evidence request.")

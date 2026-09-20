@@ -35,9 +35,9 @@ Established by reading the code, not the README. Line refs are on `main` at `e79
 | F4 | `disabled_tabs` is a constant | `api/app/ingestion.py:696`, `web/src/lib/data.tsx:28` | Derive from state |
 | F5 | Coordinator results never reach the dashboard | `cfo_runs` lives in a separate SQLite file (`api/app/cfo/api.py:88`); nothing joins it to `ingestion.bundle()` | Unify |
 | F6 | `/cfo` is an isolated page | only reachable by a link; its output is invisible to every tab | Fold in |
-| F7 | Approvals do nothing | `api/app/store.py:48` flips a status and marks a task done; recomputes nothing | Build |
-| F8 | Reports "before vs after" is fixture text | `contracts/fixtures/sandbox.json` `report.comparisons` | Derive |
-| F9 | sandbox/MIT are static JSON | `api/app/store.py:31` reads the fixture and serves it | Seed from a real run |
+| F7 | Approvals need recomputation | Human decisions must update the derived projection coherently | Build |
+| F8 | Reports need a derived baseline | Comparisons must come from saved calculations | Derive |
+| F9 | Workspace state must be live | Every workspace is derived from persisted records and runs | Build |
 | F10 | `run_loop.py` stack is unreachable over HTTP | 561 lines + `ap_tools`/`ap_write_tools`/`au_write_tools`/`cfo_tools`/`decision_tools`; only `api/scripts/*.py` and tests call it | Repoint, don't delete |
 | F11 | `ap_tools` reads its own JSON fixture | `api/app/agents/data/ap_sandbox.json` (7.7 KB) instead of committed records | Repoint |
 | F12 | `POST /api/demo/{action}` half-implemented | `api/app/main.py:95` — `inject_issue`, `add_evidence`, `next_month` return 501 | Implement or remove |
@@ -114,13 +114,11 @@ Steps 1 and 2 landed. Steps 3 and 4 were misplaced in this plan and moved:
 2. Rewrite `api/app/cfo/repository.py` to use `db.connect()` instead of its own
    `sqlite3.connect(self.path)`. Drop `CFO_DB_PATH` and the `.venv/cfo-runs.sqlite3` default in
    `api/app/cfo/api.py:88`.
-3. Give `store.py` a SQLite-backed implementation behind the same function signatures. Every
-   existing caller (`run_loop`, `ap_write_tools`, `au_write_tools`, `main.decide`) keeps working.
-4. `store.get_bundle(ws)` stops branching on `ws in {"sandbox","mit"}`; all workspaces go through
-   one path.
+3. Route all dashboard bundles through the SQLite-backed projection layer.
+4. Remove any alternate fixture-backed bundle path.
 
-**Done when:** `main.py:74`'s `if ws in {"sandbox","mit"} else` branch is gone, and a coordinator
-run and a triage run on the same workspace are readable in one transaction.
+**Done when:** no workspace-ID special case remains, and a coordinator run and a triage run on the
+same workspace are readable in one transaction.
 
 **Risk:** this touches the DB schema. Write the migration as additive-only (`CREATE TABLE IF NOT
 EXISTS`), and add a test that opens a `user_version = 2` database and reads it without loss.
@@ -335,16 +333,16 @@ five-agent workflow can be started.
 
 ## Phase 8 — Seed sandbox and MIT from real runs — **DONE for sandbox; MIT cannot be**
 
-`scripts/seed_fixtures.py` records sandbox from a real pipeline run, offline by default. MIT is not regenerable: its source is a published PDF hosted elsewhere and PDF extraction is not implemented, so there is nothing to run agents over. Both now carry `recorded_from`, and the topbar shows it. Playbooks and the ablation are carried through rather than blanked, so the Learning workstream keeps its tab.
+All workspace state is derived from persisted records and runs. There is no alternate preloaded bundle path.
 
 Decided: keep both workspaces, but generate their contents instead of authoring them.
 
 1. New `api/scripts/seed_fixtures.py`:
-   - create the workspace, upload the synthetic source pack from `contracts/fixtures/intake.json`
+   - create the workspace and upload authorized source records
      (7 files, already used by the starter-pack flow), commit a snapshot
    - run the five-agent workflow live
    - run the auditor
-   - export the resulting `Bundle` to `contracts/fixtures/sandbox.json`
+   - verify the resulting `Bundle` against the contract
 2. `ap_sandbox.json` (F11): repoint `ap_tools._load` at committed records so Stack C reads the same
    snapshot as everyone else, then delete the file.
 3. MIT: it is a public-document workspace with no ledger, so the same script runs document-only

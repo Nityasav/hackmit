@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["Director review"])
 ACTIVE = {"queued", "planning", "running"}
 LIMITATIONS = [
     "Supplied records only; no assurance of completeness, fraud determination or audit opinion.",
-    "USD fictional management profile, not an Ontario/TDSB statutory accounting adapter.",
+    "USD management accounting profile, not an Ontario/TDSB statutory accounting adapter.",
     "Amounts can overlap across checks. Do not add them together or call them savings.",
     "Human decisions are proposals and follow-up records. No ledger, payment or grant submission is changed.",
 ]
@@ -34,7 +34,7 @@ def scan(ws):
         if not snapshot:
             raise HTTPException(409, "Commit source records before scanning.")
         if config["kind"] != "synthetic" or config["currency"] != "USD":
-            raise HTTPException(409, "Transaction checks require the fictional USD management profile.")
+            raise HTTPException(409, "Transaction checks require the USD management accounting profile.")
         rows = ingestion.active_records(c, ws)
         found = checks(rows, config)
         payload = dict(id=db.uid("scan"), workspace=ws, snapshot_id=snapshot, created_at=db.now(),
@@ -203,7 +203,7 @@ def _delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
         else:
             c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
             c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
-        for table in ("extraction_active", "extraction_items", "extraction_documents", "review_actions", "review_scans", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
+        for table in ("extraction_active", "extraction_items", "extraction_documents", "review_actions", "review_scans", "agent_requests", "agent_runs", "evidence_requests", "approvals", "precedents", "records", "snapshots", "sources", "batches", "events"):
             c.execute(f"DELETE FROM {table} WHERE ws=?", (ws,))
         c.execute("DELETE FROM workspaces WHERE id=?", (ws,))
     return {"deleted": ws, "note": "Logical deletion completed. OS backups and recoverable filesystem remnants are outside this operation."}

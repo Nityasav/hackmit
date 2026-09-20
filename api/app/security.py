@@ -58,7 +58,7 @@ def password_hash(password):
 def identity(request):
     configured = users()
     if not configured:
-        return {"name": "local-reviewer", "role": "admin", "workspaces": ["*"], "mode": "local_demo"}
+        return {"name": "local-reviewer", "role": "admin", "workspaces": ["*"], "mode": "local_admin"}
     session = SESSIONS.get(hashlib.sha256(request.cookies.get("schooltrace_session", "").encode()).hexdigest())
     if not session or session[1] < time.time() or session[0] not in configured:
         raise HTTPException(401, "Sign in to access this workspace.")
@@ -81,7 +81,7 @@ async def guard(request):
         # API on which every caller is an admin.
         raise HTTPException(503, "Public hosting requires SCHOOLTRACE_USERS; refusing to serve an unauthenticated admin API.")
     if not testing and not hosted and (host not in {"localhost", "127.0.0.1", "::1"} or peer not in {"127.0.0.1", "::1"}):
-        raise HTTPException(403, "Laptop demo accepts loopback connections only; set SCHOOLTRACE_PUBLIC_HOSTS to host it.")
+        raise HTTPException(403, "This server accepts loopback connections only; set SCHOOLTRACE_PUBLIC_HOSTS to host it.")
     origin = request.headers.get("origin")
     if origin and origin not in ORIGINS and not (ORIGIN_PATTERN and ORIGIN_PATTERN.fullmatch(origin)):
         raise HTTPException(403, "Untrusted browser origin.")
@@ -122,7 +122,10 @@ async def guard(request):
                 raise ValueError()
         except (ValueError, UnicodeError):
             raise HTTPException(400, "Expected a JSON request object.") from None
-        authorize_workspace(user, body.get("workspace", "sandbox"))
+        workspace = body.get("workspace")
+        if not isinstance(workspace, str) or not workspace:
+            raise HTTPException(422, "A workspace is required.")
+        authorize_workspace(user, workspace)
         if path.startswith("/api/approvals/") and user["role"] not in {"admin", "reviewer"}:
             raise HTTPException(403, "Reviewer role required.")
 

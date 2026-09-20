@@ -1,9 +1,9 @@
 "use client";
 
+import { displayLabel } from "@/lib/format";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { starterPackSchema, type StarterPack } from "@/lib/schemas";
 import type { IntakeUiProgress } from "@/lib/workflow";
 import { FileUpdates } from "@/components/FileUpdates";
 import Link from "next/link";
@@ -21,8 +21,8 @@ const ROLES: Record<string, string> = {
 };
 const AGENTS = {
   cfo: { label: "CFO Agent", action: "Run CFO triage", focus: "Perform an initial risk triage of the committed snapshot." },
-  grants_compliance: { label: "Grants & Compliance agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
-  internal_auditor: { label: "Internal Auditor agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
+  grants_compliance: { label: "Grants & Compliance Agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
+  internal_auditor: { label: "Internal Auditor Agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
 };
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
@@ -31,11 +31,6 @@ const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
 });
-function download(name: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
-  const a = document.createElement("a"); a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
@@ -45,17 +40,12 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
   </dialog>;
 }
 
-const EMPTY_PACK: StarterPack = { name: "", start: "", end: "", files: [] };
-
 /**
  * `onProgressChange` lets the step guide above this panel read where the import
  * actually is. It is reported, never inferred: the guide can only ever say what
  * this panel has already seen.
  */
 export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progress: IntakeUiProgress) => void }) {
-  const [sample, setSample] = useState<StarterPack>(EMPTY_PACK);
-  const stageable = sample.files.filter((f) => !f.later);
-  const laterFiles = sample.files.filter((f) => f.later);
   const { ws, bundle, setWs, refreshWorkspaces, refreshBundle, apiError } = useData();
   const isIntake = Boolean(bundle.workspace.intake);
   const [creating, setCreating] = useState(false);
@@ -85,22 +75,6 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     ]);
     setCoverage(cov); setHistory(imports); setAgentRuns(runs);
   }, [base]);
-  // The starter pack is product content, so it comes from the database rather
-  // than being compiled into the bundle.
-  useEffect(() => {
-    let mounted = true;
-    void getSupabaseClient()
-      .rpc("get_starter_pack")
-      // Parsed rather than cast: this comes back from the database untyped, and a
-      // drifted shape should fail here instead of rendering a half-built file list.
-      .then(({ data }) => {
-        if (!mounted || !data) return;
-        const parsed = starterPackSchema.safeParse(data);
-        if (parsed.success) setSample(parsed.data);
-      });
-    return () => { mounted = false; };
-  }, []);
-
   useEffect(() => {
     // Without a workspace the base URL is /api/workspaces/, which 404s. Nothing
     // here is meaningful until someone has created a school.
@@ -157,7 +131,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   return <section className="mb-4 border border-line bg-white p-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-base font-semibold">Sources & coverage</h2>
-        <p className="mt-1 text-xs text-ink-dim">Bring the records. See what is supported, what is missing, and where each number came from.</p></div>
+        <p className="mt-1 text-xs text-ink-dim">Upload records and check their coverage.</p></div>
       <button className={button} onClick={() => setCreating(true)}>New institution</button>
     </div>
     {(error || apiError) && (() => {
@@ -180,7 +154,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {coverage?.capabilities.map((c) => <div key={c.id} className="border border-line p-3">
           <div className="font-semibold">{c.label}</div>
-          <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-amber-50 text-amber-800"}`}>{c.status.replaceAll("_", " ")}</span>
+          <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-amber-50 text-amber-800"}`}>{displayLabel(c.status)}</span>
           {c.missing.length > 0 && <p className="mt-1 text-xs">Missing: {c.missing.map((r) => ROLES[r as SourceRole] || r).join(", ")}</p>}
           <p className="mt-1 text-[11px] text-ink-dim">{c.note}</p>
         </div>)}
@@ -190,8 +164,8 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div className="mt-5 border border-violet-200 bg-violet-50/40 p-4">
         <Link href="/investigation" className="mb-3 inline-block text-sm font-semibold text-ink underline">Open the investigation →</Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
-            <p className="mt-1 max-w-3xl text-xs text-ink-dim">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>
+          <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">OpenAI</span></h3>
+            <p className="mt-1 max-w-3xl text-xs text-ink-dim">Review committed records with this agent. Starting a run sends selected evidence to OpenAI.</p></div>
           {agentRuns[0] && <span className="text-[11px] text-ink-dim">Latest: {agentRuns[0].status} · {agentRuns[0].model}{agentRuns[0].current_snapshot ? "" : " · stale snapshot"}</span>}
         </div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -227,7 +201,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <p className="mt-1 text-xs text-ink-dim">Scope: {agentRuns[0].result.analysis.scope_assessed}</p>
           {agentRuns[0].result.review_scope && <p className="mt-2 text-xs">Reviewed {agentRuns[0].result.review_scope.reviewed_count} of {agentRuns[0].result.review_scope.candidate_count} candidate findings in this run. Remaining findings are unreviewed.</p>}
           {agentRuns[0].result.analysis.reviews?.map((review) => <div key={review.finding_id} className="mt-3 border border-line bg-white p-3">
-            <b>Auditor verdict: {review.verdict.replaceAll("_", " ")}</b>
+            <b>Auditor verdict: {displayLabel(review.verdict)}</b>
             <p className="break-all font-mono text-[10px] text-ink-dim">{review.finding_id}</p>
             <p className="mt-1 text-xs">{review.rationale}</p>
             <p className="mt-1 text-xs">Required action: {review.required_action || "No further action proposed within this limited review."}</p>
@@ -236,7 +210,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             </button>)}</div>
           </div>)}
           {agentRuns[0].result.analysis.findings.map((finding, index) => <div key={index} className="mt-3 border border-line bg-white p-3">
-            <div className="flex flex-wrap items-center gap-2"><b>{finding.title}</b><span className="bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">{finding.status === "cleared" ? "proposed clearance · unreviewed" : finding.status.replaceAll("_", " ")}</span></div>
+            <div className="flex flex-wrap items-center gap-2"><b>{finding.title}</b><span className="bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">{finding.status === "cleared" ? "Proposed clearance · unreviewed" : displayLabel(finding.status)}</span></div>
             <p className="mt-1 text-xs">{finding.summary}</p>
             <div className="mt-2 flex flex-wrap gap-2">{finding.citations.map((citation) => <button key={`${citation.source_id}:${citation.line}`} className="text-xs text-ink underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
               Source line {citation.line}: “{citation.quote}”
@@ -263,28 +237,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
 
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
-        <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. No real private institutional data in this local demo.</p>
+        <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
         <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
           onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
-        <details className="mt-3 border border-line bg-surface-2 p-3">
-          <summary className="cursor-pointer text-xs font-semibold">Try a fictional sample record pack</summary>
-          {/* Counts and dates come from the pack itself. They were hardcoded and
-              drifted once already: the copy still said "six files" after the pack
-              grew to twelve. */}
-          <p className="my-2 text-xs">
-            Fictional records for a synthetic workspace{sample.start && sample.end ? ` dated ${sample.start} to ${sample.end}` : ""}.
-            Stage {stageable.length} {stageable.length === 1 ? "file" : "files"} together
-            {laterFiles.length > 0 ? `; add ${laterFiles.length === 1 ? "the remaining record" : `${laterFiles.length} remaining records`} afterwards to fill an evidence gap.` : "."}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button disabled={busy || coverage?.workspace.kind === "public"} className={button} onClick={() => setFiles(stageable.map((f) => ({
-              file: new File([f.content], f.name, { type: f.name.endsWith(".csv") ? "text/csv" : "text/plain" }),
-              options: defaults(f.role as SourceRole),
-            })))}>Use starter pack</button>
-            <button disabled={busy} className={button} onClick={() => setFiles(laterFiles.map((f) => ({ file: new File([f.content], f.name, { type: "text/plain" }), options: defaults(f.role as SourceRole) })))}>Use service evidence</button>
-            {sample.files.map((f) => <button key={f.name} className={button} onClick={() => download(f.name, f.content)}>↓ {f.name}</button>)}
-          </div>
-        </details>
         {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
           <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
           <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
@@ -305,12 +260,12 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       {history.length > 0 && <label className="mt-4 block text-xs">Resume an import
         <select className={input + " mt-1"} value={batch?.id || ""} disabled={busy} onChange={(e) => { const id = e.target.value; if (id) act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + id))); }}>
           <option value="">Choose saved import…</option>
-          {history.map((h) => <option key={h.id} value={h.id}>{h.created_at.slice(0, 19)} · {h.status} · {h.id.slice(-6)}</option>)}
+          {history.map((h) => <option key={h.id} value={h.id}>{h.created_at.slice(0, 19)} · {displayLabel(h.status)} · {h.id.slice(-6)}</option>)}
         </select>
       </label>}
 
       {batch && <div id="source-import" className="mt-4 scroll-mt-4 border border-line p-3">
-        <h3 className="font-semibold">2. Review import · {batch.status.replaceAll("_", " ")}</h3>
+        <h3 className="font-semibold">2. Review import · {displayLabel(batch.status)}</h3>
         <p className="my-2 text-xs">{batch.counts.parsed} source rows/lines · {batch.counts.valid_records} valid records · {batch.counts.new_records} new · {batch.counts.duplicate_records} duplicates · {batch.counts.issues} issues</p>
         <p className="text-xs">Validated debit total: {(batch.totals.debit_cents / 100).toFixed(2)} · credit: {(batch.totals.credit_cents / 100).toFixed(2)} {coverage?.workspace.currency}</p>
         <p className="mt-1 text-[11px] text-ink-dim">Totals combine opening and activity files for import control only; they are not a financial statement. {batch.coverage_note}</p>
@@ -370,7 +325,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           </button>)}
         </div>
         <div><h3 className="font-semibold">Missing evidence requests</h3>
-          <p className="my-2 text-[11px] text-ink-dim">Track evidence for later review. Attaching a document does not mean an auditor verified it.</p>
+          <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
             act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
             <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
@@ -378,7 +333,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             <button disabled={busy} className={button}>Add request</button>
           </form>
           {coverage?.requests.map((r) => <div key={r.id} className="mt-3 border border-line p-3">
-            <b>{r.title}</b><span className="ml-2 text-xs text-ink-dim">{r.status.replaceAll("_", " ")}</span>
+            <b>{r.title}</b><span className="ml-2 text-xs text-ink-dim">{displayLabel(r.status)}</span>
             <select aria-label={`Attach evidence for ${r.title}`} disabled={busy} className={input + " mt-2"} value="" onChange={(e) => {
               const id = e.target.value; if (!id) return;
               act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests/" + r.id + "/responses", {
@@ -397,15 +352,15 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
-        <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Your fictional school or public-report institution" className={input} /></label>
-        <label className="text-xs">Institution type<select name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v}>{v}</option>)}</select></label>
+        <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
+        <label className="text-xs">Institution type<select name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
         <label className="text-xs">Data origin<select name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
-        <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v}>{v}</option>)}</select></label>
+        <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
         <label className="text-xs">Period start<input type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
         <label className="text-xs">Period end<input type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
-        <label className="text-xs">Jurisdiction<input name="jurisdiction" required defaultValue="Demo" className={input} /></label>
+        <label className="text-xs">Jurisdiction<input name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
         <label className="text-xs">Scope<input name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
-        <p className="text-xs text-ink-dim sm:col-span-2">Synthetic accounting uses the USD demo management profile. Other currencies are available for public-document exploration. This local build is for synthetic and public data.</p>
+        <p className="text-xs text-ink-dim sm:col-span-2">The current accounting checks use the USD management profile. Other currencies are available for public-document exploration.</p>
         {error && <p role="alert" className="text-red-700 sm:col-span-2">{error}</p>}
         <button disabled={busy} className={primary}>{busy ? "Creating…" : "Create workspace"}</button>
       </form>
@@ -415,7 +370,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <p className="my-2 text-xs">{source.extraction_origin ? "Reviewed extraction — derived from the document below" : source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
       <a className="text-xs text-ink underline" href={API_URL + base + "/sources/" + source.id + "/download"}>{source.extraction_origin ? "Download the reviewed extraction" : "Download unchanged original"}</a>
       {source.extraction_origin && <div className="my-2 text-xs">
-        <p>Someone read this out of a document and checked it. The document itself is kept unchanged.</p>
+        <p>Reviewed extraction. The original document is preserved.</p>
         <a className="text-ink underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin.document_id}/original`}>Download the original: {source.extraction_origin.name}</a>
         {source.extraction_origin.has_images && source.extraction_origin.pages.map((page) => <a key={page} target="_blank" rel="noreferrer" className="ml-3 text-ink underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin!.document_id}/pages/${page}`}>Original page {page}</a>)}
       </div>}
