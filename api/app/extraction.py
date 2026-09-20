@@ -361,8 +361,20 @@ def predict(ws: str, body: Predict, request: Request):
     error, output, elapsed = None, None, None
     try:
         output, elapsed = infer(model, doc)
-    except (ValueError, KeyError, TypeError, AttributeError, httpx.HTTPError, HTTPException):
-        error = "Extraction failed validation or local model was unavailable; source preserved for review."
+    except ValueError as exc:
+        # These messages are ours and name a condition, not an internal. One
+        # generic string for every failure meant a registration that no longer
+        # matched its weights, a service that was not running and output that
+        # failed the contract were indistinguishable — each needing a different
+        # thing done about it.
+        error = f"{exc} The document and its page text are preserved; nothing was imported."
+    except (httpx.HTTPError, OSError):
+        # Never surface the endpoint or the provider's error body.
+        error = ("The local extraction service did not answer. Check that it is running on "
+                 "its loopback port, then try again. The document is preserved.")
+    except (KeyError, TypeError, AttributeError, HTTPException):
+        error = ("The extraction did not satisfy the contract and was discarded rather than "
+                 "imported. The document and its page text are preserved for review.")
     with db.connect() as c:
         return put(c, ws, "prediction", {"document_id": doc["id"], "model_id": model_id, "output": output, "seconds": elapsed, "error": error}, request.state.user["name"])
 
