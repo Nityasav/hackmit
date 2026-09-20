@@ -7,6 +7,7 @@ Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request, Query
@@ -18,8 +19,18 @@ from starlette.concurrency import run_in_threadpool
 
 from . import store, ingestion
 from .models import ApprovalDecision, Bundle, WorkspaceId
+from .cfo.api import router as cfo_router
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    if hasattr(app.state, "cfo_runtime"):
+        await app.state.cfo_runtime.close()
+
+
+app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app.include_router(cfo_router)
 
 app.add_middleware(
     CORSMiddleware,
