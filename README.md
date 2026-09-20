@@ -123,9 +123,10 @@ fine-tuned document extractor. See `PROJECT_TRACKER.md` for verified scope and t
 | Path | What's in it |
 | --- | --- |
 | `web/` | The dashboard: 8 tabs plus an MIT / Sandbox workspace switcher |
-| `web/src/fixtures/` | One JSON bundle per workspace, shared by web and api |
-| `api/` | Accounting engine, document intake, HTTP API |
-| `schooltrace/INGESTION_PLAN.md` | The intake design this build follows |
+| `api/` | Accounting engine, document intake, the agents, HTTP API |
+| `contracts/` | The shared bundle contract and the fixtures both sides read |
+| `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo |
+| `docs/design/prototype.html` | Clickable design prototype (open it in a browser) |
 | `PROJECT_TRACKER.md` | Verified scope and the next integration task |
 
 ### `api/` layout
