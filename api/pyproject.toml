@@ -25,6 +25,10 @@ extractor = [
     "accelerate>=1.15.0",
     "peft>=0.21.0",
     "torch>=2.14.0",
+    # Loading the processor imports Qwen3VLVideoProcessor, which requires
+    # torchvision even though nothing here touches video. Leaving it out fails
+    # only when the model actually loads, not at install.
+    "torchvision>=0.19",
     "transformers>=5",
 ]
 

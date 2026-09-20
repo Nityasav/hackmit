@@ -202,13 +202,17 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
                Toolbox(ws, spec, meter, inputs["records"], config, snapshot["id"], thread_id,
                        record_keys=record_keys, event_ids=event_ids))
 
+    # One connection for both: `db.connect()` takes an immediate write lock, so
+    # opening a second where the first would serve is avoidable contention.
+    # Never nest these — a connection opened inside another deadlocks against
+    # itself until the busy timeout expires.
+    #
+    # The precedent read is what a person already decided in this workspace,
+    # offered to the agent as guidance it must re-check. It goes through the
+    # same accessor the approvals layer writes, so there is one memory rather
+    # than a drifting copy of it.
     with db.connect() as connection:
         check_day_cap(connection, ws)
-
-    # What a person already decided in this workspace, offered to the agent as
-    # guidance it must re-check. Read through the same accessor the approvals
-    # layer writes, so there is one memory rather than a drifting copy.
-    with db.connect() as connection:
         precedents = approvals.active_precedents(connection, ws)
 
     client = client or build_client()
@@ -313,10 +317,24 @@ async def _converse(spec: AgentSpec, objective: str, toolbox: Toolbox, meter: Me
 
     for _ in range(MAX_TOOL_ROUNDS):
         meter.check_model_call(spec.id, spec.model, spec.budget)
-        response = await client.responses.parse(
-            model=spec.model, input=messages, tools=tools,
-            text_format=spec.output_schema, max_output_tokens=4096, store=False,
-        )
+        try:
+            response = await client.responses.parse(
+                model=spec.model, input=messages, tools=tools,
+                text_format=spec.output_schema, max_output_tokens=4096, store=False,
+            )
+        except ValidationError as exc:
+            # The SDK validates the model's reply against the schema before
+            # returning it, so a refused result raises HERE rather than at the
+            # `model_validate` below. That made the retry path unreachable for
+            # the commonest failure there is — a figure in prose, which the
+            # schema forbids — and turned an ordinary correctable mistake into
+            # a 500 with the run lost. Feed it back and let the agent fix it,
+            # which is what the loop was always for.
+            last_error = exc
+            messages.append({"role": "user", "content":
+                             "That result was refused: " + _readable(exc) +
+                             " Return a corrected result in the same schema."})
+            continue
         usage = getattr(response, "usage", None)
         meter.charge_model_call(spec.id, spec.model,
                                 getattr(usage, "input_tokens", 0) or 0,
