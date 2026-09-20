@@ -2,7 +2,7 @@
 
 import { displayLabel } from "@/lib/format";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 
 type Observation = { status: "present" | "missing" | "ambiguous" | "unreadable"; value: string | null; page: number | null; start: number | null; end: number | null };
@@ -76,6 +76,7 @@ function Lab({ ws }: { ws: string }) {
   const [selected, setSelected] = useState("");
   const [role, setRole] = useState("invoice");
   const [file, setFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [replaces, setReplaces] = useState("");
   const [editor, setEditor] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -117,7 +118,14 @@ function Lab({ ws }: { ws: string }) {
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
         <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
         <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
-          <label>Choose document<input className="w-full border border-line bg-white text-sm" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+            <span>Choose document</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={`${button} font-semibold`} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
+              <span className="min-w-0 break-all text-xs text-ink-dim" aria-live="polite">{file?.name || "No document selected"}</span>
+            </div>
+            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
+          </div>
           <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>

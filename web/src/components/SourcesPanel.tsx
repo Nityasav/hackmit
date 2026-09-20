@@ -21,6 +21,10 @@ const ROLES: Record<string, string> = {
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
+// Keep essential form geometry on the controls, not dependent on native input
+// styling or the order in which global development CSS chunks arrive.
+const fieldLayout: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const fieldControl: React.CSSProperties = { boxSizing: "border-box", width: "100%", minWidth: 0, height: 34, padding: "6px 10px", border: "1px solid #d4d4d8", background: "white", lineHeight: "20px", outlineOffset: -2 };
 const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
@@ -184,7 +188,11 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {/* macOS file-type associations can incorrectly disable CSVs when an
             accept filter is present. Validate names here; the API independently
             validates extensions, UTF-8 content, sizes and record schemas. */}
-        <input className="mt-4 block" ref={fileInput} aria-label="Choose CSV, TXT or Markdown files" type="file" multiple disabled={busy || detecting || !coverage}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" className={primary} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy || detecting || !coverage} onClick={() => fileInput.current?.click()}>Choose files</button>
+          <span className="text-xs text-ink-dim" aria-live="polite">{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "No files selected"}</span>
+        </div>
+        <input style={{ display: "none" }} ref={fileInput} aria-label="Choose CSV, TXT or Markdown files" type="file" multiple disabled={busy || detecting || !coverage}
           onChange={async (e) => {
             const selected = Array.from(e.target.files || []);
             const unsupported = selected.filter((file) => !/\.(csv|txt|md)$/i.test(file.name));
@@ -300,14 +308,14 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <form className="institution-form grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
-        <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
-        <label className="text-xs">Institution type<select name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label className="text-xs">Data origin<select name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
-        <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label className="text-xs">Period start<input type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
-        <label className="text-xs">Period end<input type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
-        <label className="text-xs">Jurisdiction<input name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
-        <label className="text-xs">Scope<input name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Institution name<input style={fieldControl} name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Institution type<select style={fieldControl} name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label style={fieldLayout} className="text-xs">Data origin<select style={fieldControl} name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
+        <label style={fieldLayout} className="text-xs">Currency<select style={fieldControl} name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label style={fieldLayout} className="text-xs">Period start<input style={fieldControl} type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Period end<input style={fieldControl} type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Jurisdiction<input style={fieldControl} name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Scope<input style={fieldControl} name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
         <p className="text-xs text-ink-dim sm:col-span-2">The current accounting checks use the USD management profile. Other currencies are available for public-document exploration.</p>
         {error && <p role="alert" className="text-red-700 sm:col-span-2">{error}</p>}
         <button disabled={busy} className={primary}>{busy ? "Creating…" : "Create workspace"}</button>
