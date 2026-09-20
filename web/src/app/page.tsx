@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useData } from "@/lib/data";
 import { SourcesPanel } from "@/components/SourcesPanel";
+import { CloseProgressChart } from "@/components/ui/close-progress-chart";
 import { TAB_HREF } from "@/lib/tabs";
 import { highlights } from "@/lib/format";
 import {
@@ -12,7 +13,6 @@ import {
   EmptyState,
   Figure,
   PageHeader,
-  ProgressBar,
   Pulse,
   Section,
   Toast,
@@ -134,16 +134,7 @@ export default function CommandCenter() {
 
       {workflows.length > 0 ? (
         <Section title="This close" right={<Link href="/workflows" className="hover:text-ink">open</Link>}>
-          {workflows.map((w) => (
-            <div
-              key={w.id}
-              className="grid grid-cols-[minmax(0,240px)_1fr_52px] items-center gap-4 border-t border-line py-3 text-[14px] first:border-t-0 first:pt-0"
-            >
-              <span className="truncate">{w.name}</span>
-              <ProgressBar value={w.progress} />
-              <b className="text-right font-num tabular-nums">{w.progress}%</b>
-            </div>
-          ))}
+          <CloseProgressChart workflows={workflows} />
         </Section>
       ) : (
         <Section title="Source" right={<Link href="/findings" className="hover:text-ink">evidence</Link>}>
