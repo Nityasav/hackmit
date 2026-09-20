@@ -193,10 +193,25 @@ def test_the_exchange_reads_in_the_order_it_happened(client, ws, monkeypatch):
 def test_a_turn_that_found_nothing_says_so_rather_than_filling_the_space(client, ws):
     from app.agents.chat import reply_for
 
-    reply = reply_for({"plan": ["A"], "findings": [], "escalations": [], "unresolved": [],
+    reply = reply_for({"plan": ["A"], "findings": [], "waiting_on_you": [], "unresolved": [],
                        "status": "no_findings", "thread_id": "t"})
 
     assert "not a clean result" in reply["text"]
+
+
+def test_a_run_where_every_agent_stopped_is_not_reported_as_concluding_nothing(client, ws):
+    """An agent that stopped to ask something did reach a conclusion: that a person has
+    to decide. A live run reported "nothing was concluded" beside three questions it had
+    just raised."""
+    from app.agents.chat import reply_for
+
+    reply = reply_for({"plan": ["B"], "findings": [],
+                       "waiting_on_you": [{"approval_id": "a"}, {"approval_id": "b"}],
+                       "unresolved": [], "status": "waiting_on_you", "thread_id": "t"})
+
+    assert "nothing was concluded" not in reply["text"]
+    assert "stopped to ask you something" in reply["text"]
+    assert "Nothing was decided without you" in reply["text"]
 
 
 def test_no_model_writes_the_reply(client, ws, monkeypatch):

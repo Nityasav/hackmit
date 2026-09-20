@@ -81,9 +81,18 @@ def reply_for(run: dict) -> dict:
         headline = "Routed to " + ", ".join(routed) + "."
 
     lines = [headline]
-    if findings:
-        lines.append(f"{len(findings)} conclusion(s) recorded"
-                     + (f", {len(waiting)} waiting on you." if waiting else "."))
+    # Three different outcomes, and they must not be worded as each other. An agent that
+    # stopped to ask something *did* reach a conclusion — that a person has to decide. A
+    # run where every agent escalated once reported "nothing was concluded" beside three
+    # questions it had just raised, which is the opposite of what happened.
+    if findings and waiting:
+        lines.append(f"{len(findings)} conclusion(s) recorded, and {len(waiting)} "
+                     "stopped for you.")
+    elif findings:
+        lines.append(f"{len(findings)} conclusion(s) recorded, none needing you.")
+    elif waiting:
+        lines.append(f"{len(waiting)} agent(s) stopped to ask you something before "
+                     "concluding. Nothing was decided without you.")
     else:
         lines.append("No agent reached a conclusion. That is not a clean result; it means "
                      "nothing was concluded.")
