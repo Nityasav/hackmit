@@ -88,6 +88,15 @@ def _apply(ws: str, proposal_id: str, answer: Any) -> dict:
     }
 
 
+def _agent(agent_id: str) -> dict:
+    """An agent as a screen needs it: the id to address, the name to show.
+
+    A bare id renders as "B4" to someone who has no idea what B4 is.
+    """
+    spec = AGENTS.get(agent_id)
+    return {"id": agent_id, "name": spec.name if spec else agent_id}
+
+
 def pending(ws: str) -> list[dict]:
     """Escalations still waiting on someone, newest first."""
     with db.connect() as connection:
@@ -97,7 +106,13 @@ def pending(ws: str) -> list[dict]:
             " WHERE a.ws=? AND a.status='pending' AND a.id LIKE 'ESC-%'"
             " ORDER BY a.rowid DESC", (ws,)).fetchall()
     return [{
-        "approval_id": row["id"], "agent": row["agent"], "title": row["title"],
+        "approval_id": row["id"],
+        # The same shape the interrupt payload carries. These two described one thing in
+        # two ways — an object here and a bare id there — so a screen built against
+        # either broke on the other, and the type that was meant to describe both could
+        # only be right about one.
+        "agent": _agent(row["agent"]),
+        "title": row["title"],
         "summary": row["summary"], "thread_id": row["thread_id"],
         "confidence": row["confidence"], "decision_id": row["finding_id"],
     } for row in rows]

@@ -247,12 +247,12 @@ function Question({
   return (
     <div className="mt-3 border border-amber-300 bg-amber-50 p-4">
       <p className="text-[13px] font-semibold">
-        {question.agent} stopped for you
+        {question.agent?.name ?? question.agent?.id ?? "An agent"} stopped for you
       </p>
       <p className="mt-1 text-[14px]">{question.title ?? question.summary}</p>
       {(question.reasons ?? []).length > 0 && (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px]">
-          {question.reasons.map((line) => (
+          {(question.reasons ?? []).map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>

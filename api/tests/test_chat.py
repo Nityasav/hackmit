@@ -336,3 +336,37 @@ def test_the_document_is_made_after_the_run_not_before(client, ws, monkeypatch):
 
     assert document["thread_id"] == body["thread_id"]
     assert document["payload"]["records"] > 0
+
+
+def test_the_queue_and_the_reply_describe_an_agent_the_same_way(client, ws, monkeypatch):
+    """These carried one concept in two shapes — an object in the interrupt payload and
+    a bare id in the queue — so a screen built against either broke on the other, and
+    the type meant to describe both could only be right about one.
+
+    It surfaced as "Objects are not valid as a React child", which is what a shape
+    mismatch looks like from the outside: nothing to do with the field it names.
+    """
+    _scripted(monkeypatch, "insufficient")
+
+    started = talk(client, ws, "Review payables and cash.").json()
+    from_reply = started["reply"]["escalations"]
+    from_queue = client.get(f"/api/workspaces/{ws}/agents/escalations").json()["escalations"]
+
+    assert from_reply and from_queue
+    for item in from_reply + from_queue:
+        assert isinstance(item["agent"], dict), item["agent"]
+        assert item["agent"]["id"] and item["agent"]["name"]
+        # The name is what a person reads. A bare id renders as "B4" to someone who has
+        # no idea what B4 is.
+        assert item["agent"]["name"] != item["agent"]["id"]
+
+
+def test_every_field_the_escalation_card_renders_is_sent(client, ws, monkeypatch):
+    """Named one by one, because a missing one does not fail — it renders blank."""
+    _scripted(monkeypatch, "insufficient")
+
+    waiting = talk(client, ws, "Review payables and cash.").json()["reply"]["escalations"][0]
+
+    for field in ("approval_id", "agent", "title", "summary", "reasons"):
+        assert field in waiting, field
+    assert isinstance(waiting["reasons"], list)
