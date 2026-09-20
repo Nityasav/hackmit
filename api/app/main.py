@@ -28,7 +28,10 @@ from . import security
 from .extraction import router as extraction_router
 from .updates import router as updates_router
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+# .env.local first, matching the web app's convention and the .gitignore rule
+# that already covers it. Both are ignored; neither is ever committed.
+for _env_file in (".env.local", ".env"):
+    load_dotenv(Path(__file__).resolve().parents[1] / _env_file, override=False)
 
 
 @asynccontextmanager
