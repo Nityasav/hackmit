@@ -12,6 +12,8 @@ diagnostic.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from .. import db, ingestion
@@ -21,6 +23,11 @@ from .runtime import AgentFailed, run_agent
 from .tools import ScopeError
 
 router = APIRouter(prefix="/api/workspaces/{ws}/agents", tags=["Agent organization"])
+
+
+class Decision(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
+    decision: Literal["approved", "rejected"]
 
 
 class RunRequest(BaseModel):
@@ -116,3 +123,39 @@ async def start(ws: str, agent_id: str, body: RunRequest, request: Request):
                                   "spend": meter.snapshot()})
 
     return {"thread_id": thread_id, **run.as_dict(), "spend": meter.snapshot()}
+
+
+@router.get("/escalations")
+def escalations(ws: str):
+    """What is waiting on a person, and what each run stopped to ask.
+
+    A paused run is not a failed one and not a finished one. It is a question, and until
+    it is answered nothing beyond it has happened.
+    """
+    from ..graph import pending
+
+    waiting = pending(ws)
+    return {
+        "escalations": waiting,
+        "count": len(waiting),
+        "note": "Each of these paused a run. Deciding one resumes it; nothing is posted, "
+                "paid or changed in an external system either way.",
+    }
+
+
+@router.post("/escalations/decide")
+async def decide_escalation(ws: str, body: Decision):
+    """Answer a paused run and let it continue.
+
+    The decision is recorded through `approvals.decide()`, which is the only writer of
+    precedent — so answering this is also what teaches the next run what you decided.
+    """
+    from ..graph import resume_investigation
+
+    try:
+        outcome = await resume_investigation(ws, body.thread_id, body.decision)
+    except BudgetExceeded as exc:
+        raise HTTPException(402, {"code": "budget_exceeded", "message": str(exc)})
+    except KeyError:
+        raise HTTPException(404, "No paused run with that thread id.")
+    return outcome

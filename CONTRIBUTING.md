@@ -47,6 +47,8 @@ These are stable. Build against them freely.
 | Event identity | `api/app/events.py` |
 | Bank reconciliation, cash | `api/app/accounting/reconcile.py`, `cash.py` |
 | The graph | `api/app/graph/` (add a worker by writing its subagents' tools) |
+| Control tests | `api/app/accounting/controls.py` |
+| Escalation and resume | `api/app/graph/escalation.py` |
 | Data generation | `fixtures/generate_saas.py` |
 | Books requirement UI | `web/src/components/DataRequirements.tsx` |
 
@@ -81,14 +83,20 @@ LangGraph, and therefore no possible collision with phase 3.
 | `accounting/statements.py` | B3 | Income statement, balance sheet, cash flow, from the ledger |
 | `accounting/variance.py` | C3 | Decompose budget-to-actual into named drivers |
 | `accounting/close.py` | B1 | Close checklist state and readiness |
-| `accounting/controls.py` | D2 | Duplicate vendors, self-approval, post-close entries, policy breaches (exists, returns `[]`) |
 
 Each is a pure function over `(records, config)` returning plain dicts. Testable with no
 model and no network. **Copy `accounting/match.py`** — it is the worked example, and its
 docstrings explain the conventions below.
 
-Second-best: defect injection in `fixtures/generate_saas.py` (`--defects` is already a
-flag that plants nothing). Self-contained, and it is what makes precision measurable.
+Second-best: more defects in `fixtures/generate_saas.py`. `--defects` plants six and
+three lookalikes today; the catalogue in the plan has more, and every one you add is
+another thing the checks can be *measured* against rather than assumed to catch.
+
+**Write the clean case first, and prove it is silent.** Three separate bugs in this
+repo were the same mistake: a check whose clean baseline was full of exceptions. A real
+finding then arrives indistinguishable from the noise, and a reviewer learns to skim
+past both. `tests/test_controls.py` shows the shape — clean pack, planted pack, scored
+against a truth file the application cannot reach.
 
 ### Wiring a new module in
 
@@ -124,6 +132,13 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
 8. **Say what a check does not establish.** An unreconciled difference is not a loss. A
    duplicate candidate is not a duplicate payment. Amounts from different checks are
    never summed.
+9. **A passing check is still a finding.** "No exact-key duplicate in the register" says
+   what was tested, and belongs on screen beside what was not. A report that only ever
+   shows problems teaches a reader that silence means safety.
+10. **One answer resolves one question.** Several agents can pause in one run.
+   `resume_investigation` is addressed to a single approval and refuses to guess when
+   more than one is waiting — resuming them all together would record a decision on
+   questions nobody was shown.
 
 ## Evaluating
 
@@ -136,7 +151,8 @@ to accept. A benchmark that asks the system whether it passed measures nothing.
 ## Running it
 
 ```bash
-cd api && uv sync && uv run pytest          # 191 passing
+cd api && uv sync && uv run pytest          # 218 passing
+python fixtures/generate_saas.py --out ./generated --seed 42 --defects
 cd web && node --experimental-strip-types --test src/lib/*.test.ts
 cd api && uv run uvicorn app.main:app --reload --port 8000
 cd web && bun install && bun dev            # http://localhost:3000

@@ -60,21 +60,41 @@ def invoice_key(ws: str, number: str) -> str:
 
 
 class FakeModel:
-    """A scripted Responses client. Each turn is (tool_calls, final_result)."""
+    """A scripted Responses client. Each turn is (tool_calls, final_result).
 
-    def __init__(self, turns, usage=(1000, 200)):
-        self.turns, self.usage = list(turns), usage
+    `build` lets one script serve several agents: the runtime asks each agent for that
+    agent's own schema, so a fixed `APResult` handed to A2 fails validation and the agent
+    retries until its budget is gone. A callable receives the requested schema and
+    returns something valid for it.
+    """
+
+    def __init__(self, turns, usage=(1000, 200), build=None):
+        self.turns, self.usage, self.build = list(turns), usage, build
         self.calls = 0
+        #: Turns consumed per conversation. One client serves every agent in a graph
+        #: run, and a single global counter meant the first agent ate the whole script
+        #: and the rest got its leftovers — concluding without reading, so their
+        #: citations were refused. Each conversation gets the script from the start.
+        self._per_conversation: dict[str, int] = {}
         self.seen_tools: list[str] = []
         self.responses = self
 
     async def parse(self, **kwargs):
         self.calls += 1
-        tool_calls, final = self.turns[min(self.calls - 1, len(self.turns) - 1)]
+        system = kwargs["input"][0].get("content", "") if kwargs.get("input") else ""
+        turn = self._per_conversation.get(system, 0)
+        self._per_conversation[system] = turn + 1
+        tool_calls, final = self.turns[min(turn, len(self.turns) - 1)]
+        # A turn may be a callable when the call it should make depends on which agent
+        # is asking — each one may read a different set of roles.
+        if callable(tool_calls):
+            tool_calls = tool_calls(kwargs)
         output = [SimpleNamespace(type="function_call", name=name,
                                   arguments=json.dumps(args), call_id=f"c{i}")
                   for i, (name, args) in enumerate(tool_calls)]
         self.seen_tools += [name for name, _ in tool_calls]
+        if not output and self.build is not None:
+            final = self.build(kwargs.get("text_format"), kwargs)
         return SimpleNamespace(
             output=output, output_parsed=None if output else final,
             usage=SimpleNamespace(input_tokens=self.usage[0], output_tokens=self.usage[1]))

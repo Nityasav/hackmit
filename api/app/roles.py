@@ -80,6 +80,9 @@ DATE_FIELDS: frozenset[str] = frozenset({
     "order_date", "received_date", "invoice_date", "due_date", "payment_date",
     "settlement_date", "payout_date", "period_start", "period_end", "pay_date",
     "expense_date", "approved_at", "locked_at", "registered_from", "registered_to",
+    # When an entry was *written*, as against the date it is dated. A post-close entry
+    # is one where these differ across a lock, and nothing else can tell them apart.
+    "posted_at",
 })
 
 #: Columns parsed as whole numbers rather than money or dates.
@@ -94,6 +97,7 @@ OPTIONAL_FIELDS: list[str] = [
     "event_ref", "po_id", "po_line_id", "receipt_id", "invoice_number", "invoice_refs",
     "payment_reference", "bank_reference", "processor", "tax_amount", "delegation",
     "cost_centre", "quantity", "unit_amount", "vendor_id", "customer_id", "employee_id",
+    "posted_at",
 ]
 
 #: The business key for a role: the column(s) that identify one record across versions.

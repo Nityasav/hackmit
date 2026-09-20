@@ -294,6 +294,36 @@ def test_expected_collections_are_shown_apart_from_committed_outflows(ws):
 # The graph
 # --------------------------------------------------------------------------- #
 
+def _clear_model():
+    """Every agent reads, then reports a clear result that needs nobody.
+
+    `insufficient_evidence` escalates by design, so a run built on it now pauses — which
+    is correct, and not what these two tests are about.
+    """
+    import json as _json
+    from app.agents import schemas as _s
+
+    def answer(schema, kwargs):
+        role, key = "vendor_invoices", "VI-1"
+        for message in reversed(kwargs.get("input", [])):
+            if isinstance(message, dict) and message.get("type") == "function_call_output":
+                body = _json.loads(message["output"])
+                if body.get("records"):
+                    role, key = body["role"], body["records"][0]["record_key"]
+                    break
+        fields = dict(summary="Nothing here needs a person.", disposition="clear",
+                      rationale="The records supplied agree with one another.",
+                      citations=[_s.Citation(role=role, record_key=key)],
+                      proposed_action="No action proposed.")
+        return schema(**fields, may_pay=True) if schema is _s.APResult else schema(**fields)
+
+    def read(kwargs):
+        context = _json.loads(kwargs["input"][1]["content"])
+        return [("read_records", {"role": context["readable_roles"][0]})]
+
+    return FakeModel([(read, None), ([], None)], build=answer)
+
+
 def test_the_graph_is_built_from_the_registry(ws):
     graph = build_graph()
     nodes = set(graph.get_graph().nodes)
@@ -328,16 +358,12 @@ def test_an_unwired_domain_is_reported_rather_than_silently_skipped(ws):
 
 def test_concurrent_subagents_all_reach_the_final_state(ws):
     """The reducers are what stop the last branch overwriting the other three."""
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="Nothing conclusive.",
-                                      rationale="The supplied records do not settle it.",
-                                      citations=[]))])
-    final = asyncio.run(run_investigation(ws, "Review payables and cash.", client=model))
+    final = asyncio.run(run_investigation(ws, "Review payables and cash.",
+                                          client=_clear_model()))
 
     # Four Treasurer subagents ran; every one of them is accounted for, either as a
     # finding or as an unresolved item.
-    accounted = {f["agent_id"] for f in final["findings"]} | {
-        key for key in final["results"]}
+    accounted = {f["agent_id"] for f in final["findings"]} | set(final["results"])
     assert {"A1", "A2", "A3", "A4"} <= accounted
 
 
@@ -352,9 +378,8 @@ def test_spend_is_summed_across_branches_not_overwritten(ws):
 
 
 def test_the_run_reports_a_status_and_a_briefing_with_no_authored_figures(ws):
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="n/a", rationale="n/a", citations=[]))])
-    final = asyncio.run(run_investigation(ws, "Review payables and cash.", client=model))
+    final = asyncio.run(run_investigation(ws, "Review payables and cash.",
+                                          client=_clear_model()))
 
     assert final["status"] in {"completed", "needs_you", "no_findings"}
     assert final["briefing"]
