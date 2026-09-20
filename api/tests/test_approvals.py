@@ -276,3 +276,30 @@ def test_a_decision_in_one_workspace_leaves_the_other_alone(client):
     with db.connect() as connection:
         assert approvals.listing(connection, second)[0]["status"] == "pending"
         assert approvals.active_precedents(connection, second) == []
+
+
+def test_a_proposal_from_a_retired_agent_does_not_break_the_whole_bundle(client):
+    """`AgentId` is a closed vocabulary four files agree on, and it changed when
+    the agents were reworked. Rows written by the previous roster survived in
+    the database naming agents the contract no longer contains, so the bundle
+    failed validation and every screen in the workspace reported the service
+    unreachable — over history nobody was looking at.
+
+    The repair is to coerce the historical id here, not to widen the contract
+    to keep retired names alive.
+    """
+    ws = commit_pack(client)
+    with db.connect() as connection:
+        approvals.store(connection, ws, {
+            "id": "ACK-from-a-retired-agent", "agent": "ap", "kind": "decision",
+            "title": "Decide how to resolve: an invoice without a receipt",
+            "summary": "Raised before the agents were reworked.", "verified": False})
+
+    response = client.get(f"/api/workspaces/{ws}/bundle")
+    assert response.status_code == 200, response.text
+
+    row = next(a for a in response.json()["approvals"] if a["id"] == "ACK-from-a-retired-agent")
+    # Coerced so the contract holds, but the real author is still stated rather
+    # than silently reattributed to an agent that never raised it.
+    assert row["agent"] == "orchestrator"
+    assert "ap" in row["title"] and "retired" in row["title"]
