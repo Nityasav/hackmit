@@ -587,13 +587,62 @@ def respond(ws, rid, body: EvidenceResponse):
 def bundle(ws):
     cov = coverage(ws)
     w = cov["workspace"]
+    snapshot_id = cov["snapshot"]["id"] if cov["snapshot"] else None
+    with db.connect() as connection:
+        running = connection.execute(
+            "SELECT * FROM agent_runs WHERE ws=? AND status='running' ORDER BY created_at DESC LIMIT 1", (ws,),
+        ).fetchone()
+        run = connection.execute(
+            "SELECT * FROM agent_runs WHERE ws=? AND snapshot_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1",
+            (ws, snapshot_id),
+        ).fetchone() if snapshot_id else None
+    output = json.loads(run["output"]) if run else {}
+    analysis = output.get("analysis", {})
+    role_ids = {"ap_payments": "ap", "payroll_budget": "py", "grants_compliance": "gr", "internal_auditor": "au"}
+    tasks = [{
+        "id": f"{run['id']}-task-{index}", "agent": role_ids[task["specialist"]], "title": task["title"],
+        "workflow": "CFO triage follow-up", "column": "queued", "progress": 0, "eta_s": None,
+        "started_at": None, "tool_calls": {"used": 0, "budget": 12},
+        "steps": [{"title": task["objective"], "state": "todo", "memory": False}], "todos": [],
+        "rationale": "Proposed by the CFO triage agent; specialist investigation has not run.",
+        "note": "Candidate task", "note_tone": "info",
+    } for index, task in enumerate(analysis.get("next_tasks", []), 1)] if run else []
+    findings = [{
+        "id": f"{run['id']}-finding-{index}", "agent": "cfo", "title": finding["title"],
+        "summary": "CFO candidate · independent review pending. " + finding["summary"],
+        "status": "hypothesized" if finding["status"] == "cleared" else finding["status"],
+        "amount_cents": None, "amount_note": "No deterministic amount calculated", "verified_by": None,
+        "evidence": [{"label": f"{cite['source_id']} line {cite['line']}: {cite['quote']}",
+                      "kind": "doc", "tone": "neutral"} for cite in finding["citations"]],
+    } for index, finding in enumerate(analysis.get("findings", []), 1)] if run else []
+    decisions = []
+    if run:
+        decision = output.get("decision", {})
+        decisions = [{
+            "id": f"decision-{run['id']}", "run": run["id"], "time": run["completed_at"], "agent": "cfo",
+            "action": decision.get("action", "Initial snapshot triage"),
+            "summary": decision.get("summary", analysis.get("executive_briefing", "")), "tags": [],
+            "when": {"run": run["id"], "step": "bounded CFO triage", "started": run["created_at"],
+                     "finished": run["completed_at"], "trigger": run["focus"]},
+            "how": [{"tool": item["tool"], "input": item["input_hash"], "output": item["output_ref"]}
+                    for item in output.get("tool_calls", [])],
+            "why": decision.get("why", "Identify bounded follow-up work from committed evidence."),
+            "alternatives": [],
+            "memory_checks": [], "outcome": decision.get("outcome", "Candidate triage saved."),
+        }]
     return {
         "contract_version": 2,
         "workspace": {"id": ws, "name": w["name"], "kind": w["kind"], "period": f"{w['start']} — {w['end']}",
-                      "mode": "not_started", "snapshot_id": cov["snapshot"]["id"] if cov["snapshot"] else "No committed records",
-                      "disabled_tabs": ["workflows", "approvals", "learning"], "model": "Not configured",
-                      "run_budget": {"used": 0, "total": 0}, "intake": True, "currency": w["currency"], "profile": w["profile"]},
-        "agents": [], "briefing": {"generated_at": "—", "text": "Upload records and review source coverage. Agent investigations have not run.", "actions": []},
-        "kpis": [], "workflows": [], "tasks": [], "findings": [], "approvals": [], "decisions": [], "playbooks": [], "ablation": None,
+                      "mode": "live" if run else "not_started", "snapshot_id": snapshot_id or "No committed records",
+                      "disabled_tabs": ["workflows", "approvals", "learning"], "model": run["model"] if run else "Not configured",
+                      "run_budget": {"used": len(output.get("tool_calls", [])), "total": 12 if run else 0},
+                      "intake": True, "currency": w["currency"], "profile": w["profile"]},
+        "agents": ([{"id": "cfo", "name": "CFO Agent", "short": "CFO", "role": "Lead investigator / orchestrator",
+                     "status": "working" if running else "idle",
+                     "doing": "Reviewing snapshot evidence" if running else "Initial triage saved; specialist work has not run."}] if run or running else []),
+        "briefing": {"generated_at": run["completed_at"] if run else "—",
+                     "text": analysis.get("executive_briefing", "Upload records and review source coverage. Agent investigations have not run."),
+                     "actions": ([{"label": "Review candidate findings", "href": "findings", "primary": True}] if findings else [])},
+        "kpis": [], "workflows": [], "tasks": tasks, "findings": findings, "approvals": [], "decisions": decisions, "playbooks": [], "ablation": None,
         "report": {"title": "No investigation report yet", "sections": [], "comparisons": []},
     }

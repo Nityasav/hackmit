@@ -16,7 +16,7 @@ uv run pytest                                       # accounting invariants
 | `app/db.py` | Functionality | SQLite schema, transactions, original bytes and local events |
 | `app/ingestion.py` | Functionality | CSV/text parsing, mappings, validation, immutable commits, coverage and evidence requests |
 | `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
-| `app/agents/` | Agent design | Model adapter, tool gateway, role prompts, orchestrator |
+| `app/agents/cfo.py` | Agent design | First live CFO agent, scoped snapshot tools, OpenAI adapter and run persistence |
 | `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
 
 ## Rules
@@ -43,5 +43,26 @@ YYYY-MM-DD; opening balances are dated at the start of the period before activit
 explicit; canonical optional columns are recognized by name. Stable source IDs are required for CSV
 records. Unsupported or malformed inputs never become accepted financial records.
 
-No corrections, full report recomputation, live agent execution or automatic evidence verification are
-performed by importing. Evidence attachment records a scoped resumption event for the future runtime.
+No corrections, full report recomputation or automatic evidence verification are performed by importing.
+Evidence attachment records a scoped resumption event for the future multi-agent runtime.
+
+## CFO triage agent
+
+Set `OPENAI_API_KEY` in ignored `api/.env`, which loads automatically without overriding existing
+environment variables. `OPENAI_MODEL` defaults to `gpt-5.4-mini`. Never place the key in `web/.env.local`
+or send it from the browser. `POST /api/workspaces/{ws}/agent-runs` accepts
+`{snapshot_id, request_id, focus}` and runs one bounded CFO triage against the current snapshot;
+`GET` lists saved runs. The provider request uses `store=False`.
+
+The agent can read only scoped workspace context, committed source lines, paginated snapshot records and one
+deterministic ledger control calculation across ALL pinned ledger records. Twelve actual tool calls,
+2,500 output tokens per response, a conservative 100,000 total-token budget, a 60,000-byte conversation
+cap, and a four-minute run deadline bound execution. Requests have a maximum 60-second timeout and
+no automatic paid retries. Provider storage is disabled; this is not a claim about all provider retention.
+Request IDs prevent duplicate execution. A changed snapshot returns 409; running rows older than the
+deadline plus 30 seconds become failed, permitting retries after a process interruption. Each completed
+tool step persists arguments, input hash, output, output hash, agent, snapshot and latency; provider failures
+retain that history and show sanitized errors. Interrupted runs restart explicitly rather than resuming automatically.
+The server checks every submitted
+citation against the original line before saving candidate findings. This is live triage, not independent
+auditor review, report generation, an audit opinion or authority to apply an adjustment.

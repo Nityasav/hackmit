@@ -46,15 +46,16 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 - **web/** — Next.js 16 (App Router), TypeScript, Tailwind v4, bun
 - **api/** — FastAPI, Python 3.12+, uv, SQLite
 - **contracts/** — one JSON bundle per workspace, shared by both
-- **Model (planned)** — provider adapter and labeled replay; no live agent adapter is connected yet
+- **Model** — first live CFO triage uses the OpenAI Responses API; local extraction model and remaining roles are planned
 
 ## What's implemented
 
 Document intake is now backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
 review column mappings and validation issues, commit an immutable snapshot, inspect original source
-lines, and track missing evidence. New workspaces start empty and never inherit demo findings.
+lines, and track missing evidence. A bounded CFO agent can inspect that snapshot through read-only tools
+and produce source-cited candidate findings and specialist tasks. New workspaces start empty and never inherit demo findings.
 
-The eight-tab dashboard still includes fixed demo workspaces. Live agents, full statements,
+The eight-tab dashboard still includes fixed demo workspaces. The other four agents, independent review, full statements,
 scenario correction/recomputation and learning are not implemented. Input availability is not an
 audit conclusion. PDF extraction/OCR, Excel files and live financial connectors remain deferred.
 
@@ -68,7 +69,10 @@ cd hackmit
 cd web && bun install && bun dev          # http://localhost:3000
 
 # API (required for document intake; optional only for fixed demo views)
-cd ../api && uv sync && uv run uvicorn app.main:app --reload --port 8000
+cd ../api && uv sync
+# Put OPENAI_API_KEY=... in api/.env (automatically loaded, ignored by Git).
+# Optional in the same file: OPENAI_MODEL=gpt-5.4-mini
+uv run uvicorn app.main:app --reload --port 8000
 uv run pytest                              # accounting invariants
 
 # Point the UI at the API
@@ -87,12 +91,18 @@ Intake automatically connects to `http://localhost:8000`, even when demo views u
 `NEXT_PUBLIC_API_URL` overrides the URL and also enables API polling for demo views. Restart the web
 server after changing environment variables. No model key is needed for intake.
 
-SQLite stores original bytes, staged imports, accepted record revisions, snapshots and local review
-events in ignored `api/data/schooltrace.sqlite3`. Set `SCHOOLTRACE_DATA_DIR` to change the local data
-directory. The app is for synthetic/public data on localhost; the reviewer marker is not production
-authentication. Original files stay on the machine and are not sent to a model.
+SQLite stores original bytes, staged imports, accepted record revisions, snapshots, local review events
+and agent runs in ignored `api/data/schooltrace.sqlite3`. Set `SCHOOLTRACE_DATA_DIR` to change the local
+data directory. The app is for synthetic/public data on localhost; the reviewer marker is not production
+authentication. Imports stay local until you explicitly click **Run CFO triage**; that action sends source
+spans and normalized records selected by the agent's scoped tools to the configured OpenAI model.
 
-The backend addition stays flat: `api/app/db.py` and `api/app/ingestion.py`; the UI is one
+After committing records, use **Run CFO triage** in the Command center. Candidate findings link to the
+original lines; suggested evidence can be added to the existing request queue. Runs are saved with
+their snapshot and become visibly stale after new imports. Follow-up specialists are proposed tasks,
+not running agents. Training and the local extraction model remain future work.
+
+The backend stays compact: `db.py`, `ingestion.py`, and `agents/cfo.py`; the intake/triage UI lives in
 `SourcesPanel.tsx`. See `PROJECT_TRACKER.md` for verified scope and the next integration task.
 
 ## Repo map

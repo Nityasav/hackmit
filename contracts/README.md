@@ -99,3 +99,23 @@ Bundle
 | `GET /api/workspaces/{ws}/bundle` | everything the dashboard renders. The web app polls every 2s |
 | `POST /api/approvals/{id}/decision` | `{workspace, decision}` → updated bundle |
 | `POST /api/demo/{action}` | `reset`, `inject_issue`, `add_evidence`, `next_month` |
+
+## CFO agent run contract
+
+`POST /api/workspaces/{ws}/agent-runs` requires the local reviewer header and JSON
+`{snapshot_id, request_id, focus?}`. The snapshot must be the latest committed snapshot. A request ID
+is unique within its workspace; replaying identical inputs returns the saved run, while changing its
+inputs returns 409. The endpoint waits for the bounded run; polling `GET` on the same path lists the
+latest 20 persisted runs, including running/failed runs and partial tool history.
+
+Each run contains `id`, `workspace_id`, `agent`, `snapshot_id`, `current_snapshot`, `status`, `model`,
+`focus`, timestamps, `error`, and `result`. `result.analysis` is present only on completed runs and has
+`executive_briefing`, `scope_assessed`, `limitations`, `findings`, `evidence_requests`, `next_tasks`.
+Findings carry source ID, line and exact quotation. Tool history and cumulative token usage are saved
+without raw model reasoning. Error messages omit provider response bodies and credentials.
+
+The bundle projects only completed CFO output for the current snapshot into briefing, candidate
+findings, queued specialist proposals and the reasoning log. `Finding.status` additionally supports
+`hypothesized`. Proposed clearances remain unreviewed hypotheses in that projection. No proposed task
+is automatically executed and no accounting correction is applied. Live provenance describes a real
+provider run, not an independently verified audit result.

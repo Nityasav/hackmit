@@ -124,7 +124,7 @@ class Finding(BaseModel):
     title: str
     summary: str
     status: Literal[
-        "substantiated", "cleared", "explained", "needs_evidence", "none_reported", "ties"
+        "hypothesized", "substantiated", "cleared", "explained", "needs_evidence", "none_reported", "ties"
     ]
     amount_cents: int | None = None
     amount_note: str | None = None

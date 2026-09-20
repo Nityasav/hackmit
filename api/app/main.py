@@ -7,7 +7,9 @@ Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from urllib.parse import quote
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,10 @@ from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from . import store, ingestion
+from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 app = FastAPI(title="SchoolTrace API", version="0.1.0")
 
@@ -179,3 +184,14 @@ def evidence_request(ws: str, body: ingestion.EvidenceCreate):
 @app.post("/api/workspaces/{ws}/evidence-requests/{rid}/responses")
 def evidence_response(ws: str, rid: str, body: ingestion.EvidenceResponse):
     return ingestion.respond(ws, rid, body)
+
+
+@app.get("/api/workspaces/{ws}/agent-runs")
+def agent_runs(ws: str):
+    return cfo.list_runs(ws)
+
+
+@app.post("/api/workspaces/{ws}/agent-runs", status_code=201)
+async def run_cfo_agent(ws: str, body: cfo.RunRequest):
+    """Run the bounded CFO triage agent against the current immutable snapshot."""
+    return await run_in_threadpool(cfo.run, ws, body)

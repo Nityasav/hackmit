@@ -91,6 +91,7 @@ export function AiTag({ children = "AI" }: { children?: React.ReactNode }) {
 
 const FINDING_STATUS: Record<FindingStatus, [string, Tone]> = {
   substantiated: ["Substantiated", "red"],
+  hypothesized: ["Hypothesis · unreviewed", "amber"],
   cleared: ["Cleared", "green"],
   explained: ["Explained", "indigo"],
   needs_evidence: ["Needs evidence", "amber"],

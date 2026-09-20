@@ -1,11 +1,9 @@
-# Agents (owner: Agent design)
+# Agents
 
-- `adapter.py` — model adapter (Anthropic `claude-sonnet-5`) + a replay adapter that reads a saved run
-- `tools.py` — typed tool gateway (spec.md §8): search_sources, read_source_span, query_financial_records,
-  traverse_context, calculate, retrieve_precedents, submit_finding, propose_adjustment, request_evidence,
-  submit_review, propose_playbook, prepare_payment_batch
-- `prompts.py` — the 5 role prompts from schooltrace/AGENT_PROMPTS.md
-- `orchestrator.py` — CFO Agent plans → specialists run → Internal Auditor reviews → human queue
+- `cfo.py` is the first live slice: OpenAI Responses API, immutable-snapshot scope, bounded read-only
+  evidence tools, strict structured submission, citation verification and persisted telemetry.
+- The remaining specialists, independent Auditor, resumable orchestrator and replay adapter are planned.
+- Keep this folder flat until a second implementation creates a real shared abstraction.
 
-Every action must emit a `Decision` (see app/models.py) so it shows up in the Reasoning log:
-when / how (tool calls) / why / alternatives / memory checks / outcome.
+Runs store concise decisions and tool metadata, never private chain-of-thought. The local extraction model
+and its gated offline improvement loop are specified for a later implementation.
