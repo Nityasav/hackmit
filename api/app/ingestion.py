@@ -32,6 +32,17 @@ MAX_FILES = 30
 MAX_ROWS = 50_000
 PROFILE = "SAAS_ACCRUAL_V1"
 
+#: Where a workspace's records came from. This is a provenance claim, shown to a
+#: person as "Data origin", and it is separately a profile selector: the first two
+#: run the USD accrual engine and accept transactional CSV, `public` accepts
+#: reference documents only.
+#:
+#: `open_data` exists because `synthetic` and `public` between them could not
+#: describe real, published transactional records — a city's checkbook, say — and
+#: loading those as `synthetic` would have put "Synthetic records" on a screen
+#: above real organizations' names.
+ACCRUAL_KINDS = ("synthetic", "open_data")
+
 
 def fail(code: str, message: str, status: int = 422, **details):
     raise HTTPException(status, {"code": code, "message": message, "retryable": status == 409, **details})
@@ -39,7 +50,7 @@ def fail(code: str, message: str, status: int = 422, **details):
 
 class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    kind: Literal["synthetic", "public"] = "synthetic"
+    kind: Literal["synthetic", "open_data", "public"] = "synthetic"
     entity_type: Literal["company", "subsidiary", "group"] = "company"
     jurisdiction: str = Field(default="Unspecified", min_length=1, max_length=100)
     currency: Literal["USD", "CAD", "EUR", "GBP"] = "USD"
@@ -62,7 +73,7 @@ class WorkspaceCreate(BaseModel):
             raise ValueError("Name, scope and jurisdiction cannot be blank")
         if self.start > self.end:
             raise ValueError("Period start must not be after its end")
-        if self.kind == "synthetic" and self.currency != "USD":
+        if self.kind in ACCRUAL_KINDS and self.currency != "USD":
             raise ValueError("The accrual profile supports USD only; other currencies are public-document mode")
         unknown = set(self.settings) - {r.setting for r in requirements.settings_schema()}
         if unknown:
@@ -141,7 +152,7 @@ def workspace(connection, ws):
 def create_workspace(body: WorkspaceCreate):
     config = body.model_dump(mode="json")
     config["name"] = config["name"].strip()
-    config["profile"] = PROFILE if body.kind == "synthetic" else "PUBLIC_DOCUMENTS_ONLY"
+    config["profile"] = PROFILE if body.kind in ACCRUAL_KINDS else "PUBLIC_DOCUMENTS_ONLY"
     ws = db.uid("ws")
     with db.connect() as connection:
         if config.get("continues"):

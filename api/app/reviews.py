@@ -107,7 +107,7 @@ def scan(ws):
         snapshot = current_snapshot(c, ws)
         if not snapshot:
             raise HTTPException(409, "Commit source records before scanning.")
-        if config["kind"] != "synthetic" or config["currency"] != "USD":
+        if config["kind"] not in ingestion.ACCRUAL_KINDS or config["currency"] != "USD":
             raise HTTPException(409, "Transaction checks require the USD accrual profile.")
         rows = ingestion.active_records(c, ws)
         found = checks(rows, config)

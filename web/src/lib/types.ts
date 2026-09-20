@@ -30,7 +30,7 @@ export type TabId =
 export interface Workspace {
   id: WorkspaceId;
   name: string;
-  kind: "synthetic" | "public";
+  kind: "synthetic" | "open_data" | "public";
   period: string;
   /** Narrower than api/app/models.py: the web app only ever receives a
    *  bundle built by ingestion.bundle(), which emits these two. */
@@ -202,7 +202,7 @@ export type SourceRole =
   | "approvals" | "period_locks" | "tax_registrations"
   | "contract" | "policy" | "document" | "invoice" | "service" | "budget";
 export interface IntakeWorkspace {
-  id: string; name: string; kind: "synthetic" | "public";
+  id: string; name: string; kind: "synthetic" | "open_data" | "public";
   entity_type: "company" | "subsidiary" | "group";
   /** Answers to the setting-kind requirements Books collects. */
   settings?: Record<string, string | number>;
