@@ -196,6 +196,36 @@ def attach_review(task_id: str | None, review: dict) -> None:
         return
 
 
+def resolve(ws: str, *, decision: str, by: str,
+            decision_id: str | None = None, approval_id: str | None = None) -> list[str]:
+    """Close every card waiting on this question, now that it has an answer.
+
+    Nothing did this, so a card went on saying "waiting on your decision" after the
+    decision was made: the approval row moved to `approved` and the board — the one
+    screen that shows what is outstanding — never heard about it.
+
+    Returns the threads whose runs were paused on it, so the caller can start them
+    again. Recording the answer and acting on it are two different things and only one
+    of them belongs in here.
+    """
+    if not decision_id and not approval_id:
+        return []
+    answer = db.encode({"decision": decision, "by": by, "at": db.now()})
+    threads: list[str] = []
+    with db.connect() as connection:
+        rows = connection.execute(
+            "SELECT id, thread_id FROM agent_tasks WHERE ws=? AND (decision_id=? OR approval_id=?)",
+            (ws, decision_id or "", approval_id or "")).fetchall()
+        for row in rows:
+            connection.execute(
+                "UPDATE agent_tasks SET state='done', resolution=?, updated_at=?,"
+                " finished_at=COALESCE(finished_at, ?) WHERE id=?",
+                (answer, db.now(), db.now(), row["id"]))
+            if row["thread_id"]:
+                threads.append(row["thread_id"])
+    return sorted(set(threads))
+
+
 def attach_approval(ws: str, decision_id: str, approval_id: str) -> None:
     """Point the card at the question a person has to answer."""
     try:
@@ -246,8 +276,13 @@ def card(row, now: datetime | None = None) -> dict:
              for s in _steps(row)]
     reasons = json.loads(row["escalation_reasons"] or "[]")
 
+    answered = _json(row["resolution"], None)
+
     note, tone = None, None
-    if state == "needs_you":
+    if answered:
+        note = f"{answered['decision'].capitalize()} by {answered['by']}"
+        tone = "info"
+    elif state == "needs_you":
         note, tone = "Waiting on your decision", "warn"
     elif state == "failed":
         note = ("No progress recorded for over 15 minutes; the run that owned this is gone."
@@ -277,7 +312,7 @@ def card(row, now: datetime | None = None) -> dict:
         "tool_calls": {"used": row["tool_calls"],
                        "budget": row["tool_budget"] or AGENTS[agent].budget.tool_calls},
         "steps": steps,
-        "todos": list(reasons) if state == "needs_you" else [],
+        "todos": [] if answered else (list(reasons) if state == "needs_you" else []),
         "rationale": row["summary"] or None,
         "note": note,
         "note_tone": tone,
@@ -315,13 +350,43 @@ def card(row, now: datetime | None = None) -> dict:
             # sends a person to the database for the work they just paid for.
             "result": _json(row["result"], {}),
             "review": _json(row["review"], None),
+            "resolution": answered,
         },
     }
+
+
+#: A card still asking a question whose approval has already been decided. Written as
+#: one statement because it is a repair, not a feature: `resolve()` keeps new decisions
+#: in step, and this catches the ones decided before anything was listening — including
+#: every question a person answered while the board went on saying it was outstanding.
+CATCH_UP = """
+UPDATE agent_tasks SET
+    resolution = json_object('decision', (
+        SELECT status FROM approvals a
+         WHERE a.ws = agent_tasks.ws
+           AND (a.id = agent_tasks.approval_id OR a.finding_id = agent_tasks.decision_id)
+           AND a.status != 'pending' LIMIT 1), 'by', (
+        SELECT COALESCE(decided_by, 'a person') FROM approvals a
+         WHERE a.ws = agent_tasks.ws
+           AND (a.id = agent_tasks.approval_id OR a.finding_id = agent_tasks.decision_id)
+           AND a.status != 'pending' LIMIT 1), 'at', (
+        SELECT COALESCE(decided_at, '') FROM approvals a
+         WHERE a.ws = agent_tasks.ws
+           AND (a.id = agent_tasks.approval_id OR a.finding_id = agent_tasks.decision_id)
+           AND a.status != 'pending' LIMIT 1)),
+    state = 'done', updated_at = ?
+WHERE ws = ? AND resolution IS NULL AND state = 'needs_you' AND EXISTS (
+    SELECT 1 FROM approvals a
+     WHERE a.ws = agent_tasks.ws
+       AND (a.id = agent_tasks.approval_id OR a.finding_id = agent_tasks.decision_id)
+       AND a.status != 'pending')
+"""
 
 
 def board(ws: str, limit: int = 120) -> list[dict]:
     """Every task in this workspace, newest first."""
     with db.connect() as connection:
+        connection.execute(CATCH_UP, (db.now(), ws))
         rows = connection.execute(
             "SELECT * FROM agent_tasks WHERE ws=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
             (ws, min(limit, 500))).fetchall()

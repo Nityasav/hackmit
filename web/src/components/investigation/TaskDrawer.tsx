@@ -69,6 +69,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
   const detail = task.detail ?? null;
   const output = detail?.result && Object.keys(detail.result).length > 0 ? detail.result : null;
   const review = detail?.review ?? null;
+  const resolution = detail?.resolution ?? null;
   const running = task.column === "working" || task.column === "auditor_review";
   const seconds = elapsedSeconds(task.started_at, now);
   const started = startedAtLabel(task.started_at);
@@ -252,6 +253,24 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
                   ))}
                 </>
               )}
+            </>
+          )}
+
+          {resolution && (
+            <>
+              <Heading className="mt-5">Your decision</Heading>
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone={resolution.decision === "approved" ? "green" : "red"}>
+                  {resolution.decision === "approved" ? "Approved" : "Rejected"}
+                </Pill>
+                <span className="text-[13px] text-ink-dim">
+                  by {resolution.by} at {stamp(resolution.at)}
+                </span>
+              </div>
+              <p className="mt-1 font-accent text-[12px] text-ink-dim">
+                Recorded as your judgement, and written as precedent the next run has to
+                re-check. It posts nothing, pays nothing and changes no external system.
+              </p>
             </>
           )}
 

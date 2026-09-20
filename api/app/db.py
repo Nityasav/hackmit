@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     result TEXT NOT NULL DEFAULT '{}',
     -- What the independent reviewer made of it, once one has looked.
     review TEXT,
+    -- The person's answer, once they have given one. A card that still says it is
+    -- waiting on a decision that was made is the board lying about the one thing a
+    -- person can actually change.
+    resolution TEXT,
     created_at TEXT NOT NULL, started_at TEXT, updated_at TEXT NOT NULL, finished_at TEXT
 );
 CREATE TABLE IF NOT EXISTS agent_requests (
@@ -256,6 +260,7 @@ ADDED_COLUMNS = (
     ("agent_decisions", "memory_checks", "TEXT NOT NULL DEFAULT '[]'"),
     ("agent_tasks", "result", "TEXT NOT NULL DEFAULT '{}'"),
     ("agent_tasks", "review", "TEXT"),
+    ("agent_tasks", "resolution", "TEXT"),
 )
 
 

@@ -136,6 +136,13 @@ def decide(ws, approval_id, decision, reviewer=REVIEWER):
             "note": "Recorded as a human decision. No payment, posting or payroll change is executed.",
         }, actor=reviewer)
         _record_precedent(connection, ws, row, decision, reviewer)
+    # Outside the connection: `db.connect()` takes an immediate write lock and these
+    # take their own. The board has to stop saying a decided question is outstanding,
+    # and whatever paused on it can now go on.
+    from .agents import activity
+
+    return activity.resolve(ws, decision=decision, by=reviewer,
+                            decision_id=row["finding_id"], approval_id=approval_id)
 
 
 def _record_precedent(connection, ws, row, decision, reviewer):

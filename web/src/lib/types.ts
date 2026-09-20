@@ -120,6 +120,8 @@ export interface TaskDetail {
   updated_at: string;
   result?: AgentOutput | null;
   review?: AgentReview | null;
+  /** The person's answer, once they have given one. */
+  resolution?: { decision: string; by: string; at: string } | null;
 }
 
 export interface Task {

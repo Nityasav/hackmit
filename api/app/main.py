@@ -125,9 +125,26 @@ def get_bundle(ws: WorkspaceId) -> Bundle:
 
 
 @app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
-def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. Agents propose; nothing they can call reaches this endpoint."""
-    approvals.decide(body.workspace, approval_id, body.decision)
+async def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
+    """Human approval. Agents propose; nothing they can call reaches this endpoint.
+
+    Answering also lets the run that stopped for this carry on. A decision that was
+    recorded and then went nowhere is what a person experiences as approving something
+    and watching nothing happen, which is the same to them as not being heard.
+    """
+    from .graph import resume_investigation
+
+    threads = approvals.decide(body.workspace, approval_id, body.decision)
+    for thread_id in threads:
+        try:
+            await resume_investigation(body.workspace, thread_id, body.decision,
+                                       approval_id=approval_id)
+        except Exception:  # noqa: BLE001
+            # Not every escalation has a run still waiting on it: a standalone agent
+            # run has no graph to resume, and a paused thread does not survive a
+            # restart. The decision is recorded either way, which is the part that
+            # must not depend on this succeeding.
+            continue
     return projection.bundle(body.workspace)
 
 
