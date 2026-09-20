@@ -49,21 +49,53 @@ table above as evidence for it.
 
 ### Environment
 
-Python 3.14, `torch` 2.14.0 + `torchvision` (the processor pulls in a video
-processor that requires it), and `transformers` from git — 5.18.0.dev0 resolves
-`qwen3_5`; older stable releases fail with `KeyError: 'qwen3_5'`. Model weights
-are ~9.3GB, Apache 2.0, not gated.
+Everything is declared in `pyproject.toml`; no git dependency is needed any
+more. `transformers` 5.17 was the first stable release carrying NuExtract3's
+`qwen3_5` architecture — an older one fails at load with `KeyError: 'qwen3_5'`,
+which is why the floor is pinned. `torchvision` is required even though nothing
+here touches video: loading the processor imports a video processor that needs
+it, and the failure appears only when the model loads, not at install.
 
-    python3.14 -m venv .venv
-    .venv/bin/pip install torch torchvision fastapi uvicorn httpx pillow pypdfium2 accelerate
-    .venv/bin/pip install git+https://github.com/huggingface/transformers.git
+Model weights are ~9.3GB, Apache 2.0, not gated, and are downloaded on first
+run into the Hugging Face cache — they are not in this repository.
+
+    python3 -m venv .venv          # 3.10+; developed on 3.14
+    .venv/bin/pip install -e .
     .venv/bin/python serve.py --port 8765
 
-Then register it with the API — see the header of `serve.py` and
-`SCHOOLTRACE_EXTRACTORS` in `api/app/extraction.py::model_config`. Registering
-makes the model selectable per document; it does **not** make it the active
-default, which requires passing the promotion gate in `POLICY` (≥20 documents,
-≥3 groups, ≥100 labeled fields, paired against a baseline).
+First start downloads the weights and hashes them (a few minutes); later starts
+load in about seven seconds and the hash is cached beside the weights. The
+service binds loopback only and refuses anything else.
+
+### Registering it with the API
+
+The API reaches the service through `SCHOOLTRACE_EXTRACTORS`, a JSON map its
+`model_config` validates strictly — loopback endpoint, 64-hex artifact hash,
+and an immutable training manifest. Read `artifact_sha256` off the running
+service so the two agree; `infer()` rejects the response if they ever diverge.
+
+    curl -s http://127.0.0.1:8765/health        # -> artifact_sha256
+
+    export SCHOOLTRACE_EXTRACTORS='{"nuextract3-local": {
+      "endpoint": "http://127.0.0.1:8765/",
+      "artifact_sha256": "<from /health>",
+      "base_revision": "<the model snapshot revision>",
+      "training_document_hashes": [],
+      "training_manifest_sha256": "<sha256 of an empty training manifest>",
+      "training_groups": [],
+      "supported_roles": ["invoice", "service", "grants", "policy", "document"]
+    }}'
+
+Training provenance is empty because the base model is served untouched.
+Claiming otherwise would put a false statement into an audit trail.
+
+Then `POST /api/workspaces/{ws}/extraction/models` with `{"name":
+"nuextract3-local", "note": "..."}`. **Registration is per workspace** — a new
+institution starts with an empty model list and needs its own registration.
+
+Registering makes the model selectable per document; it does **not** make it
+the active default, which requires passing the promotion gate in `POLICY`
+(≥20 documents, ≥3 groups, ≥100 labeled fields, paired against a baseline).
 
 ## Model
 
