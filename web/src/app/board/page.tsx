@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useData } from "@/lib/data";
 import type { Column, Task } from "@/lib/types";
 import { duration } from "@/lib/format";
-import { AgentAvatar, PageHeader, Pill, ProgressBar, Pulse } from "@/components/ui";
+import { AGENT_NAME, AgentAvatar, PageHeader, Pill, ProgressBar, Pulse } from "@/components/ui";
 import { TaskDrawer } from "@/components/board/TaskDrawer";
 
 const COLUMNS: { id: Column; label: string }[] = [
@@ -15,36 +15,78 @@ const COLUMNS: { id: Column; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+const EMPTY_COLUMN: Record<Column, string> = {
+  queued: "Nothing waiting",
+  working: "No agent is running right now",
+  needs_you: "You're all caught up",
+  auditor_review: "Nothing to re-check",
+  done: "Nothing finished yet",
+};
+
 export default function BoardPage() {
   const { bundle } = useData();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const open = bundle.tasks.find((t) => t.id === openId) ?? null;
+  const visible = bundle.tasks.filter((t) => agentFilter === "all" || t.agent === agentFilter);
 
   return (
     <>
       <PageHeader
         title="Agent board"
         subtitle="Every task the agents are running. Click a card for its steps, progress and to-dos."
+        right={
+          <div className="flex flex-wrap items-center gap-1">
+            <FilterChip active={agentFilter === "all"} onClick={() => setAgentFilter("all")}>
+              All agents
+            </FilterChip>
+            {bundle.agents.map((a) => (
+              <FilterChip key={a.id} active={agentFilter === a.id} onClick={() => setAgentFilter(a.id)}>
+                <AgentAvatar id={a.id} size="sm" />
+                <span className="hidden xl:inline">{AGENT_NAME[a.id]}</span>
+              </FilterChip>
+            ))}
+          </div>
+        }
       />
       <div className="grid grid-cols-2 items-start gap-2 lg:grid-cols-5">
         {COLUMNS.map((col) => {
-          const tasks = bundle.tasks.filter((t) => t.column === col.id);
+          const tasks = visible.filter((t) => t.column === col.id);
           return (
-            <div key={col.id} className="min-h-[430px] rounded-[10px] bg-slate-100 p-2">
-              <div className="mx-0.5 mb-2 flex items-center gap-1.5 text-[11.5px] font-semibold">
+            <section key={col.id} aria-label={col.label} className="min-h-[430px] rounded-[10px] bg-slate-100 p-2">
+              <div className="sticky top-0 z-[1] mx-0.5 mb-2 flex items-center gap-1.5 rounded bg-slate-100 py-0.5 text-[11.5px] font-semibold">
                 {col.id === "working" && <Pulse />}
                 {col.label}
-                <span className="ml-auto font-normal text-slate-500">{tasks.length}</span>
+                <span className="ml-auto font-normal text-slate-500 tabular-nums">{tasks.length}</span>
               </div>
-              {tasks.map((t) => (
-                <TaskCard key={t.id} task={t} onOpen={() => setOpenId(t.id)} />
-              ))}
-            </div>
+              {tasks.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 px-2 py-6 text-center text-[10.5px] text-slate-400">
+                  {EMPTY_COLUMN[col.id]}
+                </div>
+              ) : (
+                tasks.map((t) => <TaskCard key={t.id} task={t} onOpen={() => setOpenId(t.id)} />)
+              )}
+            </section>
           );
         })}
       </div>
       <TaskDrawer task={open} onClose={() => setOpenId(null)} />
     </>
+  );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
+        active ? "border-slate-900 bg-slate-900 text-white" : "border-line bg-white text-slate-600 hover:border-teal-300"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

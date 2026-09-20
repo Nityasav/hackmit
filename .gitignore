@@ -21,3 +21,5 @@ api/data/
 .superpowers/
 .playwright-mcp/
 .DS_Store
+schooltrace/package-lock.json
+bun.lockb

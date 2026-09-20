@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
 import type { Approval } from "@/lib/types";
-import { AGENT_NAME, AgentAvatar, Button, Card, CardTitle, PageHeader, Pill } from "@/components/ui";
+import { AgentAvatar, Button, Card, CardTitle, EmptyState, PageHeader, Pill, Toast } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
 
 const KIND_LABEL = {
@@ -17,6 +17,16 @@ const KIND_LABEL = {
 export default function ApprovalsPage() {
   const { bundle, decideApproval } = useData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const decide = (id: string, decision: "approved" | "rejected") => {
+    decideApproval(id, decision);
+    setToast(
+      decision === "approved"
+        ? `${id} approved · dependent schedules and the close pack recomputed`
+        : `${id} rejected · the agent will be told why`,
+    );
+  };
   const pending = bundle.approvals.filter((a) => a.status === "pending");
   const decided = bundle.approvals.filter((a) => a.status !== "pending");
   const selected = bundle.approvals.find((a) => a.id === selectedId) ?? pending[0] ?? bundle.approvals[0];
@@ -27,7 +37,11 @@ export default function ApprovalsPage() {
       <div className="grid gap-2.5 lg:grid-cols-[1fr_1.1fr]">
         <Card>
           <CardTitle right={`${pending.length} pending`}>Waiting on you</CardTitle>
-          {pending.length === 0 && <div className="py-4 text-center text-slate-500">All clear. Nothing needs you.</div>}
+          {pending.length === 0 && (
+            <EmptyState title="All clear">
+              Nothing needs you. Agents keep working and will queue the next proposal here.
+            </EmptyState>
+          )}
           {pending.map((a) => (
             <Row key={a.id} approval={a} active={a.id === selected?.id} onClick={() => setSelectedId(a.id)} />
           ))}
@@ -94,10 +108,10 @@ export default function ApprovalsPage() {
 
             {selected.status === "pending" ? (
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                <Button primary onClick={() => decideApproval(selected.id, "approved")}>
+                <Button primary onClick={() => decide(selected.id, "approved")}>
                   {selected.kind === "payment" ? "Release (simulated)" : selected.kind === "evidence" ? "Mark provided" : "Approve"}
                 </Button>
-                <Button onClick={() => decideApproval(selected.id, "rejected")}>Reject</Button>
+                <Button onClick={() => decide(selected.id, "rejected")}>Reject</Button>
                 <Button disabled title="Wired to the orchestrator in the live build">✦ Ask the agent</Button>
               </div>
             ) : (
@@ -118,6 +132,7 @@ export default function ApprovalsPage() {
           </Card>
         )}
       </div>
+      <Toast message={toast} onDone={() => setToast(null)} />
     </TabGate>
   );
 }

@@ -16,6 +16,22 @@
 
   --animate-ping-soft: ping-soft 1.6s infinite;
   --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-slide-in: slide-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade-in: fade-in 0.18s ease-out;
+  --animate-rise: rise 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+
+  @keyframes slide-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 
   @keyframes ping-soft {
     0% { box-shadow: 0 0 0 0 rgb(20 184 166 / 0.55); }
@@ -31,6 +47,32 @@
 body {
   background: var(--color-canvas);
   color: #0f172a;
+}
+
+/* Keyboard focus is always visible; mouse focus never draws a ring. */
+:focus-visible {
+  outline: 2px solid var(--color-agent-cfo);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Thin scrollbars so dense panes don't eat 15px of layout. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Animated text for "what the agent is doing right now". */
