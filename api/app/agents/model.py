@@ -45,7 +45,7 @@ class StructuredSpecialistModel:
     def from_env(cls, max_calls: int = DEFAULT_MODEL_CALLS):
         """Specialist settings fall back to the coordinator's, so one key configures both."""
         provider = os.getenv("SPECIALIST_PROVIDER") or os.getenv("CFO_PROVIDER", "openai")
-        model = os.getenv("SPECIALIST_MODEL") or os.getenv("CFO_MODEL", "")
+        model = os.getenv("SPECIALIST_MODEL") or os.getenv("CFO_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5.4-mini"
         if not model:
             raise ValueError("Set SPECIALIST_MODEL (or CFO_MODEL) to an available structured-output model ID.")
         if provider not in {"openai", "local"}:

@@ -52,7 +52,7 @@ class StructuredCFOModel:
     @classmethod
     def from_env(cls):
         provider = os.getenv("CFO_PROVIDER", "openai")
-        model = os.getenv("CFO_MODEL", "")
+        model = os.getenv("CFO_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5.4-mini"
         if not model:
             raise ValueError("Set CFO_MODEL to an available structured-output model ID.")
         if provider not in {"openai", "local"}:

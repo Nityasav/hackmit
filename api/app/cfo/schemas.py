@@ -124,6 +124,7 @@ class Limits(Contract):
 
 
 class RunRequest(Contract):
+    workflow: Literal["focused", "five_agent"] = "focused"
     # "sandbox"/"mit" are the fixed demo workspaces; anything else is an intake
     # workspace ID, which only a registered live data adapter can resolve.
     workspace: str = Field(default="sandbox", pattern=r"^[A-Za-z0-9_-]{1,64}$")

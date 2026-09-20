@@ -11,7 +11,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.agents.payroll import PayrollBudgetSpecialist
+from app.agents.team import SnapshotSpecialist, SnapshotAuditor
 from app.cfo.api import CFORuntime
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import RunRequest
@@ -181,18 +181,14 @@ def test_factory_omits_the_payroll_agent_when_no_specialist_model_is_configured(
     assert "agents are not" in error.value.detail
 
 
-def test_factory_registers_the_payroll_agent_but_live_runs_still_need_the_others(tmp_path, monkeypatch):
+def test_factory_registers_all_snapshot_agents(tmp_path, monkeypatch):
     monkeypatch.setenv("SPECIALIST_PROVIDER", "openai")
     monkeypatch.setenv("SPECIALIST_MODEL", "test-model-id")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     adapters = create_adapters()
-    assert isinstance(adapters.specialists["py"], PayrollBudgetSpecialist)
-    # AP, grants and the independent auditor are still missing, so a live run must not start.
-    runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"), adapters)
-    with pytest.raises(HTTPException) as error:
-        runtime.start(RunRequest(workspace="ws-abc123", mode="live"))
-    assert error.value.status_code == 503
-    assert "agents are not" in error.value.detail
+    assert set(adapters.specialists) == {"ap", "py", "gr"}
+    assert all(isinstance(agent, SnapshotSpecialist) for agent in adapters.specialists.values())
+    assert isinstance(adapters.auditor, SnapshotAuditor)
 
 
 def test_intake_workspace_ids_are_accepted_but_never_served_by_the_scripted_harness(tmp_path):

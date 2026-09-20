@@ -11,7 +11,7 @@ from uuid import uuid4
 from .ports import Auditor, CFOModel, DataSource, Specialist
 from .reporting import render, validate_narrative
 from .repository import RunRepository
-from .schemas import AcceptedClaim, Event, FollowUp, Narrative, Plan, Review, Run, RunRequest, TaskState, WorkerResult
+from .schemas import AcceptedClaim, Event, FollowUp, Narrative, Plan, Review, Run, RunRequest, TaskSpec, TaskState, WorkerResult
 from .tools import BoundaryError, EvidenceTools
 
 
@@ -61,7 +61,23 @@ class CFOEngine:
             if any(not set(c.source_ids).issubset({s.id for s in run.scope.sources}) for c in run.scope.calculations):
                 raise BoundaryError("Calculation inventory references unavailable sources.")
             run.unresolved.extend(run.scope.gaps)
-            plan = await call_model("plan", lambda: self.model.plan(run.request.objective, run.scope.model_copy(deep=True)), Plan)
+            objective = run.request.objective
+            if run.request.workflow == "five_agent":
+                objective += "\nFive-agent workflow: delegate independent tasks to ALL of ap, py and gr, including evidence-gap checks. Auditor review is automatic."
+            plan = await call_model("plan", lambda: self.model.plan(objective, run.scope.model_copy(deep=True)), Plan)
+            if run.request.workflow == "five_agent":
+                # A model cannot silently omit a required domain. Added tasks remain
+                # subject to the same scope, DAG and task-budget checks below.
+                for role in ("ap", "py", "gr"):
+                    if not any(task.role == role for task in plan.tasks):
+                        task_id = "coverage-" + role
+                        while any(task.id == task_id for task in plan.tasks):
+                            task_id += "-x"
+                        plan.tasks.append(TaskSpec(id=task_id, role=role,
+                            objective=f"Review {role} evidence relevant to the objective; explicitly identify missing support.",
+                            source_ids=[s.id for s in run.scope.sources if s.domain in {role, "shared"}],
+                            success_criteria="Return supported cited observations or explicit evidence requests; never invent amounts."))
+                        emit("cfo", "plan.coverage_added", role)
             self._validate_plan(plan, run)
             run.plan = plan
             run.tasks = [TaskState(spec=spec) for spec in plan.tasks]

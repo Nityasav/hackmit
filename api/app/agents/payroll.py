@@ -90,6 +90,7 @@ class PayrollBudgetSpecialist:
 
     role = "py"
     display_name = "Payroll & Budget"
+    system_prompt = SYSTEM
 
     def __init__(self, model: StructuredSpecialistModel):
         self.model = model
@@ -125,7 +126,7 @@ class PayrollBudgetSpecialist:
             return WorkerResult(summary="No evidence budget remained for this payroll task.",
                                 evidence_requests=["Increase the evidence tool budget; payroll evidence was never retrieved."])
         try:
-            selection = await self.model.generate(SYSTEM, self._SELECT_INSTRUCTION, catalogue, EvidenceSelection)
+            selection = await self.model.generate(self.system_prompt, self._SELECT_INSTRUCTION, catalogue, EvidenceSelection)
         except (ModelBudgetExceeded, SpecialistRefusal) as exc:
             return WorkerResult(summary=f"Evidence selection unavailable ({type(exc).__name__}); no conclusions drawn.",
                                 evidence_requests=["Retry the payroll task; the specialist model did not return a usable evidence plan."])
@@ -151,7 +152,7 @@ class PayrollBudgetSpecialist:
             "evidence_not_retrieved": notes,
         }
         try:
-            findings = await self.model.generate(SYSTEM, self._FINDINGS_INSTRUCTION, retrieved, DraftFindings)
+            findings = await self.model.generate(self.system_prompt, self._FINDINGS_INSTRUCTION, retrieved, DraftFindings)
         except (ModelBudgetExceeded, SpecialistRefusal) as exc:
             return WorkerResult(summary=f"Payroll evidence was retrieved but no reviewable conclusion was produced ({type(exc).__name__}).",
                                 evidence_requests=["Retry the payroll task; the specialist model did not return usable findings."])

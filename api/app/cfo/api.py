@@ -83,7 +83,7 @@ class CFORuntime:
 def runtime(request: Request) -> CFORuntime:
     if not hasattr(request.app.state, "cfo_runtime"):
         adapters = None
-        factory_path = os.getenv("CFO_ADAPTER_FACTORY")
+        factory_path = os.getenv("CFO_ADAPTER_FACTORY", "app.integrations.cfo_factory:create_adapters")
         if factory_path:
             try:
                 module_name, name = factory_path.split(":", 1)

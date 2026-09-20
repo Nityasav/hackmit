@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useData } from "@/lib/data";
+import { API_URL, useData } from "@/lib/data";
 import { Button, Card, CardTitle, PageHeader, Pill } from "@/components/ui";
 
-const API = process.env.NEXT_PUBLIC_CFO_API_URL ?? process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_CFO_API_URL || API_URL;
 const ACTIVE = new Set(["queued", "planning", "running"]);
+const AGENTS: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", au: "Internal Auditor" };
 type Mode = "scripted" | "model_preview" | "live";
 interface CFORun {
   id: string;
@@ -30,8 +31,13 @@ async function loadRun(id: string, signal?: AbortSignal): Promise<CFORun> {
 
 export default function CFOPage() {
   const { ws } = useData();
+  return <CFOInvestigation key={ws} />;
+}
+
+function CFOInvestigation() {
+  const { ws } = useData();
   const [objective, setObjective] = useState("Review the current close, identify evidence gaps, and prepare a CFO briefing.");
-  const [mode, setMode] = useState<Mode>("scripted");
+  const [mode, setMode] = useState<Mode>("live");
   const [run, setRun] = useState<CFORun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -62,7 +68,7 @@ export default function CFOPage() {
     try {
       const response = await fetch(`${API}/api/cfo/runs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspace: ws, objective, mode }),
+        body: JSON.stringify({ workspace: ws, objective, mode, workflow: mode === "live" ? "five_agent" : "focused" }),
       });
       if (!response.ok) {
         const body = await response.json();
@@ -76,7 +82,11 @@ export default function CFOPage() {
   }
 
   async function restore() {
-    try { setRun(await loadRun(savedId.trim())); setError(null); }
+    try {
+      const saved = await loadRun(savedId.trim());
+      if (saved.request.workspace !== ws) throw new Error("This run belongs to a different workspace. Switch workspaces before opening it.");
+      setRun(saved); setError(null);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to load run."); }
   }
 
@@ -93,18 +103,19 @@ export default function CFOPage() {
           <select id="cfo-mode" value={mode} onChange={(e) => setMode(e.target.value as Mode)} className="rounded border border-line p-2">
             <option value="scripted">Scripted integration demo</option>
             <option value="model_preview">Live CFO + scripted collaborators</option>
-            <option value="live">Live connected team</option>
+            <option value="live">Five-agent workflow · uploaded records</option>
           </select>
-          <Button primary disabled={!API || starting || active || !objective.trim()} onClick={() => void start()}>
+          <Button primary disabled={!API || starting || active || !objective.trim() || (mode === "live" && !ws.startsWith("ws-"))} onClick={() => void start()}>
             {starting ? "Starting…" : active ? "Investigation running" : "Start investigation"}
           </Button>
         </div>
         <p className="mt-2 text-xs text-slate-500">
           {mode === "scripted" ? "A fixed example exercises the orchestration and accounting code without a model call."
             : mode === "model_preview" ? "The CFO plans and writes using a real model. Data, specialists, and auditor are scripted examples."
-            : "Uses the connected data source, specialist agents, and independent auditor. Missing integrations are reported explicitly."}
+            : "CFO → AP & Payments + Payroll & Budget + Grants & Compliance → independent Internal Auditor → CFO report. Uses this workspace’s committed snapshot and paid API calls. Missing evidence stays unresolved; AP/Grants amounts without an engine calculation cannot be confirmed."}
           {" "}All financial changes remain proposals for human review.
         </p>
+        {mode === "live" && !ws.startsWith("ws-") && <p className="mt-2 text-amber-800">Select an uploaded-records workspace and commit its sources first. Fixture workspaces support the scripted demo only.</p>}
         {!API && <p className="mt-2 text-amber-800">The CFO service is not connected. Configure its API URL to start an investigation.</p>}
         {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
         <div className="mt-3 flex gap-2">
@@ -123,7 +134,7 @@ export default function CFOPage() {
         {run.plan && <Card className="mt-3">
           <CardTitle>Investigation plan</CardTitle><p className="mb-2 text-slate-600">{run.plan.rationale}</p>
           {run.tasks.map((task) => <div key={task.spec.id} className="border-t border-line py-2">
-            <b>{task.spec.role.toUpperCase()} · {task.spec.id}</b> <span className="text-teal-700">{task.status}</span>
+            <b>{AGENTS[task.spec.role] || task.spec.role} · {task.spec.id}</b> <span className="text-teal-700">{task.status}</span>
             <p>{task.spec.objective}</p>
             <small className="text-slate-500">Attempts: {task.attempts}; dependencies: {task.spec.depends_on.join(", ") || "none"}</small>
           </div>)}
@@ -137,7 +148,7 @@ export default function CFOPage() {
         </Card>}
         <Card className="mt-3"><CardTitle>Activity record</CardTitle>
           {run.events.map((event, i) => <details key={i} className="border-t border-line py-2">
-            <summary className="cursor-pointer">{event.actor.toUpperCase()} · {event.action} {event.task_id && `· ${event.task_id}`}</summary>
+            <summary className="cursor-pointer">{AGENTS[event.actor] || event.actor} · {event.action} {event.task_id && `· ${event.task_id}`}</summary>
             <p className="mt-1 text-xs text-slate-500">{event.at}</p>
             <pre className="mt-1 whitespace-pre-wrap break-words text-xs">{event.detail}</pre>
           </details>)}

@@ -303,5 +303,5 @@ def test_specialist_settings_fall_back_to_the_coordinator_configuration(monkeypa
     monkeypatch.setenv("OPENAI_API_KEY", "present")
     assert StructuredSpecialistModel.from_env().label == "openai/shared-model-id"
     monkeypatch.delenv("CFO_MODEL")
-    with pytest.raises(ValueError, match="SPECIALIST_MODEL"):
-        StructuredSpecialistModel.from_env()
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    assert StructuredSpecialistModel.from_env().model == "gpt-5.4-mini"
