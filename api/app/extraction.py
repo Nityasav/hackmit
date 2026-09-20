@@ -150,7 +150,20 @@ def validate(output, doc):
     allowed = set(schema(doc["role"]))
     for record in result["records"]:
         if set(record) != allowed:
-            raise ValueError("Every schema field must appear once; unknown fields are forbidden")
+            # Name them. The commonest cause is a record produced under an
+            # older field vocabulary — the schema for a document type changes
+            # and stored predictions keep the shape they were made with — and
+            # "unknown fields are forbidden" gave no way to tell that from a
+            # typo in the raw JSON.
+            missing = sorted(allowed - set(record))
+            unknown = sorted(set(record) - allowed)
+            detail = "; ".join(filter(None, [
+                f"missing: {', '.join(missing)}" if missing else "",
+                f"not part of this document type: {', '.join(unknown)}" if unknown else ""]))
+            raise ValueError(
+                f"Every field of a {doc['role']} record must appear exactly once ({detail}). "
+                "A record saved under an older field set has to be reloaded before it can be "
+                "accepted.")
         for value in record.values():
             if value["status"] == "present":
                 page = next((p for p in doc["pages"] if p["page"] == value["page"]), None)

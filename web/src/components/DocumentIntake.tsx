@@ -108,6 +108,7 @@ function Lab({ ws }: { ws: string }) {
   const [authorization, setAuthorization] = useState("");
   const [model, setModel] = useState("");
   const [combine, setCombine] = useState<string[]>([]);
+  const [reshaped, setReshaped] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -149,12 +150,41 @@ function Lab({ ws }: { ws: string }) {
           .map(([field]) => `record ${index + 1} · ${displayLabel(field)}`));
     } catch { return ["the advanced JSON is not valid"]; }
   })();
+  /**
+   * A stored record, reshaped to the field set this document type has now.
+   *
+   * The fields a document type extracts are not frozen: the agent rework
+   * changed the vocabulary, and predictions saved before it kept the shape
+   * they were made with — school-era `student_ref` and `fund` where the books
+   * now want `customer_id` and `entity`. Loading one verbatim produced an
+   * editor whose every submission the API refused, with nothing on screen
+   * explaining why.
+   *
+   * Values for fields that still exist are kept, because a person checked
+   * them. Fields that no longer exist are dropped, and fields that did not
+   * exist then are added as abstentions — never as guesses.
+   */
+  function reshape(output: Output | null | undefined, fields: string[]): Output | undefined {
+    if (!output?.records?.length) return undefined;
+    return {
+      schema_version: state?.schema_version || output.schema_version,
+      records: output.records.map(record => Object.fromEntries(fields.map(field => [
+        field,
+        record[field] || { status: "missing", value: null, page: null, start: null, end: null },
+      ])) as Record<string, Observation>),
+    };
+  }
+
   function choose(d: Doc) {
     setSelected(d.id);
+    const fields = state?.schemas[d.role] || [];
     const saved = state?.correction.filter(c => c.document_id === d.id).at(-1);
     const predicted = state?.prediction.filter(p => p.document_id === d.id && p.output).at(-1);
-    const blank = { schema_version: state?.schema_version, records: [Object.fromEntries((state?.schemas[d.role] || []).map(k => [k, { status: "missing", value: null, page: null, start: null, end: null }]))] };
-    setEditor(JSON.stringify(saved?.output || predicted?.output || blank, null, 2));
+    const blank: Output = { schema_version: state?.schema_version || "", records: [Object.fromEntries(fields.map(k => [k, { status: "missing", value: null, page: null, start: null, end: null }])) as Record<string, Observation>] };
+    const loaded = reshape(saved?.output, fields) || reshape(predicted?.output, fields) || blank;
+    const source = saved?.output || predicted?.output;
+    setReshaped(!!source && JSON.stringify(Object.keys(source.records[0] || {}).sort()) !== JSON.stringify([...fields].sort()));
+    setEditor(JSON.stringify(loaded, null, 2));
     setTranscript(JSON.stringify(d.pages.map(p => p.text), null, 2));
     setGroup(saved?.group || ""); setConsent(saved?.training_authorized || false); setIncludeRecords(false); setNote(""); setAuthorization("");
   }
@@ -217,6 +247,13 @@ function Lab({ ws }: { ws: string }) {
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Stage new records for import. Leave unchecked if these records are already imported.</label>
           <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
         {/* A disabled control that does not say why reads as a broken one. */}
+        {reshaped &&
+          <p className="mt-2 text-[12.5px] text-amber-800">
+            These values were saved when this document type extracted a different set of fields,
+            so they have been fitted to the current one: anything still extracted was kept, fields
+            that no longer exist were dropped, and new ones start blank rather than guessed. Check
+            them against the pages before accepting.
+          </p>}
         {uncited.length > 0 &&
           <p className="mt-2 text-[12.5px] text-amber-800">
             These are marked present but have no exact page span, which the books will not accept:{" "}

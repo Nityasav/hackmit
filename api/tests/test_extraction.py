@@ -608,3 +608,25 @@ def test_a_superseded_correction_cannot_be_combined(client):
         "correction_ids": [first["id"]], "include_records": True})
 
     assert response.status_code == 409
+
+
+def test_a_field_set_mismatch_names_the_fields(client):
+    """"Unknown fields are forbidden" gave no way to tell a record saved under
+    an older vocabulary from a typo in the raw JSON. The commonest cause is the
+    former: a document type's field set changes and stored predictions keep the
+    shape they were made with."""
+    ws = workspace(client)
+    doc = upload(client, ws)
+    out = output(doc)
+    out["records"][0].pop(next(iter(out["records"][0])))      # a field that went away
+    out["records"][0]["student_ref"] = {"status": "missing", "value": None,
+                                        "page": None, "start": None, "end": None}
+
+    response = client.post(path(ws) + "/corrections", json={
+        "document_id": doc["id"], "output": out, "group": "g", "training_authorized": False,
+        "authorization_note": "synthetic", "note": "n", "text_sha256": doc["text_sha256"]})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "student_ref" in detail, detail
+    assert "missing:" in detail and "older field set" in detail
