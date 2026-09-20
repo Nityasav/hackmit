@@ -284,6 +284,32 @@ def test_the_briefing_links_to_the_report_once_one_is_published(client):
     assert [a["href"] for a in actions] == ["reports"]
 
 
+def test_the_workflow_is_the_dag_the_run_executed(client):
+    """Stages are not authored anywhere; they are the plan's tasks."""
+    ws = commit_pack(client, later=True)
+    snapshot = _snapshot_id(ws)
+    specs = {status: TaskSpec(id=f"t-{status}", role=role, objective="Work", source_ids=["s1"],
+                              success_criteria="Cited observations")
+             for status, role in [("done", "ap"), ("working", "py"), ("needs_evidence", "gr")]}
+    RunRepository().save(_run(ws, snapshot,
+                              tasks=[TaskState(spec=spec, status=status) for status, spec in specs.items()]))
+
+    workflow = client.get(f"/api/workspaces/{ws}/bundle").json()["workflows"][0]
+    assert workflow["owner"] == "cfo"
+    assert [s["name"] for s in workflow["stages"]] == [
+        "Plan", "AP t-done", "PY t-working", "GR t-needs_evidence", "Report"]
+    assert [s["state"] for s in workflow["stages"]] == ["done", "done", "running", "human", "done"]
+    # Three of five stages are done, and the number is not authored either.
+    assert workflow["progress"] == 60
+
+
+def test_a_workspace_with_no_run_has_no_workflow(client):
+    ws = commit_pack(client, later=True)
+    bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
+    assert bundle["workflows"] == []
+    assert "workflows" not in bundle["workspace"]["disabled_tabs"]
+
+
 def test_only_the_projection_module_builds_a_bundle():
     """One builder, or the tabs drift apart again."""
     from pathlib import Path

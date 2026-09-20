@@ -199,6 +199,38 @@ def _coordinator_tasks(run):
     return tasks
 
 
+#: Coordinator task status -> the stage state the Workflows tab draws.
+STAGE_STATE = {
+    "done": "done", "working": "running", "auditor_review": "running",
+    "needs_evidence": "human", "failed": "human", "blocked": "human", "queued": "todo",
+}
+
+
+def _coordinator_workflow(run):
+    """One workflow per run: the DAG the coordinator actually executed.
+
+    Stages are not authored anywhere. They are the plan's tasks, in the order the
+    engine ran them, wrapped by the two steps every run has: planning it, and
+    publishing what survived review.
+    """
+    stages = [{"name": "Plan", "state": "done" if run.get("plan") else "todo"}]
+    for state in run["tasks"]:
+        stages.append({"name": AGENTS[state["spec"]["role"]]["short"] + " " + state["spec"]["id"],
+                       "state": STAGE_STATE[state["status"]]})
+    published = bool(run["report_markdown"])
+    stages.append({"name": "Report", "state": "done" if published else
+                   "human" if run["status"] in {"needs_evidence", "partial"} else "todo"})
+    done = sum(1 for stage in stages if stage["state"] == "done")
+    return {
+        "id": run["id"],
+        "name": run["request"]["objective"][:90],
+        # The CFO owns the run; the specialists own the stages inside it.
+        "owner": "cfo",
+        "progress": round(done * 100 / len(stages)),
+        "stages": stages,
+    }
+
+
 def _tool_calls_for(events, task_id):
     """Evidence reads and calculations an actor actually performed, for the `how` trail."""
     return [{"tool": event["action"].removesuffix(".completed"),
@@ -343,13 +375,13 @@ def _report(cov, findings, coordinator, comparisons, gate):
 def _disabled_tabs(workspace):
     """Which tabs this workspace has no business showing.
 
-    Workflows is derived in a later phase and Learning belongs to another
-    workstream. Approvals depends on the workspace: a public-documents workspace
-    holds published reports and no transactions, so there is nothing to decide.
+    Learning belongs to another workstream. Approvals and Workflows depend on the
+    workspace: a public-documents workspace holds published reports and no
+    transactions, so there is nothing to decide and no close to run.
     """
-    disabled = ["workflows", "learning"]
+    disabled = ["learning"]
     if workspace["kind"] == "public":
-        disabled.insert(1, "approvals")
+        disabled = ["workflows", "approvals", "learning"]
     return disabled
 
 
@@ -493,6 +525,7 @@ def _derived(ws):
             task["column"], task["progress"] = "done", 100
             task["note"], task["note_tone"] = f"{approval_id} approved", "info"
 
+    workflows = [_coordinator_workflow(run) for run in coordinator]
     comparisons, gate = approvals_module.comparisons(pending_approvals, findings)
     report = _report(cov, findings, coordinator, comparisons, gate)
     waiting = sum(1 for a in pending_approvals if a["status"] == "pending")
@@ -524,7 +557,7 @@ def _derived(ws):
             "actions": actions,
         },
         "kpis": _kpis(cov, findings, triage, coordinator),
-        "workflows": [], "tasks": tasks, "findings": findings, "approvals": pending_approvals,
+        "workflows": workflows, "tasks": tasks, "findings": findings, "approvals": pending_approvals,
         "decisions": decisions,
         # Owned by the Learning workstream; this layer must keep emitting them unchanged.
         "playbooks": [], "ablation": None,
