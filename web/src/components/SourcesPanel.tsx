@@ -15,7 +15,12 @@ const AGENTS = {
   cfo: { label: "CFO Agent", action: "Run CFO triage", focus: "Perform an initial risk triage of the committed snapshot." },
   grants_compliance: { label: "Grants & Compliance agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
   internal_auditor: { label: "Internal Auditor agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
+  // The five-agent workflow is a coordinator run, not a single-agent triage, so it
+  // starts through a different endpoint. It belongs in the same control regardless:
+  // from here it is one more choice of who investigates.
+  five_agent: { label: "Five-agent workflow (CFO → AP + Payroll + Grants → Auditor)", action: "Start five-agent workflow", focus: "Review the current close, identify evidence gaps, and prepare a CFO briefing." },
 };
+type AgentChoice = keyof typeof AGENTS;
 const input = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs";
 const button = "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40";
 const primary = "rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-40";
@@ -48,8 +53,10 @@ export function SourcesPanel() {
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
   const [allAgentRuns, setAgentRuns] = useState<AgentRun[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<AgentRun["agent"]>("cfo");
-  const agentRuns = allAgentRuns.filter((run) => run.workspace_id === ws && run.agent === selectedAgent);
+  const [selectedAgent, setSelectedAgent] = useState<AgentChoice>("cfo");
+  const [startedRun, setStartedRun] = useState<string | null>(null);
+  const coordinator = selectedAgent === "five_agent";
+  const agentRuns = coordinator ? [] : allAgentRuns.filter((run) => run.workspace_id === ws && run.agent === selectedAgent);
   const agentRunning = allAgentRuns.some((run) => run.workspace_id === ws && run.status === "running");
   const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
   const [agentFocus, setAgentFocus] = useState("Perform an initial risk triage of the committed snapshot.");
@@ -119,7 +126,6 @@ export function SourcesPanel() {
       <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
 
       <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
-        <Link href="/cfo" className="mb-3 inline-block text-sm font-semibold text-teal-700 underline">Open five-agent workflow →</Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
             <p className="mt-1 max-w-3xl text-xs text-slate-600">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>
@@ -127,23 +133,40 @@ export function SourcesPanel() {
         </div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <select aria-label="Investigation agent" className={input} disabled={agentBusy || agentRunning} value={selectedAgent} onChange={(e) => {
-            const agent = e.target.value as AgentRun["agent"];
-            setSelectedAgent(agent); setAgentFocus(AGENTS[agent].focus); setError(""); setMessage("");
+            const agent = e.target.value as AgentChoice;
+            setSelectedAgent(agent); setAgentFocus(AGENTS[agent].focus); setError(""); setMessage(""); setStartedRun(null);
           }}>{Object.entries(AGENTS).map(([id, agent]) => <option key={id} value={id}>{agent.label}</option>)}</select>
           <input aria-label="Agent focus" className={input} value={agentFocus} maxLength={500} onChange={(e) => setAgentFocus(e.target.value)} />
           <button disabled={busy || agentBusy || agentRunning || !snapshot || !agentFocus.trim()} className={primary + " whitespace-nowrap"} onClick={async () => {
             setAgentBusy(true); setError(""); setMessage("");
             try {
-              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: JSON.stringify({
-                agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
-              }) });
-              setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
+              if (coordinator) {
+                // The coordinator runs in the background and reports through the bundle.
+                const started = await intakeApi<{ id: string }>("/api/cfo/runs", { method: "POST", body: JSON.stringify({
+                  workspace: ws, mode: "live", workflow: "five_agent", objective: agentFocus,
+                }) });
+                setStartedRun(started.id);
+                setMessage("Five-agent workflow started. Findings and proposals appear as the run progresses.");
+              } else {
+                const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: JSON.stringify({
+                  agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
+                }) });
+                setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
+                setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
+              }
               await refreshBundle();
-              setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
             } catch (e) { setError(e instanceof Error ? e.message : "Agent request failed"); }
             finally { setAgentBusy(false); void refresh().catch(() => {}); }
           }}>{agentBusy || agentRunning ? "Agent working…" : AGENTS[selectedAgent].action}</button>
         </div>
+        {startedRun && (
+          <p className="mt-2 text-xs">
+            <Link href={`/cfo?run=${encodeURIComponent(startedRun)}`} className="font-semibold text-teal-700 underline">
+              Follow run {startedRun} →
+            </Link>
+          </p>
+        )}
+        {coordinator && <p className="mt-2 text-xs text-slate-500">The CFO plans, AP &amp; Payments, Payroll &amp; Budget and Grants &amp; Compliance investigate in parallel, and the Internal Auditor re-reads the sources and redoes the math before anything is reported. Uses this workspace&rsquo;s committed snapshot and paid API calls.</p>}
         {!snapshot && <p className="mt-2 text-xs text-amber-700">Commit at least one valid source snapshot before running the agent.</p>}
         {selectedAgent === "grants_compliance" && <p className="mt-2 text-xs text-slate-500">Checks supplied award terms and payroll service periods. Payroll totals are not complete grant expenditure. Findings remain unreviewed; no compliance certification is issued.</p>}
         {selectedAgent === "internal_auditor" && <p className="mt-2 text-xs text-slate-500">Run CFO or Grants first. Reviews up to four findings per run using fresh source reads and calculation checks. Accept means the limited claim is supported—not approval of a transaction or an audit opinion.</p>}

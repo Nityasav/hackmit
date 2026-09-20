@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+
 import { API_URL, useData } from "@/lib/data";
-import { Button, Card, CardTitle, PageHeader, Pill } from "@/components/ui";
+import { AGENT_NAME, Card, CardTitle, EmptyState, PageHeader, Pill } from "@/components/ui";
 
 const API = process.env.NEXT_PUBLIC_CFO_API_URL || API_URL;
 const ACTIVE = new Set(["queued", "planning", "running"]);
-const AGENTS: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", au: "Internal Auditor" };
-type Mode = "scripted" | "model_preview" | "live";
+
 interface CFORun {
   id: string;
-  request: { workspace: string; mode: Mode; objective: string };
+  request: { workspace: string; mode: string; objective: string };
   status: string;
   model_label: string;
   model_calls: number;
@@ -29,131 +31,152 @@ async function loadRun(id: string, signal?: AbortSignal): Promise<CFORun> {
   return response.json();
 }
 
-export default function CFOPage() {
-  const { ws } = useData();
-  return <CFOInvestigation key={ws} />;
+export default function CFORunPage() {
+  return (
+    <Suspense fallback={<PageHeader title="Investigation run" />}>
+      <RunRoute />
+    </Suspense>
+  );
 }
 
-function CFOInvestigation() {
+function RunRoute() {
+  const runId = useSearchParams().get("run");
+  // Keyed so switching runs remounts rather than leaving the previous run on screen.
+  return <RunDetail key={runId ?? "none"} runId={runId} />;
+}
+
+/** The detail behind one coordinator run. Runs are started from the Command center. */
+function RunDetail({ runId }: { runId: string | null }) {
   const { ws } = useData();
-  const [objective, setObjective] = useState("Review the current close, identify evidence gaps, and prepare a CFO briefing.");
-  const [mode, setMode] = useState<Mode>("live");
   const [run, setRun] = useState<CFORun | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [savedId, setSavedId] = useState("");
-  const runId = run?.id;
   const active = !!run && ACTIVE.has(run.status);
 
   useEffect(() => {
-    if (!API || !runId || !active) return;
+    if (!API || !runId) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const next = await loadRun(runId, controller.signal);
-        if (!controller.signal.aborted) { setRun(next); setError(null); }
+        if (controller.signal.aborted) return;
+        setRun(next);
+        setError(null);
+        // Stop polling once the run reaches a terminal state.
+        if (ACTIVE.has(next.status)) timer = setTimeout(poll, 1500);
       } catch (e) {
-        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to refresh run.");
+        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to load run.");
       }
-      if (!controller.signal.aborted) timer = setTimeout(poll, 1500);
     };
     void poll();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [runId, active]);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [runId]);
 
-  async function start() {
-    setStarting(true);
-    setError(null);
-    try {
-      const response = await fetch(`${API}/api/cfo/runs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspace: ws, objective, mode, workflow: mode === "live" ? "five_agent" : "focused" }),
-      });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new Error(typeof body.detail === "string" ? body.detail : `Run could not start (${response.status}).`);
-      }
-      const next: CFORun = await response.json();
-      setRun(next);
-      setSavedId(next.id);
-    } catch (e) { setError(e instanceof Error ? e.message : "Unable to start run."); }
-    finally { setStarting(false); }
-  }
+  if (!runId)
+    return (
+      <>
+        <PageHeader title="Investigation run" />
+        <EmptyState icon="○" title="No run selected">
+          Investigations start in the <Link href="/" className="underline">Command center</Link>. Open one from there
+          to see its plan, evidence and report.
+        </EmptyState>
+      </>
+    );
 
-  async function restore() {
-    try {
-      const saved = await loadRun(savedId.trim());
-      if (saved.request.workspace !== ws) throw new Error("This run belongs to a different workspace. Switch workspaces before opening it.");
-      setRun(saved); setError(null);
-    }
-    catch (e) { setError(e instanceof Error ? e.message : "Unable to load run."); }
-  }
+  if (error)
+    return (
+      <>
+        <PageHeader title="Investigation run" subtitle={runId} />
+        <Card>
+          <p role="alert" className="text-accent-bad">{error}</p>
+          <p className="mt-2 text-[13px] text-ink-dim">
+            A run belongs to the workspace it was started in. This one may belong to a workspace other than {ws}.
+          </p>
+        </Card>
+      </>
+    );
+
+  if (!run)
+    return <><PageHeader title="Investigation run" subtitle={runId} /><Card>Loading the run…</Card></>;
 
   return (
     <>
-      <PageHeader title="CFO investigation" subtitle="Plan the work, review the evidence, and prepare a report" />
+      <PageHeader title="Investigation run" subtitle={run.request.objective} />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-[13px] text-ink-dim">
+        <Pill tone={run.status === "completed" ? "green" : "amber"}>{run.status}</Pill>
+        <span className="font-mono">{run.id}</span>
+        <span>· {run.request.workspace} · {run.model_label}</span>
+        <span className="font-num tabular-nums">
+          · {run.model_calls} CFO call(s) · {run.tool_calls} evidence tool call(s)
+        </span>
+      </div>
+
       <Card>
-        <CardTitle>Start an investigation · {ws}</CardTitle>
-        <label className="block text-xs font-semibold" htmlFor="cfo-objective">What should the CFO investigate?</label>
-        <textarea id="cfo-objective" value={objective} onChange={(e) => setObjective(e.target.value)} maxLength={2000}
-          className="my-2 min-h-20 w-full rounded-lg border border-line p-2" />
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="cfo-mode">Run mode</label>
-          <select id="cfo-mode" value={mode} onChange={(e) => setMode(e.target.value as Mode)} className="rounded border border-line p-2">
-            <option value="scripted">Scripted integration demo</option>
-            <option value="model_preview">Live CFO + scripted collaborators</option>
-            <option value="live">Five-agent workflow · uploaded records</option>
-          </select>
-          <Button primary disabled={!API || starting || active || !objective.trim() || (mode === "live" && !ws.startsWith("ws-"))} onClick={() => void start()}>
-            {starting ? "Starting…" : active ? "Investigation running" : "Start investigation"}
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          {mode === "scripted" ? "A fixed example exercises the orchestration and accounting code without a model call."
-            : mode === "model_preview" ? "The CFO plans and writes using a real model. Data, specialists, and auditor are scripted examples."
-            : "CFO → AP & Payments + Payroll & Budget + Grants & Compliance → independent Internal Auditor → CFO report. Uses this workspace’s committed snapshot and paid API calls. Missing evidence stays unresolved; AP/Grants amounts without an engine calculation cannot be confirmed."}
-          {" "}All financial changes remain proposals for human review.
-        </p>
-        {mode === "live" && !ws.startsWith("ws-") && <p className="mt-2 text-amber-800">Select an uploaded-records workspace and commit its sources first. Fixture workspaces support the scripted demo only.</p>}
-        {!API && <p className="mt-2 text-amber-800">The CFO service is not connected. Configure its API URL to start an investigation.</p>}
-        {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
-        <div className="mt-3 flex gap-2">
-          <input aria-label="Saved CFO run ID" value={savedId} onChange={(e) => setSavedId(e.target.value)} placeholder="Saved run ID"
-            className="min-w-0 rounded border border-line px-2 py-1" />
-          <Button disabled={!API || !savedId.trim() || active} onClick={() => void restore()}>Open saved run</Button>
-        </div>
+        <CardTitle>CFO briefing</CardTitle>
+        <p className="text-[14px]">{run.briefing}</p>
       </Card>
-      {run && <>
-        <div className="my-3 flex flex-wrap items-center gap-2 text-xs">
-          <Pill tone={run.status === "completed" ? "green" : "amber"}>{run.status}</Pill>
-          <span>{run.id} · {run.request.workspace} · {run.request.mode} · {run.model_label}</span>
-          <span>{run.model_calls} CFO calls · {run.tool_calls} evidence tool calls</span>
-        </div>
-        <Card><CardTitle>CFO briefing</CardTitle><p>{run.briefing}</p></Card>
-        {run.plan && <Card className="mt-3">
-          <CardTitle>Investigation plan</CardTitle><p className="mb-2 text-slate-600">{run.plan.rationale}</p>
-          {run.tasks.map((task) => <div key={task.spec.id} className="border-t border-line py-2">
-            <b>{AGENTS[task.spec.role] || task.spec.role} · {task.spec.id}</b> <span className="text-teal-700">{task.status}</span>
-            <p>{task.spec.objective}</p>
-            <small className="text-slate-500">Attempts: {task.attempts}; dependencies: {task.spec.depends_on.join(", ") || "none"}</small>
-          </div>)}
-        </Card>}
-        {run.unresolved.length > 0 && <Card className="mt-3"><CardTitle>Unresolved matters</CardTitle>
-          <ul className="list-disc space-y-1 pl-5">{run.unresolved.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </Card>}
-        {run.report_markdown && <Card className="mt-3"><CardTitle>Review report</CardTitle>
-          <a href={`${API}/api/cfo/runs/${run.id}/report`} target="_blank" rel="noreferrer" className="text-teal-700 underline">Open Markdown report</a>
-          <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed">{run.report_markdown}</pre>
-        </Card>}
-        <Card className="mt-3"><CardTitle>Activity record</CardTitle>
-          {run.events.map((event, i) => <details key={i} className="border-t border-line py-2">
-            <summary className="cursor-pointer">{AGENTS[event.actor] || event.actor} · {event.action} {event.task_id && `· ${event.task_id}`}</summary>
-            <p className="mt-1 text-xs text-slate-500">{event.at}</p>
-            <pre className="mt-1 whitespace-pre-wrap break-words text-xs">{event.detail}</pre>
-          </details>)}
+
+      {run.plan && (
+        <Card className="mt-4">
+          <CardTitle right={`${run.tasks.length} task(s)`}>Investigation plan</CardTitle>
+          <p className="mb-2 text-[14px] text-ink-dim">{run.plan.rationale}</p>
+          {run.tasks.map((task) => (
+            <div key={task.spec.id} className="border-t border-line py-2 first:border-t-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <b className="text-[13.5px]">{AGENT_NAME[task.spec.role as keyof typeof AGENT_NAME] ?? task.spec.role}</b>
+                <span className="font-mono text-[12.5px] text-ink-faint">{task.spec.id}</span>
+                <Pill tone={task.status === "done" ? "green" : "amber"}>{task.status}</Pill>
+              </div>
+              <p className="mt-1 text-[13.5px]">{task.spec.objective}</p>
+              <small className="text-[12.5px] text-ink-faint">
+                Attempts: {task.attempts}; dependencies: {task.spec.depends_on.join(", ") || "none"}
+              </small>
+            </div>
+          ))}
         </Card>
-      </>}
+      )}
+
+      {run.unresolved.length > 0 && (
+        <Card className="mt-4">
+          <CardTitle right={`${run.unresolved.length}`}>Unresolved matters</CardTitle>
+          <ul className="list-inside list-disc space-y-1 text-[13.5px]">
+            {run.unresolved.map((item, i) => <li key={i}>{item}</li>)}
+          </ul>
+        </Card>
+      )}
+
+      {run.report_markdown && (
+        <Card className="mt-4">
+          <CardTitle right={<Link href="/reports" className="underline">Reports tab</Link>}>Published report</CardTitle>
+          <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed">
+            {run.report_markdown}
+          </pre>
+        </Card>
+      )}
+
+      <Card className="mt-4">
+        <CardTitle right={`${run.events.length} event(s)`}>Activity record</CardTitle>
+        <p className="mb-2 text-[13px] text-ink-dim">
+          Every step the run took. The decisions drawn from these are in the{" "}
+          <Link href="/reasoning" className="underline">Reasoning log</Link>.
+        </p>
+        {run.events.map((event, i) => (
+          <details key={i} className="border-t border-line py-2">
+            <summary className="cursor-pointer text-[13.5px]">
+              {AGENT_NAME[event.actor as keyof typeof AGENT_NAME] ?? event.actor} · {event.action}
+              {event.task_id && ` · ${event.task_id}`}
+            </summary>
+            <p className="mt-1 font-num text-[12px] tabular-nums text-ink-faint">{event.at}</p>
+            <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[12.5px]">{event.detail}</pre>
+          </details>
+        ))}
+      </Card>
+
+      {active && <p className="mt-3 text-[13px] text-ink-dim">This run is still working; the page refreshes itself.</p>}
     </>
   );
 }
