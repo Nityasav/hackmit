@@ -21,7 +21,7 @@ import json
 from typing import Any
 
 from .. import db, roles
-from ..accounting import cash, match, reconcile
+from ..accounting import accruals, cash, close, match, reconcile, statements
 from .budget import BudgetExceeded, Meter
 
 
@@ -211,6 +211,59 @@ class Toolbox:
         self.calculations["cash"] = result
         return result
 
+
+    def build_statements(self) -> dict:
+        """Income statement, balance sheet and cash flow, from the ledger.
+
+        Deterministic end to end. B3 holds this tool and no model writes any figure it
+        returns; the agent's job is to notice when something does not tie and to say so.
+        """
+        self._charge("build_statements")
+        result = statements.statements(self._records, self.config)
+        self.calculations["statements"] = result
+        return result
+
+    def close_checklist(self) -> dict:
+        """What is outstanding before the period can be closed."""
+        self._charge("close_checklist")
+        result = close.checklist(self._records, self.config)
+        self.calculations["close"] = result
+        return result
+
+    def propose_journal(self) -> dict:
+        """Accruals the period owes, from deliveries with no invoice against them.
+
+        Proposals only. Every journal is balanced before it is returned, and nothing
+        downstream of this can post one.
+        """
+        self._charge("propose_journal")
+        result = accruals.unbilled_receipts(self._records, self.config)
+        for proposal in result["proposals"]:
+            for citation in proposal["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+            self.calculations[proposal["id"]] = proposal
+        return result
+
+    def reperform(self) -> dict:
+        """Recompute the close independently, for a reviewer that trusts nothing.
+
+        B4 must not accept a figure because a preparer reported it. This runs the same
+        deterministic code against the same records and returns the answer directly, so
+        a disagreement is visible rather than negotiable.
+        """
+        self._charge("reperform")
+        result = {
+            "statements": statements.statements(self._records, self.config),
+            "close": close.checklist(self._records, self.config),
+        }
+        self.calculations["reperformed"] = {
+            "balances": result["statements"]["balance_sheet"]["balances"],
+            "ties": result["statements"]["cash_flow"]["ties"],
+            "ready": result["close"]["ready"],
+        }
+        return result
+
     # ----------------------------------------------------------------- writes --
     def record_decision(self, *, agent: str, action: str, summary: str, why: str,
                         confidence: int | None, evidence: list[dict], model: str,
@@ -281,6 +334,10 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "reconcile_bank": toolbox.reconcile_bank,
         "decompose_payout": toolbox.decompose_payout,
         "project_cash": toolbox.project_cash,
+        "build_statements": toolbox.build_statements,
+        "close_checklist": toolbox.close_checklist,
+        "propose_journal": toolbox.propose_journal,
+        "reperform": toolbox.reperform,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -329,6 +386,23 @@ def tool_definitions(spec) -> list[dict]:
                            "against it over a horizon in days.",
             "properties": {"horizon_days": {"type": "integer", "minimum": 1, "maximum": 180}},
             "required": []},
+        "build_statements": {
+            "description": "Income statement, balance sheet and cash flow computed from "
+                           "the ledger in exact cents, with the checks that say whether "
+                           "they tie. You do not write any of these figures.",
+            "properties": {}, "required": []},
+        "close_checklist": {
+            "description": "Every close question, answered from the records, with what "
+                           "is blocking the period and what is merely outstanding.",
+            "properties": {}, "required": []},
+        "propose_journal": {
+            "description": "Accruals for deliveries inside the period with no invoice "
+                           "against them. Balanced proposals; nothing posts.",
+            "properties": {}, "required": []},
+        "reperform": {
+            "description": "Recompute the statements and the close independently, so a "
+                           "preparer's figure can be checked rather than believed.",
+            "properties": {}, "required": []},
     }
     return [{
         "type": "function", "name": name,

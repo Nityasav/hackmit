@@ -346,14 +346,24 @@ def test_an_objective_about_cash_routes_to_the_treasurer(ws):
 
 
 def test_an_unwired_domain_is_reported_rather_than_silently_skipped(ws):
-    """A domain nobody asked anything of must not read as a clean one."""
-    model = FakeModel([([], ap_result(disposition="insufficient_evidence",
-                                      summary="n/a", rationale="n/a", citations=[]))])
-    final = asyncio.run(run_investigation(
-        ws, "Run the month-end close and test the controls.", client=model))
+    """A domain nobody asked anything of must not read as a clean one.
+
+    Named against whatever is still unwired rather than a fixed worker, so wiring one
+    updates this test instead of breaking it — and the day the last one lands, the
+    assertion that there is something to report is what tells you to delete it.
+    """
+    from app.graph.build import WIRED_WORKERS
+
+    pending = [w for w in ("A", "B", "C", "D") if w not in WIRED_WORKERS]
+    assert pending, "every worker is wired; this test and its branch can go"
+
+    objective = {"C": "Explain the budget variance.",
+                 "D": "Test the controls and the approvals."}[pending[0]]
+    final = asyncio.run(run_investigation(ws, objective, client=_clear_model()))
 
     unresolved = " ".join(final["unresolved"])
-    assert "Controller" in unresolved and "not wired yet" in unresolved
+    assert AGENTS[pending[0]].name in unresolved
+    assert "not wired yet" in unresolved
 
 
 def test_concurrent_subagents_all_reach_the_final_state(ws):

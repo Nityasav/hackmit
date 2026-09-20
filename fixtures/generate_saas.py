@@ -247,10 +247,13 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
     becomes the opening payables balance.
     """
     carried_in = 0
-    for _ in range(40):
+    # 26 billed inside the period, 14 carried in, for the same reason as sales: the
+    # first set is the month's cost, the second is opening payables to pay down.
+    for index in range(40):
+        in_period = index < 26
         vendor = rng.choice(vendors)
-        # Roughly a third of the population is carried in from before the period.
-        ordered = business_day(start + timedelta(days=rng.randrange(-45, 12)))
+        ordered = business_day(start + timedelta(
+            days=rng.randrange(0, 12) if in_period else rng.randrange(-45, -12)))
         received = business_day(ordered + timedelta(days=rng.randrange(1, 8)))
         billed = business_day(received + timedelta(days=rng.randrange(0, 5)))
         amount = rng.randrange(45_000, 2_400_000, 100)
@@ -310,6 +313,34 @@ def purchase_cycle(books, rng, period, start, end, vendors, counter) -> int:
                 "bank_reference": reference, "event_ref": ref})
             artifacts["payments"] = [payment_id]
         books.record_event(ref, "purchase", f"{vendor['name']} — {vendor['memo']}", billed, period, artifacts)
+
+    # Deliveries late in the month whose invoice has not arrived yet. Entirely ordinary
+    # at a period end, and the reason accruals exist: the cost belongs to this period
+    # and no bill names it. Nothing is posted for them, which is what leaves the month
+    # understated until someone accrues it.
+    for _ in range(4):
+        vendor = rng.choice(vendors)
+        ordered = business_day(end - timedelta(days=rng.randrange(9, 16)))
+        received = business_day(ordered + timedelta(days=rng.randrange(1, 5)))
+        amount = rng.randrange(180_000, 900_000, 100)
+        counter["n"] += 1
+        n = counter["n"]
+        ref = f"EVT-{period}-U{n:04d}"
+        po_id, receipt_id = f"PO-{7000 + n}", f"GR-{8000 + n}"
+        books.add("purchase_orders", {
+            "po_id": po_id, "line_id": "1", "vendor_id": vendor["vendor_id"],
+            "description": vendor["memo"], "order_date": ordered.isoformat(),
+            "amount": money(amount),
+            "approver": f"{GIVEN[n % len(GIVEN)]} {FAMILY[n % len(FAMILY)]}",
+            "event_ref": ref})
+        books.add("goods_receipts", {
+            "receipt_id": receipt_id, "line_id": "1", "po_id": po_id, "po_line_id": "1",
+            "received_date": received.isoformat(), "amount": money(amount),
+            "event_ref": ref})
+        books.record_event(ref, "purchase", f"{vendor['name']} — delivered, not yet billed",
+                           received, period,
+                           {"purchase_orders": [po_id], "goods_receipts": [receipt_id]})
+
     return carried_in
 
 
@@ -322,10 +353,14 @@ def sales_cycle(books, rng, period, start, end, customers, counter) -> int:
     reconciliation would have no credits to match. Returns carried-in receivables.
     """
     carried_in = 0
-    for _ in range(30):
+    # 22 billed inside the period, 14 carried in. The first set is the month's services
+    # revenue; the second is opening receivables with something to collect against.
+    for index in range(36):
+        in_period = index < 22
         customer = rng.choice(customers)
-        issued = business_day(start + timedelta(days=rng.randrange(-60, 20)))
-        amount = rng.randrange(120_000, 4_800_000, 100)
+        issued = business_day(start + timedelta(
+            days=rng.randrange(0, 20) if in_period else rng.randrange(-60, -5)))
+        amount = rng.randrange(400_000, 3_200_000, 100)
         tax = amount * 725 // 10_000 if customer["country"] == "US" else 0
         counter["n"] += 1
         n = counter["n"]
@@ -379,7 +414,7 @@ def processor_cycle(books, rng, period, start, end, counter):
         n = counter["n"]
         ref = f"EVT-{period}-X{n:04d}"
         paid_out = business_day(start + timedelta(days=14 * index + 12))
-        gross = rng.randrange(1_800_000, 4_200_000, 100)
+        gross = rng.randrange(28_000_000, 44_000_000, 100)
         fees = gross * rng.randrange(210, 310) // 10_000
         refunds = rng.randrange(0, gross // 40, 100)
         chargebacks = rng.randrange(0, gross // 200, 100)
