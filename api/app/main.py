@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import approvals, ingestion, projection, roles
+from . import approvals, ingestion, projection, registers, roles
 from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .reviews import router as review_router
@@ -224,6 +224,39 @@ def workspace_requirements(ws: str):
 def settings(ws: str, body: ingestion.SettingsUpdate):
     """Answer the requirements that are a single value rather than a file."""
     return ingestion.update_settings(ws, body)
+
+
+@app.get("/api/workspaces/{ws}/records")
+def records(ws: str, role: str, field: str | None = None,
+            start: str | None = None, end: str | None = None,
+            limit: int = Query(default=200, ge=1, le=1000)):
+    """Committed records of one role, narrowed to a date range.
+
+    `field` names which date to filter on. Most roles carry more than one and
+    they mean different things — invoiced, due and paid are three different
+    questions — so the answer always reports the field it used rather than
+    leaving the reader to assume.
+    """
+    supplied = ingestion.financial_records(ws)["records"]
+    try:
+        view = registers.select(supplied, role, field=field, start=start, end=end)
+    except ValueError as exc:
+        ingestion.fail("invalid_filter", str(exc), 422)
+    return {**view, "records": view["records"][:limit], "truncated": view["count"] > limit}
+
+
+@app.get("/api/workspaces/{ws}/records.csv")
+def records_csv(ws: str, role: str, field: str | None = None,
+                start: str | None = None, end: str | None = None):
+    """The same register as a spreadsheet, stating on its face what it holds."""
+    supplied = ingestion.financial_records(ws)["records"]
+    try:
+        view = registers.select(supplied, role, field=field, start=start, end=end)
+    except ValueError as exc:
+        ingestion.fail("invalid_filter", str(exc), 422)
+    return Response(
+        registers.to_csv(view), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{registers.filename(view)}"'})
 
 
 @app.get("/api/workspaces/{ws}/sources/{sid}")

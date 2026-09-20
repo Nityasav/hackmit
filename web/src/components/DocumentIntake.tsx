@@ -121,6 +121,7 @@ function Lab({ ws }: { ws: string }) {
   // since been re-read, and the API refuses it. Restricted to the kind now
   // selected, because each kind extracts different columns and one register
   // cannot hold two of them.
+  const sameKind = (state?.documents || []).filter(d => d.role === role);
   const readyToCombine = Object.values(
     (state?.correction || []).reduce<Record<string, Correction>>((acc, c) => ({ ...acc, [c.document_id]: c }), {}),
   ).filter(c => {
@@ -164,7 +165,7 @@ function Lab({ ws }: { ws: string }) {
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
       </section>
-      {readyToCombine.length > 1 && <section className="border border-line p-5">
+      {sameKind.length > 1 && <section className="border border-line p-5">
         <h3 className="text-[15px] font-semibold tracking-tight">Combine several into one register</h3>
         <p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">
           Staging one at a time makes one import per document. These have all been checked and are
@@ -172,12 +173,13 @@ function Lab({ ws }: { ws: string }) {
           Each document still keeps its own evidence file, so every value stays traceable to the
           page it came from.
         </p>
-        <ul className="my-3 space-y-1">{readyToCombine.map(c => {
-          const named = state.documents.find(d => d.id === c.document_id);
-          return <li key={c.id} className="text-[13px]"><label className="flex items-center gap-2">
-            <input type="checkbox" checked={combine.includes(c.id)} disabled={busy}
-              onChange={e => setCombine(prev => e.target.checked ? [...prev, c.id] : prev.filter(x => x !== c.id))} />
-            {named?.name || c.document_id} · {named ? displayLabel(named.role) : ""}
+        <ul className="my-3 space-y-1">{sameKind.map(d => {
+          const ready = readyToCombine.find(c => c.document_id === d.id);
+          return <li key={d.id} className="text-[13px]"><label className={`flex items-center gap-2 ${ready ? "" : "text-ink-dim"}`}>
+            <input type="checkbox" checked={!!ready && combine.includes(ready.id)} disabled={busy || !ready}
+              onChange={e => ready && setCombine(prev => e.target.checked ? [...prev, ready.id] : prev.filter(x => x !== ready.id))} />
+            {d.name}
+            {!ready && <span className="text-[12px]">· check its values and accept them first</span>}
           </label></li>;
         })}</ul>
         <button className={button} disabled={busy || combine.length < 2}
