@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 
 import { AGENT_NAME, AgentAvatar, ProgressBar, Pulse } from "@/components/ui";
 import { duration, elapsedSeconds } from "@/lib/format";
@@ -76,6 +77,7 @@ export function AgentBoard({ ws }: { ws: string }) {
   const now = useNow();
   const [openId, setOpenId] = useState<string | null>(null);
   const open = board.tasks.find((task) => task.id === openId) ?? null;
+  const finished = board.tasks.filter((task) => task.detail?.result?.disposition).length;
 
   if (board.error) {
     return (
@@ -120,6 +122,16 @@ export function AgentBoard({ ws }: { ws: string }) {
           )}
         </span>
       </div>
+
+      {finished > 0 && (
+        <p className="mb-5 max-w-prose border border-line bg-surface-2 px-3 py-2 text-[13px] leading-relaxed">
+          {finished} conclusion{finished === 1 ? " has" : "s have"} been written up in{" "}
+          <Link href="/briefing" className="underline underline-offset-4">
+            the briefing
+          </Link>
+          , with the evidence behind each one and a copy to download.
+        </p>
+      )}
 
       <div className="grid gap-px border border-line bg-line md:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
         {COLUMNS.map((column) => {
