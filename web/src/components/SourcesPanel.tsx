@@ -58,6 +58,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   const [files, setFiles] = useState<{ file: File; options: SourceOptions }[]>([]);
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [scope, setScope] = useState<Scope>("top");
+  //: Keyed by source, line and field, so two blanks on one row stay separate.
+  const [supply, setSupply] = useState<Record<string, string>>({});
+  const [supplyNote, setSupplyNote] = useState("");
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
   const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
@@ -262,7 +265,35 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {batch.issues.length > 0 && <ul className="mt-3 space-y-1" aria-label="Validation issues">{batch.issues.map((i, n) => <li key={n} className="bg-red-50 p-2 text-xs text-accent-bad">
           <b>{i.code}</b>: {i.message} {i.field && `(${i.field})`}
           {i.source_id !== "batch" && <button className="ml-2 underline" onClick={() => act(() => viewSource(i.source_id, i.locator || 1))}>Open source {i.locator ? `line ${i.locator}` : ""}</button>}
-        </li>)}</ul>}
+          {/* A value the document never stated has to come from somewhere, and
+              there was nowhere to put it. Offered only for a blank the source
+              left empty: a value the source does state is evidence, and the
+              API refuses to overwrite it. */}
+          {i.code === "required_field" && i.field && i.locator && i.source_id !== "batch" &&
+            <span className="ml-2 inline-flex flex-wrap items-center gap-1">
+              <input aria-label={`Supply ${i.field} for line ${i.locator}`} className="border border-line px-2 py-1 text-xs"
+                placeholder={`Supply ${i.field}`} value={supply[`${i.source_id}:${i.locator}:${i.field}`] || ""}
+                onChange={(e) => setSupply((v) => ({ ...v, [`${i.source_id}:${i.locator}:${i.field}`]: e.target.value }))} />
+              <button className="underline" disabled={busy || !(supply[`${i.source_id}:${i.locator}:${i.field}`] || "").trim()}
+                onClick={() => act(async () => {
+                  const key = `${i.source_id}:${i.locator}:${i.field}`;
+                  showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/values", {
+                    method: "POST",
+                    body: { expected_version: batch.version, source_id: i.source_id, note: supplyNote.trim() || "Supplied by the reviewer; the source did not state it.",
+                            edits: [{ locator: i.locator, field: i.field, value: supply[key].trim() }] },
+                  }));
+                  setSupply((v) => ({ ...v, [key]: "" }));
+                  setMessage(`Supplied ${i.field} on line ${i.locator}. It is recorded against you as a value the source did not state, and the import was revalidated.`);
+                }, "import")}>Save value</button>
+            </span>}
+        </li>)}
+        <li className="p-2 text-xs text-ink-dim">
+          <label>Why these values are being supplied
+            <input className="ml-2 w-96 max-w-full border border-line px-2 py-1" value={supplyNote}
+              onChange={(e) => setSupplyNote(e.target.value)}
+              placeholder="e.g. matched by vendor name against the vendor register" />
+          </label>
+        </li></ul>}
         {batch.issues_truncated && <p className="text-xs">Showing the first 500 issues; resolve these and revalidate.</p>}
         {batch.changes.length > 0 && <details className="my-2"><summary className="font-semibold">Review {batch.changes.length} superseding record changes</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(batch.changes, null, 2)}</pre></details>}
         {batch.status !== "committed" ? <div className="mt-3 flex flex-wrap gap-2">

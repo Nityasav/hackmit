@@ -171,6 +171,17 @@ def import_detail(ws: str, bid: str):
     return ingestion.get_batch(ws, bid)
 
 
+@app.post("/api/workspaces/{ws}/imports/{bid}/values")
+def supply_values(ws: str, bid: str, body: ingestion.ValueSupply):
+    """Fill cells a source left empty, before the import is committed.
+
+    Only a blank is filled. A cell the source already states is refused rather
+    than overwritten: supplying what a document omitted and rewriting what it
+    says are different acts, and only the first belongs in a review screen.
+    """
+    return ingestion.supply_values(ws, bid, body)
+
+
 @app.patch("/api/workspaces/{ws}/imports/{bid}/mapping")
 def mapping(ws: str, bid: str, body: ingestion.MappingUpdate):
     return ingestion.update_mapping(ws, bid, body)

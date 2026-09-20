@@ -93,6 +93,21 @@ class MappingUpdate(BaseModel):
     files: dict[str, FileOptions]
 
 
+class SuppliedValue(BaseModel):
+    #: The source line a reader sees. The header is line 1, so rows start at 2.
+    locator: int = Field(ge=2)
+    field: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=500)
+
+
+class ValueSupply(BaseModel):
+    expected_version: int = Field(ge=1)
+    source_id: str
+    edits: list[SuppliedValue] = Field(min_length=1, max_length=200)
+    #: Why this value is being supplied, since the document did not state it.
+    note: str = Field(min_length=1, max_length=500)
+
+
 class CommitRequest(BaseModel):
     expected_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=128)
@@ -413,6 +428,76 @@ def list_batches(ws):
         return [dict(r) for r in connection.execute(
             "SELECT id,status,version,created_at,snapshot_id FROM batches WHERE ws=? ORDER BY rowid DESC LIMIT 100", (ws,)
         )]
+
+
+def supply_values(ws, bid, body):
+    """Fill values the source never stated, in a staged import, before commit.
+
+    An extracted register can be missing a field the document simply does not
+    contain: an invoice names a vendor but carries no vendor id, and a register
+    that requires one cannot be committed. The id exists — it is just not on
+    the page — so somebody has to supply it.
+
+    This only ever fills a blank. A cell that already holds a value is refused
+    rather than overwritten, because those two acts are not the same thing:
+    supplying what a document omitted is bookkeeping, and rewriting what it
+    states is altering evidence. The first belongs in a review screen; the
+    second must never be reachable from one.
+
+    Each filled cell is recorded against the person who supplied it, so the
+    trail distinguishes a value read off a page from a value a human asserted.
+    """
+    with db.connect() as connection:
+        batch = load_batch(connection, ws, bid)
+        if batch["status"] == "committed":
+            fail("already_committed", "This import is committed; correct it with a new revision", 409)
+        if batch["version"] != body.expected_version:
+            fail("stale_preview", "This preview changed; refresh it before supplying values", 409)
+
+        source = connection.execute("SELECT * FROM sources WHERE ws=? AND id=? AND batch_id=?",
+                                    (ws, body.source_id, bid)).fetchone()
+        if not source:
+            fail("source_not_found", "Source does not belong to this import", 404)
+        if not source["name"].lower().endswith(".csv"):
+            fail("not_tabular", "Only a tabular source has cells to fill", 422)
+
+        text = bytes(source["original"]).decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
+        headers = reader.fieldnames or []
+        rows = list(reader)
+        supplied = []
+        for edit in body.edits:
+            # `locator` is the source line a reader sees, and the header is line 1.
+            index = edit.locator - 2
+            if not 0 <= index < len(rows):
+                fail("unknown_line", f"Line {edit.locator} is not a row of this source", 422)
+            if edit.field not in headers:
+                fail("unknown_field", f"{edit.field!r} is not a column of this source", 422)
+            if (rows[index].get(edit.field) or "").strip():
+                fail("value_present",
+                     f"Line {edit.locator} already states a {edit.field}. A value a source "
+                     "supplied is evidence and is never overwritten here; correct it at source "
+                     "and upload a new revision instead.", 409)
+            if not edit.value.strip():
+                fail("empty_value", "Supply a value, or leave the cell empty", 422)
+            rows[index][edit.field] = edit.value.strip()
+            supplied.append({"line": edit.locator, "field": edit.field, "value": edit.value.strip()})
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+        content = buffer.getvalue().encode()
+
+        connection.execute("UPDATE sources SET original=?, sha256=? WHERE id=?",
+                           (content, hashlib.sha256(content).hexdigest(), source["id"]))
+        connection.execute("UPDATE batches SET version=version+1 WHERE id=?", (bid,))
+        revalidate(connection, ws, bid)
+        db.event(connection, ws, "values_supplied",
+                 {"batch_id": bid, "source_id": source["id"], "supplied": supplied,
+                  "note": body.note,
+                  "meaning": "Filled cells the source left empty. No stated value was changed."})
+    return get_batch(ws, bid)
 
 
 def update_mapping(ws, bid, body: MappingUpdate):
