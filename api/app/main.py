@@ -62,16 +62,6 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=os.environ.get("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX") or None,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True,
-)
-
-
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
     # A CORS preflight carries no credentials, no reviewer header and no body — by design, the
@@ -102,6 +92,20 @@ async def intake_write_guard(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+# Registered last on purpose. Starlette runs the most recently added middleware outermost, so this
+# wraps intake_write_guard rather than sitting inside it. Registered before the guard, a 401 or 403
+# the guard returns leaves the app without ever passing through CORS, and a browser cannot read a
+# cross-origin response that carries no Access-Control-Allow-Origin, whatever its status. The
+# hosted web app then reports the API as unreachable: the status was right, the header was missing.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=os.environ.get("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX") or None,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
 
 
 @app.get("/api/health")
