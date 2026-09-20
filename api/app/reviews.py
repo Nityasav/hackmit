@@ -238,9 +238,12 @@ def _delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
         ingestion.workspace(c, ws)
         if c.execute("SELECT 1 FROM agent_runs WHERE ws=? AND status='running'", (ws,)).fetchone():
             raise HTTPException(409, "Wait for the active standalone review before deleting.")
+        for row in c.execute("SELECT payload FROM extraction_items WHERE ws=? AND kind='benchmark_job'", (ws,)):
+            if json.loads(row[0]).get("status") in {"queued", "running"}:
+                raise HTTPException(409, "Wait for the extraction benchmark before deleting.")
         c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
         c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
-        for table in ("review_actions", "review_scans", "demo_sessions", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
+        for table in ("extraction_active", "extraction_items", "extraction_documents", "review_actions", "review_scans", "demo_sessions", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
             c.execute(f"DELETE FROM {table} WHERE ws=?", (ws,))
         c.execute("DELETE FROM workspaces WHERE id=?", (ws,))
     return {"deleted": ws, "note": "Logical deletion completed. OS backups and recoverable filesystem remnants are outside this operation."}

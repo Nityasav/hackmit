@@ -25,12 +25,16 @@ from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
 from .reviews import router as review_router
 from . import security
+from .extraction import router as extraction_router
+from .updates import router as updates_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .extraction import interrupt_jobs
+    interrupt_jobs()
     yield
     if hasattr(app.state, "cfo_runtime"):
         await app.state.cfo_runtime.close()
@@ -40,6 +44,8 @@ app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
 app.include_router(review_router)
 app.include_router(security.router)
+app.include_router(extraction_router)
+app.include_router(updates_router)
 
 app.add_middleware(
     CORSMiddleware,

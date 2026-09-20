@@ -96,7 +96,7 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
     href: tab.href,
     icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
     active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows"].includes(tab.id)),
+    disabled: bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows", "learning"].includes(tab.id)),
     badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
   }));
 

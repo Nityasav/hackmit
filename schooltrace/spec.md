@@ -500,3 +500,22 @@ Recovery behaviors: quarantine malformed imports; show OCR uncertainty; keep con
 | Own measure of better | Hidden issue detection plus false positives, consistency, interventions, and memory ablation |
 
 Supporting documents: [accounting](ACCOUNTING_CONTROLS.md), [evaluation](DATA_AND_EVALUATION.md), [implementation](IMPLEMENTATION_PLAN.md), [role prompts](AGENT_PROMPTS.md), [handoff](BUILD_PROMPT.md), [demo](DEMO.md), [sources](SOURCES.md).
+# Implementation checkpoint: document lifecycle and incremental updates
+
+The `max` implementation now includes a laptop-local document/extraction review
+pipeline and a benchmark-gated release workflow; see `EXTRACTION_IMPLEMENTATION.md`
+for the precise interface, thresholds, limitations and partner training handoff.
+PDF/image originals are retained; local preprocessing produces page text, and
+reviewed extracted fields link back to original pages. OCR and field corrections
+are versioned. Only human-approved fields enter staged intake; normal validation
+and explicit commit still apply. Uploaded files can be appended or versioned in
+an existing institution. The dashboard shows snapshot changes and offers explicit
+rules-only or live five-agent rescans. No unseen file silently triggers paid calls.
+
+The improvement workflow supports permissioned correction datasets, frozen train
+and held-out splits, immutable model manifests, paired benchmark jobs, promotion,
+rollback and retirement. It does not train weights: partner models implement the
+versioned local page-text extraction contract. Thresholds are engineering gates,
+not measured accuracy. Promotion requires benchmark results and admin approval;
+model output never becomes training truth automatically. No recursive weight
+updates, automatic drift detector or hosted multi-tenant security is claimed.

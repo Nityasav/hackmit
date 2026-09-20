@@ -209,3 +209,15 @@ accounts are separate; this is still a laptop demo, not end-to-end hosted tenant
 authorization.
 
 - [Nityasav](https://github.com/Nityasav) · [hppddub](https://github.com/hppddub) · Maxim · Stanley
+## Documents, continuous updates, and partner model training
+
+Use **Records & overview → Keep this institution up to date** to append files to an
+existing institution, inspect snapshot changes and rescan. For PDFs/images use
+**Documents & model improvement** (`/documents`, or Learning for an intake workspace).
+Originals, document versions, OCR revisions, corrections and source citations are
+preserved. Accepted extraction remains staged until a human commits validated intake.
+
+The Document lab also freezes authorized training/evaluation datasets, exports JSONL
+and manifests, benchmarks local model candidates and gates human promotion/rollback.
+Your partner supplies the trained weights and local inference endpoint; none are
+silently installed or trained. Full handoff: `EXTRACTION_IMPLEMENTATION.md`.

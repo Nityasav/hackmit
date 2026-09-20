@@ -80,6 +80,20 @@ CREATE TABLE IF NOT EXISTS demo_sessions (
     ws TEXT PRIMARY KEY REFERENCES workspaces(id), evidence_added INTEGER NOT NULL DEFAULT 0
 );
 PRAGMA user_version = 2;
+CREATE TABLE IF NOT EXISTS extraction_items (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS extraction_workspace ON extraction_items(ws, kind);
+CREATE TABLE IF NOT EXISTS extraction_documents (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    name TEXT NOT NULL, sha256 TEXT NOT NULL, original BLOB NOT NULL,
+    payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(ws, sha256)
+);
+CREATE TABLE IF NOT EXISTS extraction_active (
+    ws TEXT PRIMARY KEY REFERENCES workspaces(id), model_id TEXT NOT NULL,
+    version INTEGER NOT NULL, evaluation_id TEXT NOT NULL
+);
 """
 
 
