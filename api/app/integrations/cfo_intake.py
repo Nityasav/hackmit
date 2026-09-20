@@ -8,15 +8,18 @@ records, publishes snapshots, or reaches evaluator truth.
 Amounts are never computed here. The accounting engine is Functionality's
 (`app/accounting/`); this module only forwards its results, because the CFO's
 provenance checks require an amount to come from the same engine the auditor
-reperforms. Payroll calculations are published from `accounting/payroll.py`.
-Domains without a published engine still carry no calculations, and `calculate`
-fails closed for them, so those specialists can cite evidence and explain a
-finding but cannot assert an amount.
+reperforms. Calculations are published from `accounting/payroll.py`,
+`accounting/ap.py` and `accounting/grants.py`. A domain with no committed
+records still carries no calculations, and `calculate` fails closed for it, so
+that specialist can cite evidence and explain a finding but cannot assert an
+amount.
 """
 
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from ..accounting.ap import calculations as ap_calculations
+from ..accounting.grants import calculations as grants_calculations
 from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
 from ..cfo.schemas import Calculation, CalculationSpec, Scope, Source, SourceSpan
 from ..ingestion import coverage, financial_records
@@ -52,8 +55,11 @@ async def _engine_calculations(workspace: str, available: set[str]) -> list[Payr
     except HTTPException as exc:
         raise _unavailable(exc) from None
     service_present = "service" in inputs["roles"]
-    return [c for c in payroll_calculations(inputs["records"], service_present)
-            if c.source_ids and set(c.source_ids).issubset(available)]
+    records = inputs["records"]
+    published = (payroll_calculations(records, service_present)
+                 + ap_calculations(records)
+                 + grants_calculations(records))
+    return [c for c in published if c.source_ids and set(c.source_ids).issubset(available)]
 
 
 def _usable(source: dict) -> bool:
@@ -85,8 +91,11 @@ class IntakeDataSource:
                  for r in view["requests"] if r["status"] in {"open", "needs_review"}]
         engine = await _engine_calculations(workspace, {s.id for s in sources})
         if engine:
-            gaps.append("Deterministic amounts are published for payroll only; AP and grant amounts "
-                        "cannot be confirmed in this run.")
+            domains = sorted({c.id.split("-", 1)[0] for c in engine})
+            missing = sorted({"payroll", "ap", "grants"} - set(domains))
+            if missing:
+                gaps.append("Deterministic amounts are published for " + ", ".join(domains)
+                            + " only; " + ", ".join(missing) + " amounts cannot be confirmed in this run.")
         else:
             gaps.append("No deterministic calculation inventory is published for this workspace; "
                         "amounts cannot be confirmed in this run.")

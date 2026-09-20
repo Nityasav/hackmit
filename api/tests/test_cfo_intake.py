@@ -57,11 +57,14 @@ def test_snapshot_maps_committed_sources_domains_and_gaps(client):
     # Document evidence is a first-class source, not just ledger CSVs.
     assert domains["award-terms.md"] == "shared"
     assert any("missing service" in gap for gap in scope.gaps)
-    # Payroll amounts come from the accounting engine; other domains still have none.
+    # Amounts come from the accounting engine, per domain that has records to work on.
     published = {c.id for c in scope.calculations}
     assert "payroll-gross-to-net" in published and "payroll-award-ceiling-excess" in published
-    assert all(c.id.startswith("payroll-") for c in scope.calculations)
-    assert any("payroll only" in gap for gap in scope.gaps)
+    # The pack charges an award through payroll, so the award-level tests publish too.
+    assert "grants-combined-ceiling-excess" in published
+    # It commits no invoices, so AP can cite evidence but still cannot assert an amount.
+    assert not any(c.id.startswith("ap-") for c in scope.calculations)
+    assert any("ap amounts cannot be confirmed" in gap for gap in scope.gaps)
     # Each published calculation names sources the specialist can actually read.
     available = {s.id for s in scope.sources}
     assert all(set(c.source_ids) <= available and c.source_ids for c in scope.calculations)
