@@ -22,7 +22,7 @@ _bundles: dict[str, dict] = {}
 
 
 def _load(ws: WorkspaceId) -> dict:
-    return json.loads((FIXTURES / f"{ws}.json").read_text())
+    return json.loads((FIXTURES / f"{ws}.json").read_text(encoding="utf-8"))
 
 
 def get_bundle(ws: WorkspaceId) -> Bundle:
