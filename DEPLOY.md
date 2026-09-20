@@ -34,7 +34,7 @@ Any host that runs a container works. `api/Dockerfile` builds it and honours `$P
 disk mounted at `/data` if you want uploads to survive a restart; without one the container still
 runs and everything uploaded is lost on redeploy.
 
-**Railway** — New Service → Deploy from repo, root directory `api`. Add a volume at `/data`.
+**Railway** — the walkthrough below is the one that has been tested.
 
 **Fly** — `fly launch --dockerfile api/Dockerfile`, then `fly volumes create data` and mount it at
 `/data`.
@@ -51,6 +51,52 @@ Set these environment variables on the API service:
 | `OPENAI_API_KEY` | your key | Only needed for agent runs, not for intake or the deterministic checks |
 
 Check it: `curl https://your-api.onrender.com/api/health` should return `{"status":"ok"}`.
+
+## 2a. Railway, step by step
+
+`api/railway.json` already pins the Dockerfile builder, a `/api/health` healthcheck and one replica.
+Keep it at one: SQLite takes a single writer per file, and a second replica would get its own
+volume and its own half of your data.
+
+**From the dashboard**
+
+1. **New Project → Deploy from GitHub repo →** `Nityasav/hackmit`.
+2. Open the service → **Settings → Root Directory** → `api`. Railway then finds `railway.json`
+   and `Dockerfile` itself; leave the build and start commands empty, since the image sets both.
+3. **Settings → Networking → Generate Domain.** Copy the hostname it gives you, e.g.
+   `sherlock-api-production.up.railway.app`. You need it before the first successful boot, because
+   the API refuses any hostname not in `SCHOOLTRACE_PUBLIC_HOSTS`.
+4. **Settings → Volumes → New Volume**, mount path `/data`. Skip this and every upload disappears
+   on the next deploy or restart.
+5. **Variables** — add the table above, with `SCHOOLTRACE_PUBLIC_HOSTS` set to the hostname from
+   step 3 and no `https://` prefix. `PORT` is injected by Railway; do not set it.
+6. Redeploy. `curl https://<your-domain>/api/health` → `{"status":"ok"}`.
+
+**From the CLI**
+
+```bash
+npm i -g @railway/cli && railway login
+cd api && railway init && railway up          # builds the Dockerfile
+railway domain                                 # prints the hostname for step 5
+railway variables --set SCHOOLTRACE_PUBLIC_HOSTS=<your-domain> \
+                  --set SCHOOLTRACE_USERS='<json from step 1>' \
+                  --set SCHOOLTRACE_ALLOWED_ORIGINS=https://schooltrace.vercel.app \
+                  --set 'SCHOOLTRACE_ALLOWED_ORIGIN_REGEX=https://schooltrace-.*\.vercel\.app'
+```
+
+Add the volume in the dashboard afterwards; the CLI does not create one.
+
+**What the image does on Railway, verified locally**
+
+The same container was built and run with `PORT`, a mounted volume and hosted variables set:
+it boots, binds `$PORT`, answers `/api/health` with 200, returns 401 without a session, answers the
+CORS preflight with 200, writes `schooltrace.sqlite3` into `/data`, and keeps that file across a
+restart. With `SCHOOLTRACE_PUBLIC_HOSTS` set and `SCHOOLTRACE_USERS` missing it returns 503 and
+refuses to serve, which is the intended failure.
+
+If a build fails on Railway, it will be in the dependency layer — `rapidocr-onnxruntime` pulls
+OpenCV, which needs `libgl1` and `libglib2.0-0`. Both are installed in the Dockerfile; do not strip
+them to slim the image.
 
 ## 3. Point the web app at it
 
