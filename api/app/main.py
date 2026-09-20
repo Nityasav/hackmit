@@ -226,6 +226,20 @@ def settings(ws: str, body: ingestion.SettingsUpdate):
     return ingestion.update_settings(ws, body)
 
 
+@app.get("/api/workspaces/{ws}/record-dates")
+def record_dates(ws: str):
+    """Which dates each role carries, and which one is used unless you say.
+
+    Needed before a register can be asked for: a role carrying several dates
+    refuses to guess, so the caller has to be able to offer the choice rather
+    than discover it from an error.
+    """
+    ingestion.workspace_config(ws)
+    return {role: {"dates": registers.date_fields(role),
+                   "default": registers.PRIMARY_DATE.get(role)}
+            for role in roles.FIELDS if registers.date_fields(role)}
+
+
 @app.get("/api/workspaces/{ws}/records")
 def records(ws: str, role: str, field: str | None = None,
             start: str | None = None, end: str | None = None,
