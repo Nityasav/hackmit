@@ -15,7 +15,17 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
       }`}
     >
       <span className="pt-1 font-mono text-[12.5px] text-ink-faint">{d.time}</span>
-      <AgentAvatar id={d.agent} />
+      {/* A human decision must not wear an agent's badge; `agent` only groups it with its run. */}
+      {d.actor ? (
+        <span
+          title={d.actor}
+          className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-none border border-ink bg-surface text-[11px] font-bold text-ink"
+        >
+          YOU
+        </span>
+      ) : (
+        <AgentAvatar id={d.agent} />
+      )}
       <div className="min-w-0">
         <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full cursor-pointer items-start gap-2 text-left">
           <span className="min-w-0">
@@ -31,7 +41,7 @@ export function DecisionCard({ decision, defaultOpen = false }: { decision: Deci
         </button>
 
         <div className="mt-1.5 flex flex-wrap gap-2">
-          <Tag>{AGENT_NAME[d.agent]}</Tag>
+          <Tag>{d.actor ? `Human · ${d.actor}` : AGENT_NAME[d.agent]}</Tag>
           {d.tags.map((t) => (
             <Tag key={t.label} kind={t.kind}>
               {t.label}

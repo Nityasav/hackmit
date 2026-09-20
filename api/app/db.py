@@ -13,6 +13,8 @@ import sqlite3
 from uuid import uuid4
 
 
+SCHEMA_VERSION = 5
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY, config TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0
@@ -64,9 +66,22 @@ CREATE TABLE IF NOT EXISTS agent_requests (
     run_id TEXT NOT NULL REFERENCES agent_runs(id),
     PRIMARY KEY(ws, request_id)
 );
+CREATE TABLE IF NOT EXISTS cfo_runs (
+    id TEXT PRIMARY KEY, workspace TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    snapshot_id TEXT, run_id TEXT, finding_id TEXT, task_id TEXT,
+    agent TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+    journal TEXT, effects TEXT, verified INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL,
+    decided_at TEXT, decided_by TEXT
+);
 CREATE INDEX IF NOT EXISTS active_records ON records(ws, active);
 CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
 CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
+CREATE INDEX IF NOT EXISTS workspace_cfo_runs ON cfo_runs(workspace, created_at);
+CREATE INDEX IF NOT EXISTS workspace_approvals ON approvals(ws, status);
 CREATE TABLE IF NOT EXISTS review_scans (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
@@ -79,7 +94,6 @@ CREATE TABLE IF NOT EXISTS review_actions (
 CREATE TABLE IF NOT EXISTS demo_sessions (
     ws TEXT PRIMARY KEY REFERENCES workspaces(id), evidence_added INTEGER NOT NULL DEFAULT 0
 );
-PRAGMA user_version = 2;
 CREATE TABLE IF NOT EXISTS extraction_items (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
@@ -94,7 +108,7 @@ CREATE TABLE IF NOT EXISTS extraction_active (
     ws TEXT PRIMARY KEY REFERENCES workspaces(id), model_id TEXT NOT NULL,
     version INTEGER NOT NULL, evaluation_id TEXT NOT NULL
 );
-"""
+""" + f"PRAGMA user_version = {SCHEMA_VERSION};"
 
 
 def uid(prefix: str) -> str:
@@ -119,7 +133,7 @@ def connect():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version > 2:
+    if version > SCHEMA_VERSION:
         connection.close()
         raise RuntimeError("Database is newer than this application; refusing to downgrade")
     connection.executescript(SCHEMA)

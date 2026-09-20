@@ -8,15 +8,18 @@ records, publishes snapshots, or reaches evaluator truth.
 Amounts are never computed here. The accounting engine is Functionality's
 (`app/accounting/`); this module only forwards its results, because the CFO's
 provenance checks require an amount to come from the same engine the auditor
-reperforms. Payroll calculations are published from `accounting/payroll.py`.
-Domains without a published engine still carry no calculations, and `calculate`
-fails closed for them, so those specialists can cite evidence and explain a
-finding but cannot assert an amount.
+reperforms. Calculations are published from `accounting/payroll.py`,
+`accounting/ap.py` and `accounting/grants.py`. A domain with no committed
+records still carries no calculations, and `calculate` fails closed for it, so
+that specialist can cite evidence and explain a finding but cannot assert an
+amount.
 """
 
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from ..accounting.ap import calculations as ap_calculations
+from ..accounting.grants import calculations as grants_calculations
 from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
 from ..accounting.review import checks
 from ..cfo.schemas import Calculation, CalculationSpec, Scope, Source, SourceSpan
@@ -53,14 +56,23 @@ async def _engine_calculations(workspace: str, available: set[str]) -> list[Payr
     except HTTPException as exc:
         raise _unavailable(exc) from None
     service_present = "service" in inputs["roles"]
-    engine = payroll_calculations(inputs["records"], service_present)
-    for item in checks(inputs["records"], {}):
-        if item["amount_cents"] is not None and item["id"].startswith(("ap-duplicate-", "budget-")):
-            engine.append(PayrollCalculation(id=item["id"], description=item["title"],
+    records = inputs["records"]
+    published = (payroll_calculations(records, service_present)
+                 + ap_calculations(records)
+                 + grants_calculations(records))
+    known = {calculation.id for calculation in published}
+    for item in checks(records, {}):
+        if (item["amount_cents"] is not None
+                and item["id"].startswith(("ap-duplicate-", "budget-"))
+                and item["id"] not in known):
+            published.append(PayrollCalculation(
+                id=item["id"], description=item["title"],
                 source_ids=tuple(sorted({e["source_id"] for e in item["evidence"]})),
                 amount_cents=item["amount_cents"], cash_delta_cents=0,
-                category="exposure" if item["status"] == "attention" else "none", basis=item["explanation"]))
-    return [c for c in engine if c.source_ids and set(c.source_ids).issubset(available)]
+                category="exposure" if item["status"] == "attention" else "none",
+                basis=item["explanation"],
+            ))
+    return [c for c in published if c.source_ids and set(c.source_ids).issubset(available)]
 
 
 def _usable(source: dict) -> bool:
@@ -91,11 +103,14 @@ class IntakeDataSource:
         gaps += [f"Open evidence request ({r['role']}): {r['title']}."
                  for r in view["requests"] if r["status"] in {"open", "needs_review"}]
         engine = await _engine_calculations(workspace, {s.id for s in sources})
-        if any(c.id.startswith(("ap-duplicate-", "budget-")) for c in engine):
-            gaps.append("Amount inventory includes payroll, exact-key invoice duplicate candidates and expense budget variance where supplied. No payment confirmation, full three-way matching, statutory accounts or full-population grant compliance is implied.")
-        elif engine:
-            gaps.append("Deterministic amounts are published for payroll only; AP and grant amounts "
-                        "cannot be confirmed in this run.")
+        if engine:
+            domains = sorted({c.id.split("-", 1)[0] for c in engine})
+            missing = sorted({"payroll", "ap", "grants"} - set(domains))
+            if missing:
+                gaps.append("Deterministic amounts are published for " + ", ".join(domains)
+                            + " only; " + ", ".join(missing) + " amounts cannot be confirmed in this run.")
+            if any(c.id.startswith(("ap-duplicate-", "budget-")) for c in engine):
+                gaps.append("Amount inventory includes exact-key invoice duplicate candidates and expense budget variance where supplied. No payment confirmation, full three-way matching, statutory accounts or full-population grant compliance is implied.")
         else:
             gaps.append("No deterministic calculation inventory is published for this workspace; "
                         "amounts cannot be confirmed in this run.")

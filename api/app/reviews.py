@@ -177,7 +177,10 @@ def act(ws: str, body: FollowUp, request: Request):
 
 def demo_files():
     sample = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text())
-    files = [f for f in sample["files"] if not f.get("later")]
+    # The shared starter pack may grow new invoice or budget examples. The guided
+    # review uses its own labelled cases below, so replace those roles instead of
+    # staging two version-1 sources with overlapping record identifiers.
+    files = [f for f in sample["files"] if not f.get("later") and f["role"] not in {"invoice", "budget"}]
     files += [dict(name="invoices.csv", role="invoice", content="record_id,vendor_id,invoice_number,service_date,amount,po_id,receipt_id\nINV-1,VENDOR-1,A-101,2026-09-10,1200.00,PO-1,\nINV-2,VENDOR-1,A-101,2026-09-10,1200.00,PO-1,\nINV-3,VENDOR-2,A-101,2026-09-10,1200.00,PO-2,REC-2\n"),
               dict(name="budget.csv", role="budget", content="record_id,account,amount,approval_reference\nBUD-1,5000,9000.00,BOARD-DEMO-SEP\n")]
     return files, next(f for f in sample["files"] if f.get("later"))
@@ -241,8 +244,11 @@ def _delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
         for row in c.execute("SELECT payload FROM extraction_items WHERE ws=? AND kind='benchmark_job'", (ws,)):
             if json.loads(row[0]).get("status") in {"queued", "running"}:
                 raise HTTPException(409, "Wait for the extraction benchmark before deleting.")
-        c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
-        c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
+        if rt.repository.path is None:
+            c.execute("DELETE FROM cfo_runs WHERE workspace=?", (ws,))
+        else:
+            c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
+            c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
         for table in ("extraction_active", "extraction_items", "extraction_documents", "review_actions", "review_scans", "demo_sessions", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
             c.execute(f"DELETE FROM {table} WHERE ws=?", (ws,))
         c.execute("DELETE FROM workspaces WHERE id=?", (ws,))

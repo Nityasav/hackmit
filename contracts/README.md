@@ -4,7 +4,7 @@
 
 The existing bundle remains compatible with `sandbox` and `mit`. New persisted workspace IDs are
 `ws-` plus 16 hexadecimal characters; they are validated by lookup, never treated as filesystem paths.
-Bundles add `contract_version: 2`, optional workspace `intake`, `currency`, `profile`, and execution mode
+Bundles add `contract_version: 2`, optional workspace `intake`, `recorded_from`, `currency`, `profile`, and execution mode
 `not_started`. New workspaces contain no demo findings/tasks. The TypeScript types in `web/src/lib/types.ts`
 describe intake responses; request models and validation live in the flat `api/app/ingestion.py` module.
 
@@ -73,11 +73,12 @@ Bundle
 ├─ tasks[]        Agent board cards: column (queued|working|needs_you|auditor_review|done),
 │                 progress, eta_s, tool_calls, steps[], todos[], rationale, approval_id
 ├─ findings[]     status, amount_cents, verified_by, evidence[] (the graph path)
-├─ approvals[]    kind (journal|payment|playbook|evidence), journal[], effects[], status
-├─ decisions[]    Reasoning log: when / how (tool calls) / why / alternatives / memory_checks / outcome
+├─ approvals[]    kind (journal|payment|playbook|evidence|decision), journal[], effects[], status
+├─ decisions[]    Reasoning log: when / how (tool calls) / why / alternatives / memory_checks / outcome.
+│                 `actor` names the person when a human, not an agent, took the decision
 ├─ playbooks[]    RSI: replay gate result, uses, status (active|needs_approval|retired|blocked)
 ├─ ablation       memory on vs off. `example: true` until the evaluator produces real numbers
-└─ report         sections, before/after comparisons, applies_approval
+└─ report         sections, before/after comparisons, applies_approval, markdown
 ```
 
 ## Rules

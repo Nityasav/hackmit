@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import store, ingestion
+from . import approvals, ingestion, projection, store
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
@@ -62,7 +62,10 @@ async def intake_write_guard(request: Request, call_next):
         await security.guard(request)
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/workspaces"):
+    # /api/approvals is a write path into intake data too, now that a decision on an
+    # intake workspace is recorded rather than refused.
+    guarded = ("/api/workspaces", "/api/approvals")
+    if request.method in {"POST", "PATCH"} and request.url.path.startswith(guarded):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
     length = request.headers.get("content-length")
@@ -88,34 +91,24 @@ def health() -> dict[str, str]:
 def get_bundle(ws: WorkspaceId) -> Bundle:
     """Everything the dashboard renders, in one payload. The web app polls this."""
     try:
-        return store.get_bundle(ws) if ws in {"sandbox", "mit"} else Bundle.model_validate(ingestion.bundle(ws))
+        return projection.bundle(ws)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"unknown workspace {ws}")
 
 
 @app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
 def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. The only path that may apply a change to a scenario."""
-    if body.workspace not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Intake workspaces do not have an agent approval runtime yet")
-    try:
-        return store.decide_approval(body.workspace, approval_id, body.decision)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    """Human approval. The only path that may apply a change to a scenario.
 
-
-@app.post("/api/demo/{action}", response_model=Bundle)
-def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
-    """Demo controls: reset, inject_issue, add_evidence, next_month.
-
-    TODO(workflows): drive these from app/workflows/scenarios.py.
+    Agents propose; nothing they can call reaches this endpoint.
     """
-    if ws not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Reset is only available for demo workspaces")
-    if action == "reset":
-        store.reset(ws)
-        return store.get_bundle(ws)
-    raise HTTPException(status_code=501, detail=f"demo action '{action}' not implemented yet")
+    if body.workspace in projection.RECORDED:
+        try:
+            return store.decide_approval(body.workspace, approval_id, body.decision)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    approvals.decide(body.workspace, approval_id, body.decision)
+    return projection.bundle(body.workspace)
 
 
 @app.get("/api/workspaces")

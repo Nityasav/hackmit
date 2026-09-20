@@ -25,6 +25,8 @@ export interface Workspace {
   run_budget: { used: number; total: number };
   source_url?: string;
   intake?: boolean;
+  /** For a recorded workspace, what the recording is of. */
+  recorded_from?: string | null;
   currency?: string;
   profile?: string;
 }
@@ -135,13 +137,15 @@ export type ApprovalStatus = "pending" | "approved" | "rejected";
 export interface Approval {
   id: string;
   agent: AgentId;
-  kind: "journal" | "payment" | "playbook" | "evidence";
+  kind: "journal" | "payment" | "playbook" | "evidence" | "decision";
   title: string;
   summary: string;
   verified: boolean;
   status: ApprovalStatus;
   journal?: JournalLine[];
   effects?: { label: string; value: string; tone?: "good" | "neutral" }[];
+  /** The finding this proposal would resolve, when it came from one. */
+  finding_id?: string | null;
 }
 
 export interface Decision {
@@ -149,6 +153,8 @@ export interface Decision {
   run: string;
   time: string;
   agent: AgentId;
+  /** Set when a person took this decision rather than an agent; `agent` has no value for a human. */
+  actor?: string | null;
   action: string;
   summary: string;
   tags: { label: string; kind?: "mem" | "memx" }[];
@@ -184,6 +190,8 @@ export interface Report {
   title: string;
   sections: string[];
   comparisons: { label: string; before: string; after: string }[];
+  /** The run's own published Markdown, when a run produced one. */
+  markdown?: string | null;
   applies_approval?: string;
   before_label?: string;
   after_label?: string;

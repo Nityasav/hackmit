@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useData } from "@/lib/data";
 import { SherlockMark } from "@/components/SherlockMark";
+import { HelpGuide } from "@/components/HelpGuide";
 
 export function Topbar() {
   const { ws, setWs, intakeWorkspaces, apiError } = useData();
@@ -13,6 +14,7 @@ export function Topbar() {
         <option value="sandbox">Fixed demo · Sandbox University</option><option value="mit">Public report example · MIT</option>
         {intakeWorkspaces.map(w => <option key={w.id} value={w.id}>{w.name} · {w.id.slice(-4)}</option>)}
       </select></label>
+      <HelpGuide />
       {!ws.startsWith("ws-") && <p className="w-full text-xs text-amber-800">Example workspace: displayed findings and activity are bundled demonstrations, not a new analysis. <Link href="/" className="underline">Start an interactive fictional scan</Link>.</p>}
       {apiError && <p role="alert" className="w-full text-xs text-red-700">{apiError} · <Link href="/access" className="underline">Check access</Link></p>}
     </header>

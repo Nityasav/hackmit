@@ -1,194 +1,131 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { useData } from '@/lib/data';
-import { ReviewWorkspace } from '@/components/ReviewWorkspace';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge-2';
-import { Button } from '@/components/ui/button-1';
-import {
-  Kanban,
-  KanbanBoard,
-  KanbanColumn,
-  KanbanColumnContent,
-  KanbanColumnHandle,
-  KanbanItem,
-  KanbanItemHandle,
-  KanbanOverlay,
-} from '@/components/ui/kanban';
-import { GripVertical } from 'lucide-react';
+import Link from "next/link";
+import { useState } from "react";
 
-interface Task {
-  id: string;
-  title: string;
-  priority: 'low' | 'medium' | 'high';
-  description?: string;
-  assignee?: string;
-  assigneeAvatar?: string;
-  dueDate?: string;
-}
+import { useData } from "@/lib/data";
+import type { Column, Task } from "@/lib/types";
+import { duration } from "@/lib/format";
+import { AGENT_NAME, AgentAvatar, EmptyState, PageHeader, Pill, ProgressBar, Pulse } from "@/components/ui";
+import { TaskDrawer } from "@/components/board/TaskDrawer";
 
-const COLUMN_TITLES: Record<string, string> = {
-  backlog: 'Backlog',
-  inProgress: 'In Progress',
-  review: 'Review',
-  done: 'Done',
-};
+/** Left to right, the order work actually moves in. */
+const COLUMNS: { id: Column; label: string; note: string }[] = [
+  { id: "queued", label: "Queued", note: "Delegated, not started" },
+  { id: "working", label: "Working", note: "Reading evidence" },
+  { id: "auditor_review", label: "Auditor review", note: "Being re-checked independently" },
+  { id: "needs_you", label: "Needs you", note: "Blocked on a human" },
+  { id: "done", label: "Done", note: "Finished this run" },
+];
 
-interface TaskCardProps extends Omit<React.ComponentProps<typeof KanbanItem>, 'value' | 'children'> {
-  task: Task;
-  asHandle?: boolean;
-}
-
-function TaskCard({ task, asHandle, ...props }: TaskCardProps) {
-  const cardContent = (
-    <div className="rounded-md border bg-card p-3 shadow-xs">
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="line-clamp-1 font-medium text-sm">{task.title}</span>
-          <Badge
-            variant={task.priority === 'high' ? 'destructive' : task.priority === 'medium' ? 'primary' : 'warning'}
-            appearance="outline"
-            className="pointer-events-none h-5 rounded-sm px-1.5 text-[11px] capitalize shrink-0"
-          >
-            {task.priority}
-          </Badge>
-        </div>
-        <div className="flex items-center justify-between text-muted-foreground text-xs">
-          {task.assignee && (
-            <div className="flex items-center gap-1">
-              <Avatar className="size-4">
-                <AvatarImage src={task.assigneeAvatar} />
-                <AvatarFallback>{task.assignee.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <span className="line-clamp-1">{task.assignee}</span>
-            </div>
-          )}
-          {task.dueDate && <time className="text-[10px] font-num tabular-nums whitespace-nowrap">{task.dueDate}</time>}
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <KanbanItem value={task.id} {...props}>
-      {asHandle ? <KanbanItemHandle>{cardContent}</KanbanItemHandle> : cardContent}
-    </KanbanItem>
-  );
-}
-
-interface TaskColumnProps extends Omit<React.ComponentProps<typeof KanbanColumn>, 'children'> {
-  tasks: Task[];
-  isOverlay?: boolean;
-}
-
-function TaskColumn({ value, tasks, isOverlay, ...props }: TaskColumnProps) {
-  return (
-
-        <KanbanColumn value={value} {...props} className="rounded-md border bg-card p-2.5 shadow-xs">
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="flex items-center gap-2.5">
-              <span className="font-semibold text-sm">{COLUMN_TITLES[value]}</span>
-              <Badge variant="secondary">{tasks.length}</Badge>
-            </div>
-            <KanbanColumnHandle asChild>
-              <Button variant="dim" size="sm" mode="icon">
-                <GripVertical />
-              </Button>
-            </KanbanColumnHandle>
-          </div>
-          <KanbanColumnContent value={value} className="flex flex-col gap-2.5 p-0.5">
-            {tasks.map((task) => (
-              <TaskCard key={task.id} task={task} asHandle={!isOverlay} />
-            ))}
-          </KanbanColumnContent>
-        </KanbanColumn>
-  );
-}
-
-export default function Component() {
+export default function BoardPage() {
   const { bundle } = useData();
-  return bundle.workspace.intake ? <ReviewWorkspace section="actions" /> : <DemoBoard />;
-}
-
-function DemoBoard() {
-  const [columns, setColumns] = React.useState<Record<string, Task[]>>({
-    backlog: [
-      {
-        id: '1',
-        title: 'Add authentication',
-        priority: 'high',
-        assignee: 'John Doe',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/b1/b1f6209ae26207ebe11c243a659f0e5e15a0a48232261ecf3c05211a40af2225.jpg',
-        dueDate: 'Jan 10, 2025',
-      },
-      {
-        id: '2',
-        title: 'Create API endpoints',
-        priority: 'medium',
-        assignee: 'Jane Smith',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/e7/e7a0b30cb92ca533b2f8dbf57649e4b60129a9e84f3fc36d45b09e2dfcaec61d.jpg',
-        dueDate: 'Jan 15, 2025',
-      },
-      {
-        id: '3',
-        title: 'Write documentation',
-        priority: 'low',
-        assignee: 'Bob Johnson',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/4c/4cff4f892ece6dca0865313df96f11ac30e11b6dcbf3b9a86bad86a3049aa6e1.jpg',
-        dueDate: 'Jan 20, 2025',
-      },
-    ],
-    inProgress: [
-      {
-        id: '4',
-        title: 'Design system updates',
-        priority: 'high',
-        assignee: 'Alice Brown',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/55/55d0cf713811843ffbd3412ee403668a82597bb83aabbc684a87f66c1fc962e4.jpg',
-        dueDate: 'Aug 25, 2025',
-      },
-      {
-        id: '5',
-        title: 'Implement dark mode',
-        priority: 'medium',
-        assignee: 'Charlie Wilson',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/32/32afb68c9233445d08f7c4af3e781f648c6eeeb7dadeb5bdd341a003684d1c93.jpg',
-        dueDate: 'Aug 25, 2025',
-      },
-    ],
-    done: [
-      {
-        id: '7',
-        title: 'Setup project',
-        priority: 'high',
-        assignee: 'Eve Davis',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/7f/7f2f1b6a4c09f5092437fe960232360d1e2dcf7a198c8580f3c5478c7b2d9386.jpg',
-        dueDate: 'Sep 25, 2025',
-      },
-      {
-        id: '8',
-        title: 'Initial commit',
-        priority: 'low',
-        assignee: 'Frank White',
-        assigneeAvatar: 'https://cdn.21st.dev/assets/mirror/f2/f25b1b7a6a351c0f748d81bf4fcaf8c5a2f8ed036563c2693d4c1ca3718d9d5d.jpg',
-        dueDate: 'Sep 20, 2025',
-      },
-    ],
-  });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = bundle.tasks.find((t) => t.id === openId) ?? null;
 
   return (
-    <div className="p-5">
-      <Kanban value={columns} onValueChange={setColumns} getItemValue={(item) => item.id}>
-        <KanbanBoard className="grid grid-cols-3 gap-5">
-          {Object.entries(columns).map(([columnValue, tasks]) => (
-            <TaskColumn key={columnValue} value={columnValue} tasks={tasks} />
-          ))}
-        </KanbanBoard>
-        <KanbanOverlay>
-          <div className="rounded-md bg-muted/60 size-full" />
-        </KanbanOverlay>
-      </Kanban>
+    <>
+      <PageHeader
+        title="Agent board"
+        subtitle="Every task an agent is running. A card's column is derived from what the agent is actually doing, so it is not something you can drag."
+      />
+
+      {bundle.tasks.length === 0 ? (
+        <EmptyState icon="○" title="No tasks yet">
+          Tasks appear here once an investigation runs. Start one from the Command center.
+        </EmptyState>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
+          {COLUMNS.map((column) => {
+            const tasks = bundle.tasks.filter((t) => t.column === column.id);
+            return (
+              <section key={column.id} className="border border-line bg-surface-2 p-2">
+                <div className="mb-2 flex items-baseline gap-2">
+                  <b className="text-[13.5px]">{column.label}</b>
+                  <span className="font-num tabular-nums text-[13px] text-ink-dim">{tasks.length}</span>
+                </div>
+                <div className="mb-2 text-[12px] text-ink-faint">{column.note}</div>
+                {tasks.map((task) => (
+                  <TaskCard key={task.id} task={task} onOpen={() => setOpenId(task.id)} />
+                ))}
+                {tasks.length === 0 && (
+                  <div className="border border-dashed border-line px-2 py-3 text-center text-[12px] text-ink-faint">
+                    Nothing here
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <TaskDrawer task={open} onClose={() => setOpenId(null)} />
+    </>
+  );
+}
+
+function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
+  const running = task.column === "working" || task.column === "auditor_review";
+  const budget = task.tool_calls.budget;
+
+  return (
+    <div className="mb-2 border border-line bg-surface">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${task.id}: ${task.title}`}
+        className="w-full cursor-pointer px-2 py-2.5 text-left transition hover:bg-surface-2"
+      >
+        <div className="flex items-center gap-2">
+          <AgentAvatar id={task.agent} size="sm" />
+          <span className="truncate text-[12px] text-ink-dim">{AGENT_NAME[task.agent]}</span>
+          {running && <Pulse className="ml-auto" />}
+        </div>
+
+        <div className="mt-1.5 line-clamp-3 text-[13.5px] font-medium">{task.title}</div>
+
+        {/* A progress bar on a queued task would imply work that has not happened. */}
+        {task.column !== "queued" && (
+          <div className="mt-2 flex items-center gap-2">
+            <ProgressBar value={task.progress} className="h-1.5 flex-1" />
+            <span className="font-num tabular-nums text-[12px] text-ink-dim">{task.progress}%</span>
+          </div>
+        )}
+
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-faint">
+          <span className="font-num tabular-nums" title="Evidence tool calls used of this task's budget">
+            {task.tool_calls.used}/{budget} tools
+          </span>
+          {running && task.eta_s !== null && <span className="font-num tabular-nums">~{duration(task.eta_s)}</span>}
+          {task.todos.length > 0 && <span>{task.todos.length} to-do</span>}
+        </div>
+
+        {task.note && (
+          <div className="mt-1.5">
+            <Pill tone={task.note_tone === "warn" ? "amber" : "gray"}>{task.note}</Pill>
+          </div>
+        )}
+      </button>
+
+      {/* The one place a card is more than a card: where it hands off to you. */}
+      {task.column === "needs_you" && (
+        <div className="border-t border-line px-2 py-1.5 text-[12px]">
+          {task.approval_id ? (
+            <Link href="/approvals" className="font-semibold text-ink underline">
+              Decide {task.approval_id} in Approvals →
+            </Link>
+          ) : (
+            <span className="text-ink-dim">
+              Waiting on evidence, not on a decision. Open the task for what it asked for.
+            </span>
+          )}
+        </div>
+      )}
+      {task.column === "auditor_review" && (
+        <div className="border-t border-line px-2 py-1.5 text-[12px] text-ink-dim">
+          The Internal Auditor is re-reading the sources and redoing the math.
+        </div>
+      )}
     </div>
   );
 }

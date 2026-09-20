@@ -73,17 +73,33 @@ only: it does not post a journal, release a payment or certify compliance.
 See [DEMO_IMPLEMENTATION.md](DEMO_IMPLEMENTATION.md) for test results, the demo script,
 optional role/workspace access configuration and remaining production gates.
 
-Document intake is now backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
+Document intake is backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
 review column mappings and validation issues, commit an immutable snapshot, inspect original source
-lines, and track missing evidence. A bounded CFO agent can inspect that snapshot through read-only tools
-and produce source-cited candidate findings and specialist tasks. New workspaces start empty and never inherit demo findings.
+lines, and track missing evidence. New workspaces start empty and never inherit demo findings.
 
-The dashboard still includes fixed demo workspaces. Connected five-agent investigation,
-invoice duplicate candidates, expense budget variance, payroll/grant checks and human
-follow-up are implemented within the fictional profile. Full statements, structured
-three-way matching, automatic correction/posting and learning remain incomplete.
-Input availability is not an audit conclusion. PDF extraction/OCR, Excel files and
-live financial connectors remain deferred.
+From a committed snapshot you can run the CFO, Grants or Internal Auditor agent on its own, or the
+five-agent workflow: the CFO plans, AP & Payments, Payroll & Budget and Grants & Compliance
+investigate in parallel, and the Internal Auditor re-reads every cited original and reperforms every
+calculation before a claim may be reported. What survives that review reaches the dashboard through
+one projection layer (`app/projection.py`), which is the only module that builds a bundle.
+
+Every tab is fed from it: findings with evidence trails that open onto the committed original, tasks
+on the board with their real tool-call budgets, workflows derived from the run's own task graph,
+KPIs and a report the run published, decisions in the reasoning log, and proposals waiting in
+Approvals. A finding carries an amount only when `app/accounting/` produced one and the auditor
+reperformed it; a proposal contains a journal only when the committed records name both funds.
+Approving one recomputes the report's before and after in exact cents.
+
+The dashboard also includes clearly labelled fixed demo workspaces. Connected five-agent
+investigation, invoice duplicate candidates, expense budget variance, payroll/grant checks and
+human follow-up work within the fictional profile. The document lab preserves PDF/image originals,
+supports bounded local preprocessing and human-reviewed extraction, and stages approved results
+back through normal intake validation.
+
+Not implemented: automatic playbook learning and replay gates, full financial statements,
+structured three-way matching, model training, or posting an approved change to a real system — an
+approval records a decision, it does not move money. Input availability is not an audit conclusion.
+Excel files and live financial connectors remain deferred.
 
 ## Getting started
 
@@ -136,13 +152,32 @@ warns when a preparer rerun makes a review historical. `AUDITOR_MODEL` optionall
 Follow-up tasks are proposals, not automatically running agents. Training
 and the local extraction model remain future work.
 
-This intake/triage slice uses `db.py`, `ingestion.py`, and `agents/cfo.py`; its UI lives in
-`SourcesPanel.tsx`. The separately merged `app/cfo/` coordinator and `/cfo` page provide a scripted
-multi-agent harness and adapter interfaces. Their `/api/cfo/runs` endpoint is distinct from the live
-snapshot-triage endpoint: live coordinator mode remains blocked until specialist and auditor adapters
-are registered. Triage suggestions do not automatically dispatch those agents. `OPENAI_MODEL` configures
-triage; `CFO_MODEL` configures the coordinator's opt-in model preview. Neither path implements the planned
-fine-tuned document extractor. See `PROJECT_TRACKER.md` for verified scope and the next integration task.
+The same selector's fourth choice, **Five-agent workflow**, runs the CFO, all three specialists and
+the Internal Auditor over the committed snapshot in one go, and links to `/cfo?run=<id>` for the
+plan, the events and the report. What it accepts appears in Findings, on the board, in the Reasoning
+log and — where a claim is substantiated — as a proposal in Approvals.
+
+### Regenerating the recorded workspaces
+
+`contracts/fixtures/sandbox.json` is a recording of a real run, not an authored file:
+
+```bash
+cd api && uv run python scripts/seed_fixtures.py        # offline, no key, no cost
+uv run python scripts/seed_fixtures.py --live           # real model calls
+```
+
+Offline stubs only the prose; the records, the amounts, the auditor's reperformance and the bundle
+are all produced by the real code. `workspace.recorded_from` says which mode produced a recording,
+and the app shows it on every page. `mit.json` is not regenerated — its source is a published PDF
+hosted elsewhere and PDF extraction is not implemented.
+
+Single-agent triage uses `db.py`, `ingestion.py` and `agents/cfo.py`; the five-agent workflow uses
+`app/cfo/` with the adapters in `app/integrations/cfo_factory.py`, which register as soon as a model
+provider is configured. Both write to the same database and both reach the dashboard through
+`app/projection.py`. `/cfo?run=<id>` shows one run's plan, events and report. `OPENAI_MODEL` configures
+triage; `CFO_MODEL` the coordinator. Neither path implements the planned fine-tuned document
+extractor. See `schooltrace/REWIRING_PLAN.md` for what each phase changed and what it deliberately
+left alone.
 
 ## Repo map
 
@@ -161,10 +196,12 @@ fine-tuned document extractor. See `PROJECT_TRACKER.md` for verified scope and t
 | --- | --- |
 | `app/main.py` | HTTP endpoints |
 | `app/models.py` | Pydantic mirror of the bundle contract |
-| `app/store.py` | Fixed demo bundles; intake workspaces use the SQLite bundle builder |
+| `app/store.py` | The two recorded workspaces, loaded from `contracts/fixtures/` |
+| `app/projection.py` | The only module that builds a dashboard bundle |
+| `app/approvals.py` | Proposals agents make and the decisions only a human may take |
 | `app/db.py` | SQLite schema, transactions, original bytes and local events |
 | `app/ingestion.py` | CSV/text parsing, mappings, validation, immutable commits, coverage |
-| `app/accounting/` | Exact integer-cent math and ledger invariants L01–L13 |
+| `app/accounting/` | Exact integer-cent math; payroll, AP and grant calculations |
 
 ### Intake notes
 
@@ -190,6 +227,9 @@ performed by importing. Evidence attachment records a scoped resumption event fo
 
 1. **Money is integer cents.** Never float. `api/app/accounting/money.py` owns parsing and allocation
    helpers; ingestion sums integer values to validate controls. The UI is the only place that formats.
+   Four ledger invariants are enforced today — L01 (debits equal credits), L02 (one side per line),
+   L07 (payroll subledger ties to the ledger) and L11 (an allocation's parts sum to the whole).
+   The rest of L01–L13 are specified in `schooltrace/`, not implemented.
 2. **Only a human decides an approval.** Agents propose; `POST /api/approvals/{id}/decision` is the one
    path that applies a change.
 3. **Every agent action emits a `Decision`** (see `api/app/models.py`) so it appears in the Reasoning log.
