@@ -6,6 +6,7 @@ import { useData } from "@/lib/data";
 import type { StageState } from "@/lib/types";
 import { AGENT_NAME, AgentAvatar, Card, PageHeader, Pulse } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 const STAGE_STYLE: Record<StageState, string> = {
   done: "border-line bg-surface-2 text-ink-dim",
@@ -16,6 +17,7 @@ const STAGE_STYLE: Record<StageState, string> = {
 
 export default function WorkflowsPage() {
   const { bundle } = useData();
+  if (bundle.workspace.intake) return <ReviewWorkspace />;
   return (
     <TabGate tab="workflows">
       <PageHeader

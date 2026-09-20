@@ -1,29 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import Link from "next/link";
+import { useData } from "@/lib/data";
 
 export function Topbar() {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-
+  const { ws, setWs, intakeWorkspaces, apiError } = useData();
   return (
-    <header className="flex items-center gap-4 border-b border-line bg-surface px-4 py-2.5">
-      <form
-        className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2.5 focus-within:border-ink"
-        onSubmit={(e) => {
-          e.preventDefault();
-          router.push(`/reasoning?q=${encodeURIComponent(q)}`);
-        }}
-      >
-        <span className="text-ink">✦</span>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Ask your finance team why… e.g. “why was INV-2291 cleared?”"
-          className="w-full bg-transparent text-[14px] outline-none placeholder:text-ink-faint"
-        />
-      </form>
+    <header className="flex flex-wrap items-center gap-4 border-b border-line bg-surface px-4 py-3">
+      <Link href="/" className="font-semibold">SchoolTrace / Start here</Link>
+      <nav aria-label="Main navigation" className="flex flex-wrap gap-3 text-sm"><Link href="/command">Records</Link><Link href="/scan">Scan</Link><Link href="/findings">Findings</Link><Link href="/reports">Reports</Link><Link href="/access">Access & data</Link></nav>
+      <label className="ml-auto text-xs">Workspace <select aria-label="Workspace" value={ws} onChange={e => setWs(e.target.value)} className="ml-2 max-w-64 border border-line bg-white p-2 text-sm">
+        <option value="sandbox">Fixed demo · Sandbox University</option><option value="mit">Public report example · MIT</option>
+        {intakeWorkspaces.map(w => <option key={w.id} value={w.id}>{w.name} · {w.id.slice(-4)}</option>)}
+      </select></label>
+      {!ws.startsWith("ws-") && <p className="w-full text-xs text-amber-800">Example workspace: displayed findings and activity are bundled demonstrations, not a new analysis. <Link href="/" className="underline">Start an interactive fictional scan</Link>.</p>}
+      {apiError && <p role="alert" className="w-full text-xs text-red-700">{apiError} · <Link href="/access" className="underline">Check access</Link></p>}
     </header>
   );
 }

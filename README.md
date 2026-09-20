@@ -50,14 +50,34 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 
 ## What's implemented
 
+### Laptop-first guided demo
+
+Open **http://localhost:3000/** and choose **Try the guided financial scan**. This
+creates and commits a fresh fictional September workspace, runs actual deterministic
+record checks and opens a guided review. Inspect the repeated invoice, open source
+lines, assign follow-up, add the withheld service memo, rescan and export the director
+briefing. No API call is made by this button. Optional live five-agent review is a
+separate, clearly labelled action on `/cfo`; its accepted claims flow into the same
+Findings/Reports view. Standalone candidates remain explicitly unverified.
+
+New uploaded-workspace pages use the shared snapshot review feed. Fixed example
+workspaces remain labelled demonstrations. Proposal approval records a human decision
+only: it does not post a journal, release a payment or certify compliance.
+
+See [DEMO_IMPLEMENTATION.md](DEMO_IMPLEMENTATION.md) for test results, the demo script,
+optional role/workspace access configuration and remaining production gates.
+
 Document intake is now backed by SQLite: create an institution workspace, upload CSV/TXT/Markdown,
 review column mappings and validation issues, commit an immutable snapshot, inspect original source
 lines, and track missing evidence. A bounded CFO agent can inspect that snapshot through read-only tools
 and produce source-cited candidate findings and specialist tasks. New workspaces start empty and never inherit demo findings.
 
-The eight-tab dashboard still includes fixed demo workspaces. AP & Payments, Payroll & Budget, full statements,
-scenario correction/recomputation and learning are not implemented. Input availability is not an
-audit conclusion. PDF extraction/OCR, Excel files and live financial connectors remain deferred.
+The dashboard still includes fixed demo workspaces. Connected five-agent investigation,
+invoice duplicate candidates, expense budget variance, payroll/grant checks and human
+follow-up are implemented within the fictional profile. Full statements, structured
+three-way matching, automatic correction/posting and learning remain incomplete.
+Input availability is not an audit conclusion. PDF extraction/OCR, Excel files and
+live financial connectors remain deferred.
 
 ## Getting started
 

@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS agent_requests (
 CREATE INDEX IF NOT EXISTS active_records ON records(ws, active);
 CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
 CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
+CREATE TABLE IF NOT EXISTS review_scans (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS review_actions (
+    ws TEXT NOT NULL REFERENCES workspaces(id), snapshot_id TEXT NOT NULL,
+    finding_id TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL,
+    PRIMARY KEY(ws, snapshot_id, finding_id)
+);
+CREATE TABLE IF NOT EXISTS demo_sessions (
+    ws TEXT PRIMARY KEY REFERENCES workspaces(id), evidence_added INTEGER NOT NULL DEFAULT 0
+);
 PRAGMA user_version = 2;
 """
 
@@ -87,7 +99,9 @@ def encode(value) -> str:
 def connect():
     root = Path(os.environ.get("SCHOOLTRACE_DATA_DIR", Path(__file__).resolve().parents[1] / "data"))
     root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
     connection = sqlite3.connect(root / "schooltrace.sqlite3", timeout=15)
+    (root / "schooltrace.sqlite3").chmod(0o600)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]

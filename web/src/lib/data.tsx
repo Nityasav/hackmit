@@ -10,7 +10,7 @@ const FIXTURES: Record<string, Bundle> = {
   sandbox: sandboxFixture as unknown as Bundle, mit: mitFixture as unknown as Bundle,
 };
 export async function intakeApi<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(API_URL + path, { ...init, cache: "no-store", headers: {
+  const response = await fetch(API_URL + path, { ...init, credentials: "include", cache: "no-store", headers: {
     ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     "X-SchoolTrace-Reviewer": "local-reviewer", ...init.headers,
   } });

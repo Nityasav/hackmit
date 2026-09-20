@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import type { Bundle } from "@/lib/types";
 import { AgentAvatar, AiTag, Button, Card, CardTitle, FindingStatusPill, PageHeader, Pill } from "@/components/ui";
 import AdvancedStats from "@/components/ui/advanced-stats";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 export default function ReportsPage() {
   const { bundle } = useData();
@@ -14,7 +15,7 @@ export default function ReportsPage() {
   const beforeLabel = report.before_label ?? "As reported";
   const afterLabel = report.after_label ?? (applied ? "After approved fixes" : `After ${gate?.id} (pending)`);
 
-  if (workspace.intake) return <><PageHeader title="Reports" subtitle="No investigation report yet" /><Card>Your uploaded sources are available in the Command center. An agent investigation and independent review must run before findings or financial reports can be generated.</Card></>;
+  if (workspace.intake) return <ReviewWorkspace section="reports" />;
 
   return (
     <>

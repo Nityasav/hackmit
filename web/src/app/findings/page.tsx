@@ -5,11 +5,13 @@ import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
 import { AgentAvatar, Card, EmptyState, FindingStatusPill, PageHeader } from "@/components/ui";
 import { EvidenceTrail } from "@/components/findings/EvidenceTrail";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 export default function FindingsPage() {
   const { bundle } = useData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = bundle.findings.find((f) => f.id === selectedId) ?? bundle.findings[0];
+  if (bundle.workspace.intake) return <ReviewWorkspace section="findings" />;
 
   return (
     <>

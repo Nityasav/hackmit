@@ -23,6 +23,8 @@ from . import store, ingestion
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
+from .reviews import router as review_router
+from . import security
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
@@ -36,17 +38,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
+app.include_router(review_router)
+app.include_router(security.router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
+    try:
+        await security.guard(request)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/workspaces"):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
@@ -58,7 +67,10 @@ async def intake_write_guard(request: Request, call_next):
             oversized = True
         if oversized:
             return JSONResponse(status_code=413, content={"detail": {"code": "batch_limit", "message": "Request exceeds 51 MB including upload metadata"}})
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/api/health")
@@ -101,8 +113,9 @@ def demo(action: str, ws: WorkspaceId = "sandbox") -> Bundle:
 
 
 @app.get("/api/workspaces")
-def workspaces():
-    return ingestion.list_workspaces()
+def workspaces(request: Request):
+    user = request.state.user
+    return [ws for ws in ingestion.list_workspaces() if user["role"] == "admin" or ws["id"] in user["workspaces"]]
 
 
 @app.post("/api/workspaces", status_code=201)

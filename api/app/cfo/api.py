@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import os
+from threading import Lock
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .repository import RunRepository
 from .schemas import Run, RunRequest
 
 router = APIRouter(prefix="/api/cfo", tags=["CFO orchestration"])
+_runtime_lock = Lock()
 
 
 @dataclass
@@ -31,11 +33,18 @@ class CFORuntime:
         self.repository, self.adapters = repository, adapters
         self.pending: dict[str, asyncio.Task] = {}
         self.active_workspaces: set[str] = set()
+        self.mutation_lock = Lock()
         repository.interrupt_pending()
 
     def start(self, request: RunRequest) -> Run:
+        with self.mutation_lock:
+            return self._start(request)
+
+    def _start(self, request: RunRequest) -> Run:
         if request.workspace in self.active_workspaces:
             raise HTTPException(409, "A CFO run is already active for this workspace.")
+        if len(self.pending) >= 2:
+            raise HTTPException(429, "Two investigations are already running. Wait before starting another paid run.")
         if request.mode in {"scripted", "model_preview"}:
             if request.workspace != "sandbox":
                 raise HTTPException(422, "The scripted harness supports sandbox only.")
@@ -81,6 +90,13 @@ class CFORuntime:
 
 
 def runtime(request: Request) -> CFORuntime:
+    # Both async run routes and synchronous dashboard readers initialize this.
+    # Only one initialization may interrupt persisted pending runs.
+    with _runtime_lock:
+        return _runtime(request)
+
+
+def _runtime(request: Request) -> CFORuntime:
     if not hasattr(request.app.state, "cfo_runtime"):
         adapters = None
         factory_path = os.getenv("CFO_ADAPTER_FACTORY", "app.integrations.cfo_factory:create_adapters")

@@ -95,7 +95,7 @@ function SidebarContent() {
     href: tab.href,
     icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
     active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id),
+    disabled: bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows"].includes(tab.id)),
     badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
   }));
 
@@ -156,8 +156,8 @@ function SidebarContent() {
       <div>
         <SidebarLink
           link={{
-            label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
-            href: "/board",
+            label: bundle.workspace.intake ? "Five-agent review & activity" : `${bundle.agents.length} agents · ${bundle.workspace.model}`,
+            href: bundle.workspace.intake ? "/cfo" : "/board",
             icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
           }}
         />

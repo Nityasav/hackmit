@@ -12,6 +12,7 @@ class RunRepository:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS cfo_runs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)")
+        Path(path).chmod(0o600)
 
     def _connect(self):
         return sqlite3.connect(self.path, timeout=10)

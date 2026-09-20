@@ -6,6 +6,7 @@ import { money } from "@/lib/format";
 import type { Approval } from "@/lib/types";
 import { AgentAvatar, Button, Card, CardTitle, EmptyState, PageHeader, Pill, Toast } from "@/components/ui";
 import { TabGate } from "@/components/shell/TabGate";
+import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 
 export default function ApprovalsPage() {
   const { bundle, decideApproval } = useData();
@@ -23,6 +24,7 @@ export default function ApprovalsPage() {
   const pending = bundle.approvals.filter((a) => a.status === "pending");
   const decided = bundle.approvals.filter((a) => a.status !== "pending");
   const selected = bundle.approvals.find((a) => a.id === selectedId) ?? pending[0] ?? bundle.approvals[0];
+  if (bundle.workspace.intake) return <ReviewWorkspace section="actions" />;
 
   return (
     <TabGate tab="approvals">

@@ -382,3 +382,31 @@ After a meaningful slice or before a context handoff:
 - Remaining limits: AP/Grants confirmed amounts need additional deterministic accounting engines;
   results remain in CFO runs rather than the standalone dashboard findings feed; local training,
   a global dollar-cost ceiling and held-out semantic evaluation are not implemented. No main merge.
+
+### Director workflow / laptop judge demo — 2026-09-19 (`max`)
+
+- Home is now plain-language onboarding; previous dashboard moved to `/command`.
+  One-click fictional scan imports real records and runs deterministic checks (no
+  model call disguised as AI). Always-visible navigation and workspace selector.
+- Unified `/api/workspaces/{ws}/review` powers uploaded-workspace Scan, Findings,
+  Follow-up, Reports and overview. It includes rules checks, exact latest standalone
+  candidates and final Auditor-accepted coordinator claims, with snapshot freshness.
+- New bounded checks: exact-key invoice duplicate candidates and expense budget
+  variance, alongside payroll/grant checks. AP/budget amounts also reach the central
+  evidence gateway. Missing service remains a gap even when a document is present.
+- Owners, evidence requests, proposals and reviewer decisions persist with optimistic
+  version checks and event history. New snapshots invalidate decision applicability.
+  No payments, posting, external email or automatic assurance.
+- Guided demo supports source drill-down, withheld memo import, real new snapshot,
+  comparison and server-backed Markdown export. Browser journey and download verified.
+- Laptop security: loopback/Origin restrictions, optional password sessions, role and
+  workspace/run ACLs, bounded run concurrency, protected local file permissions and
+  admin-confirmed logical workspace deletion. Sensitive-data readiness remains false.
+- Verification checkpoint: 315 offline tests passed, 10 opt-in/artifact checks skipped;
+  full frontend lint/build passed. One real demo five-agent run: 3 tasks, 20 evidence
+  calls, 3 CFO calls, 4 accepted claims, `needs_evidence`. This is execution validation,
+  not a held-out accuracy or production compliance claim.
+- Exact setup, labelled-case measurements and remaining production gates are in
+  `DEMO_IMPLEMENTATION.md`. Full PO/receipt matching, statutory statements, Ontario
+  profile validation, enterprise identity/encryption/retention compliance and held-out
+  model evaluation are incomplete. Changes remain on `max`; no new main merge.

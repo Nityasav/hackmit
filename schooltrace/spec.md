@@ -235,11 +235,25 @@ fresh Auditor reads/reperformance, bounded retries and stale-snapshot rejection.
 No payment or posting tools are exposed. Clients/budgets are invocation-local.
 
 This is a bounded investigation workflow, not the full benchmark implementation.
-AP/Grants observations are supported, but confirmed financial amounts are limited
-to the intake engine's existing payroll calculations. Results are persisted in CFO
-runs and displayed on `/cfo`; standalone findings are not silently imported or
-marked verified. Model training, generalized AP calculations, a global dollar-cost
-ceiling and held-out accuracy measurement remain future work.
+AP/Grants observations are supported. The laptop director workflow now additionally
+publishes exact-key invoice duplicate candidate amounts and expense budget variance
+through the deterministic evidence gateway. These are bounded checks, not complete
+AP/payment or grant eligibility assurance.
+
+The new home page offers a one-click fictional scan. `/scan`, Findings, Follow-up,
+Reports and the uploaded-workspace overview share a snapshot-aware review feed:
+rules checks, latest standalone candidates and final Auditor-accepted central claims
+are labelled separately. A human may assign an owner, request evidence and decide
+a proposed correction; version checks and history preserve the distinction between
+proposal acceptance and financial execution. Source commits invalidate applicability
+of older decisions. Reports export current evidence and explicit gaps.
+
+Laptop safeguards include loopback/origin restrictions, optional account sessions,
+role/workspace permissions, protected local file permissions and admin-confirmed
+logical deletion. This does not establish enterprise privacy compliance, encrypted
+storage or an Ontario accounting profile. Model training, complete PO/receipt matching,
+statutory statements, a global dollar-cost ceiling and held-out model accuracy remain
+future work. `DEMO_IMPLEMENTATION.md` documents the demo, tests and deployment gates.
 
 Five roles, shown in the UI as an Office of the CFO:
 

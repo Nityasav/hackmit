@@ -24,7 +24,7 @@ interface CFORun {
 }
 
 async function loadRun(id: string, signal?: AbortSignal): Promise<CFORun> {
-  const response = await fetch(`${API}/api/cfo/runs/${encodeURIComponent(id)}`, { cache: "no-store", signal });
+  const response = await fetch(`${API}/api/cfo/runs/${encodeURIComponent(id)}`, { credentials: "include", cache: "no-store", signal });
   if (!response.ok) throw new Error(`Could not load run (${response.status}).`);
   return response.json();
 }
@@ -44,6 +44,18 @@ function CFOInvestigation() {
   const [savedId, setSavedId] = useState("");
   const runId = run?.id;
   const active = !!run && ACTIVE.has(run.status);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`${API}/api/cfo/workspaces/${encodeURIComponent(ws)}/latest`, { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then(async response => {
+        if (response.status === 404) return;
+        if (!response.ok) throw new Error("Could not load the latest investigation. Check access.");
+        const latest: CFORun = await response.json();
+        if (!controller.signal.aborted && latest.request.workspace === ws) { setRun(current => current || latest); setSavedId(current => current || latest.id); }
+      }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to load investigation."); });
+    return () => controller.abort();
+  }, [ws]);
 
   useEffect(() => {
     if (!API || !runId || !active) return;
@@ -67,7 +79,7 @@ function CFOInvestigation() {
     setError(null);
     try {
       const response = await fetch(`${API}/api/cfo/runs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspace: ws, objective, mode, workflow: mode === "live" ? "five_agent" : "focused" }),
       });
       if (!response.ok) {

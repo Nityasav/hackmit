@@ -1,6 +1,8 @@
 'use client';
 
 import * as React from 'react';
+import { useData } from '@/lib/data';
+import { ReviewWorkspace } from '@/components/ReviewWorkspace';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge-2';
 import { Button } from '@/components/ui/button-1';
@@ -105,6 +107,11 @@ function TaskColumn({ value, tasks, isOverlay, ...props }: TaskColumnProps) {
 }
 
 export default function Component() {
+  const { bundle } = useData();
+  return bundle.workspace.intake ? <ReviewWorkspace section="actions" /> : <DemoBoard />;
+}
+
+function DemoBoard() {
   const [columns, setColumns] = React.useState<Record<string, Task[]>>({
     backlog: [
       {

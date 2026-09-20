@@ -1,187 +1,27 @@
 "use client";
-
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useData } from "@/lib/data";
-import { SourcesPanel } from "@/components/SourcesPanel";
-import { CloseProgressChart } from "@/components/ui/close-progress-chart";
-import { TAB_HREF } from "@/lib/tabs";
-import { highlights } from "@/lib/format";
-import {
-  AgentAvatar,
-  Button,
-  EmptyState,
-  Figure,
-  PageHeader,
-  Pulse,
-  Section,
-  Toast,
-} from "@/components/ui";
+import { intakeApi, useData } from "@/lib/data";
 
-export default function CommandCenter() {
-  const { bundle, decideApproval } = useData();
-  const [toast, setToast] = useState<string | null>(null);
-  const { workspace, agents, briefing, kpis, workflows, tasks, approvals, findings, decisions } = bundle;
-  const done = tasks.filter((t) => t.column === "done").length;
-  const pendingApprovals = approvals.filter((a) => a.status === "pending");
-  const pending = pendingApprovals.length;
-
-  if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} /><SourcesPanel key={workspace.id} /></>;
-
-  return (
-    <div className="mx-auto max-w-[1180px]">
-      {/* The briefing is the one thing on this page that gets to be loud. */}
-      <Section first>
-        <div className="flex items-center gap-2">
-          <b className="text-[14px]">CFO Agent</b>
-        </div>
-        <p className="mt-4 max-w-[68ch] text-[17px] leading-[1.6]">
-          {highlights(briefing.text).map(([part, strong], i) =>
-            strong ? (
-              // A filled block per phrase breaks the line into patches; weight plus a
-              // hairline under the words marks them without chopping up the paragraph.
-              <b key={i} className="font-semibold decoration-ink/30 underline decoration-1 underline-offset-[5px]">
-                {part}
-              </b>
-            ) : (
-              <span key={i}>{part}</span>
-            ),
-          )}
-        </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          {briefing.actions.map((a) => (
-            <Link key={a.label} href={TAB_HREF[a.href]}>
-              <Button primary={a.primary}>{a.label}</Button>
-            </Link>
-          ))}
-        </div>
-      </Section>
-
-      {/* The numbers, as one strip divided by hairlines rather than five boxes. */}
-      <Section>
-        <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
-          {kpis.map((k) => (
-            <Figure key={k.label} label={k.label} value={k.value} note={k.note} tone={k.tone === "warn" ? "warn" : "good"} />
-          ))}
-          <Figure
-            label="Tasks done"
-            value={`${done} / ${tasks.length}`}
-            note={`${findings.length} findings · ${pending} waiting on you`}
-          />
-        </div>
-      </Section>
-
-      <div className="mt-8 grid gap-8 border-t border-line pt-8 min-[980px]:grid-cols-2">
-        <section>
-          <div className="mb-4 flex items-baseline gap-3">
-            <h2 className="text-[15px] font-semibold tracking-tight">Waiting on you</h2>
-            <Link href="/approvals" className="ml-auto font-accent text-[13px] text-ink-dim hover:text-ink">
-              all
-            </Link>
-          </div>
-          {pendingApprovals.length === 0 ? (
-            <EmptyState title={workspace.kind === "public" ? "Nothing to approve" : "You're all caught up"}>
-              {workspace.kind === "public"
-                ? "Public reports are read-only, so there is nothing to decide here."
-                : "Every proposal has a decision. The agents will queue the next one."}
-            </EmptyState>
-          ) : (
-            pendingApprovals.slice(0, 4).map((a) => (
-              <div key={a.id} className="flex items-center gap-3 border-t border-line py-4 first:border-t-0 first:pt-0">
-                <AgentAvatar id={a.agent} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <Link href="/approvals" className="block truncate text-[14px] font-semibold hover:underline">
-                    {a.title}
-                  </Link>
-                  <span className="mt-0.5 block truncate font-accent text-[13px] text-ink-dim">{a.summary}</span>
-                </div>
-                <Button
-                  onClick={() => {
-                    decideApproval(a.id, "approved");
-                    setToast(`${a.id} approved · dependent reports recomputed`);
-                  }}
-                >
-                  {a.kind === "payment" ? "Release" : a.kind === "evidence" ? "Provide" : "Approve"}
-                </Button>
-              </div>
-            ))
-          )}
-        </section>
-
-        <section>
-          <div className="mb-4 flex items-baseline gap-3">
-            <h2 className="text-[15px] font-semibold tracking-tight">Latest reasoning</h2>
-            <Link href="/reasoning" className="ml-auto font-accent text-[13px] text-ink-dim hover:text-ink">
-              all
-            </Link>
-          </div>
-          {decisions.slice(0, 4).map((d) => (
-            <Link
-              key={d.id}
-              href={`/reasoning?q=${encodeURIComponent(d.id)}`}
-              className="flex items-start gap-3 border-t border-line py-4 first:border-t-0 first:pt-0 hover:bg-surface-2"
-            >
-              <span className="pt-0.5 font-num text-[12.5px] tabular-nums text-ink-faint">{d.time}</span>
-              <AgentAvatar id={d.agent} size="sm" />
-              <span className="min-w-0 flex-1">
-                <b className="block truncate text-[14px]">{d.action}</b>
-                <span className="mt-0.5 block truncate font-accent text-[13px] text-ink-dim">{d.summary}</span>
-              </span>
-            </Link>
-          ))}
-        </section>
-      </div>
-
-      {workflows.length > 0 ? (
-        <Section title="This close" right={<Link href="/workflows" className="hover:text-ink">open</Link>}>
-          <CloseProgressChart workflows={workflows} />
-        </Section>
-      ) : (
-        <Section title="Source" right={<Link href="/findings" className="hover:text-ink">evidence</Link>}>
-          <p className="max-w-[68ch] text-[14px]">
-            <b>MIT FY2025 Uniform Guidance report</b> · year ended June 30, 2025 · independent auditor PwC.
-          </p>
-          <p className="mt-2 max-w-[68ch] font-accent text-[13.5px] text-ink-dim">
-            Agents read this published PDF only. They have no access to MIT&apos;s internal ledger, and nothing here is
-            a claim about MIT beyond what the report states.
-          </p>
-          {workspace.source_url && (
-            <a
-              href={workspace.source_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-block text-[14px] font-semibold underline"
-            >
-              Open the report
-            </a>
-          )}
-        </Section>
-      )}
-
-      {/* The team, kept quiet: it is context for the work above, not the work itself. */}
-      <Section title="The team">
-        <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 lg:divide-x lg:divide-line xl:grid-cols-5">
-          {agents.map((a) => (
-            <div key={a.id} className="px-5 first:pl-0 last:pr-0">
-              <div className="flex items-center gap-2 text-[13.5px] font-semibold">
-                <AgentAvatar id={a.id} size="sm" />
-                <span className="truncate">{a.name}</span>
-                {a.status === "working" && <Pulse className="ml-auto" />}
-              </div>
-              <div className={`mt-2 font-accent text-[13px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
-                {a.doing}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* Where the records come from. Below the close, since a demo workspace is already loaded. */}
-      <Section>
-        <SourcesPanel key={workspace.id} />
-      </Section>
-
-      <Toast message={toast} onDone={() => setToast(null)} />
-    </div>
-  );
+export default function Home() {
+  const { setWs, refreshWorkspaces } = useData(); const router = useRouter();
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  async function demo() {
+    setBusy(true); setError("");
+    try { const result = await intakeApi<{ workspace: string }>("/api/review-demo", { method: "POST" }); await refreshWorkspaces(); setWs(result.workspace); router.push("/scan"); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not start demo"); setBusy(false); }
+  }
+  return <div className="mx-auto max-w-6xl py-6"><p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">SchoolTrace / your finance review desk</p>
+    <div className="mt-6 grid gap-10 lg:grid-cols-[1.4fr_1fr]"><section><h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-6xl">Know what needs attention.<br /><span className="text-ink-dim">See the evidence behind it.</span></h1>
+      <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-dim">Turn a school’s financial records into a reviewable list of questions, checks and next steps. Inspect every source. Ask your finance team for missing evidence. Keep the final decision human.</p>
+      <div className="mt-7 flex flex-wrap gap-3"><button disabled={busy} onClick={() => void demo()} className="bg-ink px-6 py-4 font-semibold text-white disabled:opacity-50">{busy ? "Importing fictional records & running checks…" : "Try the guided financial scan →"}</button><Link className="border border-line px-6 py-4" href="/command">Use my own sample records</Link></div>
+      <p className="mt-3 text-xs text-ink-dim">Local demo · fictional USD school district · no API key needed for record checks · no payment execution</p>
+      {error && <p role="alert" className="mt-4 text-red-700">{error} <Link className="underline" href="/access">Check access & sign in</Link></p>}</section>
+      <aside className="border border-line bg-surface-2 p-7"><p className="text-xs uppercase tracking-widest">Judge’s challenge / about 3 minutes</p><h2 className="mt-3 text-2xl font-semibold">Could you explain this month’s exceptions to the board?</h2>
+        <ol className="mt-6 list-decimal space-y-5 pl-5"><li>Scan the fictional September records.</li><li>Find the repeated invoice. Open its original source.</li><li>Assign follow-up, then add the withheld service memo.</li><li>Rescan. Notice what changed—and what is still unproven.</li><li>Export your director briefing.</li></ol><p className="mt-6 border-t border-line pt-4 text-sm text-ink-dim">Want to see the agents reason? Start the optional live five-agent review from the scan page. Provider calls are separate and explicitly labelled.</p></aside></div>
+    <section className="mt-12 border-t border-line pt-7"><h2 className="text-2xl font-semibold">Where do I go?</h2><div className="mt-5 grid gap-4 md:grid-cols-3">
+      {[["01", "Records & overview", "Create a workspace, upload files, check coverage and commit a snapshot.", "/command"], ["02", "Scan & findings", "Run checks, investigate exceptions and open the original evidence.", "/scan"], ["03", "Follow-up & decisions", "Assign an owner, request support or record a proposed correction.", "/approvals"], ["04", "Director reports", "Get an exportable briefing with unresolved issues and limitations.", "/reports"], ["05", "Live agent team", "Ask the CFO, AP, Payroll, Grants and Auditor to review a committed snapshot.", "/cfo"], ["06", "Access & data", "Understand demo limits, sign in when configured, or delete a workspace.", "/access"]].map(([n, title, text, href]) => <Link key={href} href={href} className="border border-line p-5 transition-colors hover:bg-surface-2"><span className="font-num text-xs text-ink-dim">{n}</span><h3 className="mt-2 font-semibold">{title} ↗</h3><p className="mt-2 text-sm leading-relaxed text-ink-dim">{text}</p></Link>)}</div></section>
+    <p className="mt-8 border-t border-line pt-5 text-sm text-ink-dim">A bounded management-review prototype—not an audit opinion, fraud detector or Ontario accounting system. Use fictional or approved public information only. Do not upload confidential school-board data.</p>
+  </div>;
 }
