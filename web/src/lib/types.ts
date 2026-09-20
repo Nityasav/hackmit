@@ -252,6 +252,24 @@ export interface DataRequirement {
   value: string | number | null;
 }
 
+/**
+ * One committed file, as the coverage listing reports it.
+ *
+ * `source_system` and `external_id` are the provenance the server writes when a
+ * file is staged from a reviewed document: system `reviewed-extraction` and the
+ * document's lineage id. Files joins a file to its document with those two
+ * fields alone, so listing every upload costs one request rather than one per
+ * file. A file uploaded directly carries an empty `external_id` and is joined
+ * to nothing, which is the honest answer for it.
+ */
+export interface CoverageSource {
+  id: string; name: string; sha256: string; role: SourceRole; active: boolean;
+  source_system: string; external_id: string; source_version: number;
+  /** When the batch that carried this file in was created. */
+  uploaded_at: string;
+  /** Live records still drawn from this file. Zero means superseded, not deleted. */
+  record_count: number;
+}
 export interface Coverage {
   workspace: IntakeWorkspace; snapshot: { id: string; revision: number; created_at: string } | null;
   counts: Record<string, number>;
@@ -262,7 +280,7 @@ export interface Coverage {
   /** Agent id -> the requirement ids still blocking it. */
   blocked_agents: Record<string, string[]>;
   satisfied_count: number; required_count: number;
-  sources: { id: string; name: string; sha256: string; role: SourceRole; active: boolean }[];
+  sources: CoverageSource[];
   requests: EvidenceRequest[]; coverage_verified: boolean; note: string;
 }
 export interface SourceDetail {
@@ -275,7 +293,6 @@ export interface SourceDetail {
     correction_id: string; has_images: boolean; pages: number[];
   } | null;
 }
-export interface AgentCitation { source_id: string; line: number; quote: string }
 /** Mirrors `api/app/agents/registry.py` and `api/app/agents/api.py`.
  *  The standalone triage agent it replaced is gone; a run is now one registry agent
  *  against a bounded task, and it always reports what it cost. */

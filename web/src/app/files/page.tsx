@@ -1,6 +1,6 @@
 "use client";
 
-import { Vault } from "@/components/files/Vault";
+import { FileLibrary } from "@/components/files/FileLibrary";
 import { useData } from "@/lib/data";
 
 export default function FilesPage() {
@@ -10,15 +10,15 @@ export default function FilesPage() {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">Files</p>
         <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-          What this review is built on.
+          Everything you have uploaded.
         </h1>
         <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-ink-dim">
-          Every file you uploaded, every check that reads it, and everything a check still needs.
-          Turn it around, then click anything to see what it is and what depends on it.
+          Every document read for this institution and every file its records were parsed out of.
+          Open one to see what it holds, or read the map to see which file came from which document.
         </p>
       </header>
       <div className="mt-8">
-        <Vault key={ws} ws={ws} />
+        <FileLibrary key={ws} ws={ws} />
       </div>
     </div>
   );
