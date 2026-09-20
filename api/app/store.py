@@ -1,4 +1,4 @@
-"""In-memory bundle store, seeded from contracts/fixtures, the same files the web app renders.
+"""In-memory bundle store, seeded from the same fixtures the web app renders.
 
 Swap the fixture seed for SQLite-backed state once the accounting engine lands.
 The web app only ever sees Bundle, so that can happen behind this module.
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .models import ApprovalStatus, Bundle, WorkspaceId
 
-FIXTURES = Path(__file__).resolve().parents[2] / "contracts" / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "web" / "src" / "fixtures"
 
 _bundles: dict[str, dict] = {}
 

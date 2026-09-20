@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
-import sample from "../../../contracts/fixtures/intake.json";
+import sample from "../fixtures/intake.json";
 
 const ROLES: Record<SourceRole, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
