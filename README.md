@@ -46,7 +46,7 @@ CSV + documents ──► import, hash, normalize ──► SQLite ──► det
 - **web/** — Next.js 16 (App Router), TypeScript, Tailwind v4, bun
 - **api/** — FastAPI, Python 3.12+, uv, SQLite
 - **contracts/** — one JSON bundle per workspace, shared by both
-- **Model** — first live CFO triage uses the OpenAI Responses API; local extraction model and remaining roles are planned
+- **Model** — live CFO, Grants & Compliance and Internal Auditor use the OpenAI Responses API; local extraction and other roles are planned
 
 ## What's implemented
 
@@ -55,7 +55,7 @@ review column mappings and validation issues, commit an immutable snapshot, insp
 lines, and track missing evidence. A bounded CFO agent can inspect that snapshot through read-only tools
 and produce source-cited candidate findings and specialist tasks. New workspaces start empty and never inherit demo findings.
 
-The eight-tab dashboard still includes fixed demo workspaces. The other four live agents, live independent review, full statements,
+The eight-tab dashboard still includes fixed demo workspaces. AP & Payments, Payroll & Budget, full statements,
 scenario correction/recomputation and learning are not implemented. Input availability is not an
 audit conclusion. PDF extraction/OCR, Excel files and live financial connectors remain deferred.
 
@@ -97,10 +97,18 @@ data directory. The app is for synthetic/public data on localhost; the reviewer 
 authentication. Imports stay local until you explicitly click **Run CFO triage**; that action sends source
 spans and normalized records selected by the agent's scoped tools to the configured OpenAI model.
 
-After committing records, use **Run CFO triage** in the Command center. Candidate findings link to the
+After committing records, choose **CFO Agent** or **Grants & Compliance agent** in the Command center's
+**Investigation agent** selector, then run it. Grants reviews supplied terms, payroll service periods and
+award ceilings, with deterministic payroll-subset totals—not a full grant expenditure schedule or
+compliance certification. `GRANTS_MODEL` optionally overrides the default model. Candidate findings link to the
 original lines; suggested evidence can be added to the existing request queue. Runs are saved with
-their snapshot and become visibly stale after new imports. Follow-up specialists are proposed tasks,
-not running agents. Training and the local extraction model remain future work.
+their snapshot and become visibly stale after new imports. CFO and Grants findings coexist. Choose
+**Internal Auditor agent** after either preparer runs to review up to four exact findings against fresh
+source reads and reperformed calculations. Its accept/reject/needs-evidence verdicts are bounded claim
+reviews—not financial approvals or audit opinions. The UI shows remaining unreviewed findings and
+warns when a preparer rerun makes a review historical. `AUDITOR_MODEL` optionally overrides the model.
+Follow-up tasks are proposals, not automatically running agents. Training
+and the local extraction model remain future work.
 
 This intake/triage slice uses `db.py`, `ingestion.py`, and `agents/cfo.py`; its UI lives in
 `SourcesPanel.tsx`. The separately merged `app/cfo/` coordinator and `/cfo` page provide a scripted

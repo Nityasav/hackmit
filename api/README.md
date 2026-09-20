@@ -17,6 +17,8 @@ uv run pytest                                       # accounting invariants
 | `app/ingestion.py` | Functionality | CSV/text parsing, mappings, validation, immutable commits, coverage and evidence requests |
 | `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
 | `app/agents/cfo.py` | Agent design | First live CFO agent, scoped snapshot tools, OpenAI adapter and run persistence |
+| `app/agents/grants.py` | Agent design | Grants & Compliance instructions, award-window checks and exact supplied-payroll totals; shares the triage runtime |
+| `app/agents/auditor.py` | Agent design | Independent direct-run review with pinned targets, original-source reperformance and provenance gates |
 | `app/cfo/` | CFO coordination | Separate bounded coordinator, scripted harness, persisted runs and specialist/reviewer ports |
 | `app/integrations/` | Integration | Read-only intake bridge and adapter factory; live specialist and auditor registration pending |
 | `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
@@ -59,8 +61,28 @@ selects the coordinator preview model. The two run stores and execution loops ar
 Set `OPENAI_API_KEY` in ignored `api/.env`, which loads automatically without overriding existing
 environment variables. `OPENAI_MODEL` defaults to `gpt-5.4-mini`. Never place the key in `web/.env.local`
 or send it from the browser. `POST /api/workspaces/{ws}/agent-runs` accepts
-`{snapshot_id, request_id, focus}` and runs one bounded CFO triage against the current snapshot;
-`GET` lists saved runs. The provider request uses `store=False`.
+`{snapshot_id, request_id, focus, agent?}` and runs one bounded review against the current snapshot;
+`agent` defaults to `cfo`, or select `grants_compliance` or `internal_auditor`. `GET` lists the latest 20 runs per agent.
+The provider request uses `store=False`. `GRANTS_MODEL` optionally overrides `OPENAI_MODEL` for Grants.
+
+Grants adds `check_grant(award_id)`: exact totals of all pinned payroll allocations for that award,
+inclusive service-period comparisons, ceiling comparison, source locators and input-ID hash. Missing
+or ambiguous award definitions yield unknown comparisons, not clearance. Payroll and ledger are not
+summed. These are supplied-payroll checks, not lifetime spend, remaining funding, eligibility decisions
+or compliance certification. At least one known award must be checked when normalized award/payroll
+records exist; unreviewed awards must be stated in limitations. Terms come only from uploaded evidence.
+The direct-run Grants agent is not yet registered as an auto-dispatched coordinator specialist.
+
+Internal Auditor requires current-snapshot preparer findings (otherwise 409). It pins the latest CFO
+and Grants results at start and retrieves up to four candidates per tool page. Its structured `reviews`
+identify exact finding IDs with `accept`, `reject` or `needs_evidence`, rationale, citations and next action.
+Accept/reject requires fresh reads of original cited lines; acceptance also requires supporting ledger/
+grant calculations to be rerun. Auditor calculations reparse original CSV bytes with the shared exact
+parser and compare against pinned records; this is independent execution, not a second parsing algorithm.
+Integrity mismatches block acceptance. `AUDITOR_MODEL` overrides `OPENAI_MODEL`; model diversity is optional.
+Results include `review_scope` counts and unreviewed IDs. Same-snapshot preparer reruns invalidate review
+targets (`review_targets_current: false`); verdicts never transfer to new findings or mutate originals.
+This direct reviewer is not yet registered with the separate coordinator's Auditor port.
 
 The agent can read only scoped workspace context, committed source lines, paginated snapshot records and one
 deterministic ledger control calculation across ALL pinned ledger records. Twelve actual tool calls,
