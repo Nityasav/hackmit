@@ -135,6 +135,20 @@ function Lab({ ws }: { ws: string }) {
     finally { setBusy(false); }
   }
   const post = (path: string, body: unknown) => intakeApi(base + path, { method: "POST", body });
+  // A field marked present must carry an exact page span: the API rejects the
+  // whole submission otherwise, and the rejection used to arrive as a wall of
+  // validator output at the top of a long page, far from the button that
+  // caused it. Naming the fields here stops the submission being made at all.
+  const uncited: string[] = (() => {
+    try {
+      const parsed = JSON.parse(editor) as Output;
+      return (parsed.records || []).flatMap((record, index) =>
+        Object.entries(record)
+          .filter(([, v]) => v && v.status === "present" &&
+            (v.page === null || v.start === null || v.end === null))
+          .map(([field]) => `record ${index + 1} · ${displayLabel(field)}`));
+    } catch { return ["the advanced JSON is not valid"]; }
+  })();
   function choose(d: Doc) {
     setSelected(d.id);
     const saved = state?.correction.filter(c => c.document_id === d.id).at(-1);
@@ -199,10 +213,17 @@ function Lab({ ws }: { ws: string }) {
           <div><p className="mb-2 text-[13px]">Check each value against the source. Citation offsets start at zero; the end position is excluded.</p><FieldEditor text={editor} doc={doc} fields={state.schemas[doc.role]} change={setEditor} /><details className="mt-3"><summary className="text-[13px]">Edit the raw extraction JSON</summary><label>Extraction JSON<textarea aria-label="Extraction JSON" spellCheck={false} className={`${input} h-96 font-mono text-xs`} value={editor} onChange={e => setEditor(e.target.value)} /></label></details></div></div>
         <details className="my-3"><summary className="cursor-pointer text-[13px]">The page text itself is wrong</summary><p className="my-2 text-[13px]">Compare each page image first. Saving this creates a new text revision and invalidates the values already placed against the old one. The original file is never overwritten.</p><textarea aria-label="Page transcription JSON array" className={`${input} h-40 font-mono`} value={transcript} onChange={e => setTranscript(e.target.value)} /><button disabled={busy || !note.trim()} className={button} onClick={() => act(() => post(`/documents/${doc.id}/transcription`, { expected_text_sha256: doc.text_sha256, pages: JSON.parse(transcript), note }), "New text revision saved. Re-open the document and check every value again.")}>Save a corrected transcription</button></details>
         <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Institution, supplier or template <span className="text-amber-800">(required)</span><input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Review note <span className="text-amber-800">(required)</span><input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>Data authorization <span className="text-amber-800">(required)</span><input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
-        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim()} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim() || uncited.length > 0} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Stage new records for import. Leave unchecked if these records are already imported.</label>
           <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
         {/* A disabled control that does not say why reads as a broken one. */}
+        {uncited.length > 0 &&
+          <p className="mt-2 text-[12.5px] text-amber-800">
+            These are marked present but have no exact page span, which the books will not accept:{" "}
+            {uncited.join("; ")}. Either set the page and character positions, or change the status
+            to ambiguous or unreadable — a value nobody can point at on the page is not evidence.
+          </p>}
+        {error && <p role="alert" className="mt-2 border border-red-300 bg-red-50 p-2 text-[12.5px] text-red-800">{error}</p>}
         {(!group.trim() || !note.trim() || !authorization.trim()) &&
           <p className="mt-2 text-[12.5px] text-amber-800">Before you can accept: fill in{" "}
             {[!group.trim() && "the institution, supplier or template", !note.trim() && "a review note",
