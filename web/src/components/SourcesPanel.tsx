@@ -78,7 +78,7 @@ export function SourcesPanel() {
   }
   const draftChanged = batch && batch.files.some((f) => JSON.stringify(f.options) !== JSON.stringify(draft[f.id]));
 
-  return <section className="mb-4 rounded-xl border border-line bg-surface p-5" aria-label="Sources and coverage">
+  return <section className="mb-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-base font-semibold">Sources & coverage</h2>
         <p className="mt-1 text-xs text-slate-500">Bring the records. See what is supported, what is missing, and where each number came from.</p></div>

@@ -63,6 +63,59 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   );
 }
 
+/** A top-level band. Sections are told apart by space and one hairline rule,
+ *  not by giving every group its own box. */
+export function Section({
+  title,
+  right,
+  children,
+  first,
+  className = "",
+}: {
+  title?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  first?: boolean;
+  className?: string;
+}) {
+  return (
+    <section className={`${first ? "" : "mt-8 border-t border-line pt-8"} ${className}`}>
+      {title && (
+        <div className="mb-4 flex items-baseline gap-3">
+          <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+          {right && <span className="ml-auto font-accent text-[13px] text-ink-dim">{right}</span>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+/** One figure in the numbers strip: label above, figure, accent note under. */
+export function Figure({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  note?: string;
+  tone?: "warn" | "good";
+}) {
+  return (
+    <div className="px-5 first:pl-0 last:pr-0">
+      <div className="text-[12.5px] text-ink-dim">{label}</div>
+      <div className="mt-1.5 font-num text-[26px] font-semibold leading-none tracking-tight tabular-nums">{value}</div>
+      {note && (
+        <div className={`mt-2 font-accent text-[13px] ${tone === "warn" ? "text-ink-dim" : "text-ink-dim"}`}>
+          {note}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProgressBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
   return (
     <div className={`overflow-hidden rounded bg-surface-2 ${className}`}>

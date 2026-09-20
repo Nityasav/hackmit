@@ -10,12 +10,12 @@ import {
   AgentAvatar,
   AiTag,
   Button,
-  Card,
-  CardTitle,
   EmptyState,
+  Figure,
   PageHeader,
   ProgressBar,
   Pulse,
+  Section,
   Toast,
 } from "@/components/ui";
 
@@ -30,19 +30,23 @@ export default function CommandCenter() {
   if (workspace.intake) return <><PageHeader title={`${workspace.name} · ${workspace.period}`} /><SourcesPanel key={workspace.id} /></>;
 
   return (
-    <>
-      {/* CFO agent briefing */}
-      <div className="mb-4 rounded-xl border border-line bg-surface p-5">
+    <div className="mx-auto max-w-[1180px]">
+      <PageHeader title={`${workspace.name} · ${workspace.period}`} />
+
+      {/* The briefing is the one thing on this page that gets to be loud. */}
+      <Section first className="border-t-2 border-ink pt-6">
         <div className="flex items-center gap-2">
-          <AgentAvatar id="cfo" />
-          <b>CFO Agent</b>
+          <AgentAvatar id="cfo" size="sm" />
+          <b className="text-[14px]">CFO Agent</b>
           <AiTag>AI briefing</AiTag>
           <span className="ml-auto font-accent text-[13px] text-ink-dim">generated {briefing.generated_at}</span>
         </div>
-        <p className="my-2.5 text-[15px]">
+        <p className="mt-4 max-w-[68ch] text-[17px] leading-[1.6]">
           {highlights(briefing.text).map(([part, strong], i) =>
             strong ? (
-              <b key={i} className="rounded-none bg-surface-3 px-0.5 font-semibold">
+              // A filled block per phrase breaks the line into patches; weight plus a
+              // hairline under the words marks them without chopping up the paragraph.
+              <b key={i} className="font-semibold decoration-ink/30 underline decoration-1 underline-offset-[5px]">
                 {part}
               </b>
             ) : (
@@ -50,91 +54,37 @@ export default function CommandCenter() {
             ),
           )}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           {briefing.actions.map((a) => (
             <Link key={a.label} href={TAB_HREF[a.href]}>
               <Button primary={a.primary}>{a.label}</Button>
             </Link>
           ))}
         </div>
-      </div>
+      </Section>
 
-      {/* The team: one card, divided, so it stays one object at any width */}
-      <Card className="mb-4 grid grid-cols-1 divide-y divide-line p-0 sm:grid-cols-2 sm:divide-x lg:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
-        {agents.map((a) => (
-          <div key={a.id} className="p-2.5">
-            <div className="flex items-center gap-2 text-[13.5px] font-semibold">
-              <AgentAvatar id={a.id} size="sm" />
-              {a.name}
-              {a.status === "working" && <Pulse className="ml-auto" />}
-            </div>
-            <div className={`mt-1.5 text-[13px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
-              {a.doing}
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        {workflows.length > 0 ? (
-          <Card>
-            <CardTitle right={<Link href="/workflows">open →</Link>}>Financial workflows this close</CardTitle>
-            {workflows.map((w) => (
-              <div key={w.id} className="grid grid-cols-[minmax(0,220px)_1fr_46px] items-center gap-2 py-1 text-[13.5px]">
-                <span className="truncate">{w.name}</span>
-                <ProgressBar value={w.progress} />
-                <b className="text-right font-num tabular-nums">{w.progress}%</b>
-              </div>
-            ))}
-          </Card>
-        ) : (
-          <Card>
-            <CardTitle right={<Link href="/findings">evidence →</Link>}>Source</CardTitle>
-            <div className="text-[14px]">
-              <b>MIT FY2025 Uniform Guidance report</b> · year ended June 30, 2025 · independent auditor PwC.
-              <div className="mt-1 text-ink-dim">
-                Agents read this published PDF only. They have no access to MIT&apos;s internal ledger, and nothing
-                here is a claim about MIT beyond what the report states.
-              </div>
-              {workspace.source_url && (
-                <a
-                  href={workspace.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-block font-semibold text-ink underline"
-                >
-                  Open the report ↗
-                </a>
-              )}
-            </div>
-          </Card>
-        )}
-
-        <Card className="grid grid-cols-2 divide-x divide-y divide-line p-0">
+      {/* The numbers, as one strip divided by hairlines rather than five boxes. */}
+      <Section>
+        <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
           {kpis.map((k) => (
-            <div key={k.label} className="p-3">
-              <small className="block text-[12.5px] text-ink-dim">{k.label}</small>
-              <b className="text-xl font-bold">{k.value}</b>
-              <em className={`block font-accent text-[13px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-ink"}`}>
-                {k.note}
-              </em>
-            </div>
+            <Figure key={k.label} label={k.label} value={k.value} note={k.note} tone={k.tone === "warn" ? "warn" : "good"} />
           ))}
-          <div className="p-3">
-            <small className="block text-[12.5px] text-ink-dim">Tasks done</small>
-            <b className="text-xl font-bold font-num tabular-nums">
-              {done} / {tasks.length}
-            </b>
-            <em className="block font-accent text-[13px] not-italic text-ink-dim">
-              {findings.length} findings · {pending} waiting on you
-            </em>
-          </div>
-        </Card>
-      </div>
+          <Figure
+            label="Tasks done"
+            value={`${done} / ${tasks.length}`}
+            note={`${findings.length} findings · ${pending} waiting on you`}
+          />
+        </div>
+      </Section>
 
-      <div className="mt-4 grid gap-4 min-[900px]:grid-cols-2">
-        <Card>
-          <CardTitle right={<Link href="/approvals">all →</Link>}>Waiting on you</CardTitle>
+      <div className="mt-8 grid gap-8 border-t border-line pt-8 min-[980px]:grid-cols-2">
+        <section>
+          <div className="mb-4 flex items-baseline gap-3">
+            <h2 className="text-[15px] font-semibold tracking-tight">Waiting on you</h2>
+            <Link href="/approvals" className="ml-auto font-accent text-[13px] text-ink-dim hover:text-ink">
+              all
+            </Link>
+          </div>
           {pendingApprovals.length === 0 ? (
             <EmptyState title={workspace.kind === "public" ? "Nothing to approve" : "You're all caught up"}>
               {workspace.kind === "public"
@@ -143,54 +93,110 @@ export default function CommandCenter() {
             </EmptyState>
           ) : (
             pendingApprovals.slice(0, 4).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 border-t border-line py-2.5 first:border-t-0">
+              <div key={a.id} className="flex items-center gap-3 border-t border-line py-4 first:border-t-0 first:pt-0">
                 <AgentAvatar id={a.agent} size="sm" />
-                <div className="min-w-0">
-                  <Link href="/approvals" className="block truncate font-semibold hover:text-ink">
+                <div className="min-w-0 flex-1">
+                  <Link href="/approvals" className="block truncate text-[14px] font-semibold hover:underline">
                     {a.title}
                   </Link>
-                  <span className="block truncate text-[13px] text-ink-dim">{a.summary}</span>
+                  <span className="mt-0.5 block truncate font-accent text-[13px] text-ink-dim">{a.summary}</span>
                 </div>
-                <span className="ml-auto flex-none">
-                  <Button
-                    onClick={() => {
-                      decideApproval(a.id, "approved");
-                      setToast(`${a.id} approved · dependent reports recomputed`);
-                    }}
-                  >
-                    {a.kind === "payment" ? "Release" : a.kind === "evidence" ? "Provide" : "Approve"}
-                  </Button>
-                </span>
+                <Button
+                  onClick={() => {
+                    decideApproval(a.id, "approved");
+                    setToast(`${a.id} approved · dependent reports recomputed`);
+                  }}
+                >
+                  {a.kind === "payment" ? "Release" : a.kind === "evidence" ? "Provide" : "Approve"}
+                </Button>
               </div>
             ))
           )}
-        </Card>
+        </section>
 
-        <Card>
-          <CardTitle right={<Link href="/reasoning">all →</Link>}>Latest reasoning</CardTitle>
+        <section>
+          <div className="mb-4 flex items-baseline gap-3">
+            <h2 className="text-[15px] font-semibold tracking-tight">Latest reasoning</h2>
+            <Link href="/reasoning" className="ml-auto font-accent text-[13px] text-ink-dim hover:text-ink">
+              all
+            </Link>
+          </div>
           {decisions.slice(0, 4).map((d) => (
             <Link
               key={d.id}
               href={`/reasoning?q=${encodeURIComponent(d.id)}`}
-              className="flex items-start gap-2 border-t border-line py-2.5 first:border-t-0 hover:bg-surface-2"
+              className="flex items-start gap-3 border-t border-line py-4 first:border-t-0 first:pt-0 hover:bg-surface-2"
             >
-              <span className="pt-0.5 font-mono text-[12px] text-ink-faint">{d.time}</span>
+              <span className="pt-0.5 font-num text-[12.5px] tabular-nums text-ink-faint">{d.time}</span>
               <AgentAvatar id={d.agent} size="sm" />
-              <span className="min-w-0">
-                <b className="block truncate">{d.action}</b>
-                <span className="block truncate text-[13px] text-ink-dim">{d.summary}</span>
+              <span className="min-w-0 flex-1">
+                <b className="block truncate text-[14px]">{d.action}</b>
+                <span className="mt-0.5 block truncate font-accent text-[13px] text-ink-dim">{d.summary}</span>
               </span>
             </Link>
           ))}
-        </Card>
+        </section>
       </div>
+
+      {workflows.length > 0 ? (
+        <Section title="This close" right={<Link href="/workflows" className="hover:text-ink">open</Link>}>
+          {workflows.map((w) => (
+            <div
+              key={w.id}
+              className="grid grid-cols-[minmax(0,240px)_1fr_52px] items-center gap-4 border-t border-line py-3 text-[14px] first:border-t-0 first:pt-0"
+            >
+              <span className="truncate">{w.name}</span>
+              <ProgressBar value={w.progress} />
+              <b className="text-right font-num tabular-nums">{w.progress}%</b>
+            </div>
+          ))}
+        </Section>
+      ) : (
+        <Section title="Source" right={<Link href="/findings" className="hover:text-ink">evidence</Link>}>
+          <p className="max-w-[68ch] text-[14px]">
+            <b>MIT FY2025 Uniform Guidance report</b> · year ended June 30, 2025 · independent auditor PwC.
+          </p>
+          <p className="mt-2 max-w-[68ch] font-accent text-[13.5px] text-ink-dim">
+            Agents read this published PDF only. They have no access to MIT&apos;s internal ledger, and nothing here is
+            a claim about MIT beyond what the report states.
+          </p>
+          {workspace.source_url && (
+            <a
+              href={workspace.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block text-[14px] font-semibold underline"
+            >
+              Open the report
+            </a>
+          )}
+        </Section>
+      )}
+
+      {/* The team, kept quiet: it is context for the work above, not the work itself. */}
+      <Section title="The team">
+        <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 lg:divide-x lg:divide-line xl:grid-cols-5">
+          {agents.map((a) => (
+            <div key={a.id} className="px-5 first:pl-0 last:pr-0">
+              <div className="flex items-center gap-2 text-[13.5px] font-semibold">
+                <AgentAvatar id={a.id} size="sm" />
+                <span className="truncate">{a.name}</span>
+                {a.status === "working" && <Pulse className="ml-auto" />}
+              </div>
+              <div className={`mt-2 font-accent text-[13px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
+                {a.doing}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
 
       {/* Where the records come from. Below the close, since a demo workspace is already loaded. */}
-      <div className="mt-4">
+      <Section>
         <SourcesPanel key={workspace.id} />
-      </div>
+      </Section>
 
       <Toast message={toast} onDone={() => setToast(null)} />
-    </>
+    </div>
   );
 }
