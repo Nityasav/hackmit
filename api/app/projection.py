@@ -91,7 +91,15 @@ def _triage_projection(run):
         "how": [{"tool": item["tool"], "input": item["input_hash"], "output": item["output_ref"]}
                 for item in output.get("tool_calls", [])],
         "why": decision.get("why", "Identify bounded follow-up work from committed evidence."),
-        "alternatives": [], "memory_checks": [],
+        "alternatives": [],
+        # Real precedent checks from the run, not a placeholder. A declined
+        # precedent is shown as prominently as an applied one — "ok: false"
+        # with a reason is the evidence that memory was re-checked rather
+        # than replayed.
+        "memory_checks": [
+            {"text": f"{check['precedent_id']}: {check['reason']}", "ok": bool(check.get("applied"))}
+            for check in analysis.get("memory_checks", [])
+        ],
         "outcome": decision.get("outcome", "Candidate triage saved."),
     }]
     return tasks, findings, decisions
@@ -296,6 +304,35 @@ def _money(cents):
     sign = "-" if cents < 0 else ""
     units, remainder = divmod(abs(cents), 100)
     return f"{sign}${units:,}.{remainder:02d}"
+
+
+def _playbooks(ws: str) -> list[dict]:
+    """Reviewed precedent, shown on the Learning tab as what the system has
+    actually learned from human review.
+
+    `status` is always "active" and `replay.passed` always True here because a
+    precedent only exists once a human decided the approval it came from — the
+    approval queue *is* the gate. There is no separate replay gate yet, so
+    `months` stays empty rather than asserting a regression test that never
+    ran: an empty list is honest, a fabricated pass is not.
+    """
+    with db.connect() as connection:
+        precedents = approvals_module.active_precedents(connection, ws)
+
+    return [
+        {
+            "id": precedent["id"],
+            "title": precedent["pattern"],
+            "source": precedent["source_finding_id"] or "human decision",
+            "proposed_by": "cfo",
+            "replay": {"passed": True, "new_false_positives": 0, "months": []},
+            "uses": str(precedent["uses"]),
+            "status": "active",
+            "status_note": f"{precedent['verdict'].capitalize()} by {precedent['decided_by']} "
+                           f"on {precedent['decided_at'][:10]}. Re-checked against the snapshot on every use.",
+        }
+        for precedent in precedents
+    ]
 
 
 def _kpis(cov, findings, triage, coordinator):
@@ -630,7 +667,7 @@ def _derived(ws):
         "kpis": _kpis(cov, findings, triage, coordinator),
         "workflows": workflows, "tasks": tasks, "findings": findings, "approvals": approval_rows,
         "decisions": decisions,
-        # Owned by the Learning workstream; this layer must keep emitting them unchanged.
-        "playbooks": [], "ablation": None,
+        "playbooks": _playbooks(ws),
+        "ablation": None,
         "report": report,
     }

@@ -283,6 +283,68 @@ def decide(ws, approval_id, decision, reviewer=REVIEWER):
             "applied": False,
             "note": "Recorded as a human decision. No payment, posting or payroll change is executed.",
         }, actor=reviewer)
+        _record_precedent(connection, ws, row, decision, reviewer)
+
+
+def _record_precedent(connection, ws, row, decision, reviewer):
+    """Turn a human decision into a precedent a later run can check.
+
+    This is the only writer of the `precedents` table, which is deliberate: a
+    precedent must never exist without a human decision behind it. The agent
+    proposes, the human decides, and only the decision becomes memory — an
+    agent cannot promote its own conclusion into guidance for its next run.
+
+    What is stored is the decision and its scope, not an instruction to repeat
+    it. A later run is told to re-check applicability against current evidence
+    and to record why it declined a precedent that no longer fits (see
+    agents/cfo.py's memory_checks). A vendor name matching is not grounds to
+    reuse a precedent whose governing document has since changed.
+    """
+    pattern = (row["title"] or "").strip()
+    if not pattern:
+        return
+
+    verb = "approved" if decision == "approved" else "rejected"
+    guidance = (
+        f"A human reviewer {verb} this proposal on {db.now()[:10]}. "
+        f"Treat that as precedent for the same situation only. Re-check it against the "
+        f"current snapshot before relying on it, and say so if the governing evidence changed."
+    )
+    connection.execute(
+        "INSERT INTO precedents (id, ws, pattern, verdict, guidance, scope, source_finding_id,"
+        " source_approval_id, decided_by, created_at, status, uses)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,'active',0)",
+        (db.uid("PB"), ws, pattern, decision, guidance,
+         json.dumps({"agent": row["agent"], "kind": row["kind"]}),
+         row["finding_id"], row["id"], reviewer, db.now()),
+    )
+
+
+def active_precedents(connection, ws: str) -> list[dict]:
+    """Reviewed precedent available to a run, newest first. Read by
+    agents/cfo.py's context() so a run sees what the human has already
+    decided, and by projection.py so the Learning tab reflects it."""
+    rows = connection.execute(
+        "SELECT * FROM precedents WHERE ws=? AND status='active' ORDER BY created_at DESC LIMIT 20",
+        (ws,),
+    ).fetchall()
+    return [
+        {
+            "id": r["id"], "pattern": r["pattern"], "verdict": r["verdict"],
+            "guidance": r["guidance"], "source_finding_id": r["source_finding_id"],
+            "decided_by": r["decided_by"], "decided_at": r["created_at"], "uses": r["uses"],
+        }
+        for r in rows
+    ]
+
+
+def note_precedent_uses(connection, ws: str, precedent_ids: list[str]) -> None:
+    """Count a precedent as used when a run actually checked it. Applied or
+    rejected both count — a precedent correctly declined as stale did its job."""
+    for precedent_id in precedent_ids:
+        connection.execute(
+            "UPDATE precedents SET uses = uses + 1 WHERE ws=? AND id=?", (ws, precedent_id)
+        )
 
 
 #: What approving or rejecting actually did, so the log never overstates it.

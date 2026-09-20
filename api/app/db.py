@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS extraction_items (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
 );
+-- Reviewed precedent: what a human decided, in a form a later run can check.
+-- Written only by approvals.decide(), so a precedent can never exist without a
+-- human decision behind it. `status` is how a precedent is retired when its
+-- governing evidence changes; nothing is ever deleted, so the history of what
+-- the agent was told stays auditable.
+CREATE TABLE IF NOT EXISTS precedents (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    pattern TEXT NOT NULL, verdict TEXT NOT NULL, guidance TEXT NOT NULL,
+    scope TEXT NOT NULL, source_finding_id TEXT, source_approval_id TEXT,
+    decided_by TEXT NOT NULL, created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active', uses INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS extraction_workspace ON extraction_items(ws, kind);
 CREATE TABLE IF NOT EXISTS extraction_documents (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
