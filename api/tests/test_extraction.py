@@ -172,7 +172,10 @@ def test_staging_requires_review_defaults_to_evidence_and_no_auto_commit(client)
     again = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"]}).json()
     assert again["batch_id"] == staged["batch_id"]
     batch = ingestion.get_batch(ws, staged["batch_id"])
-    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "document"
+    # Staged under what the document IS, not the catch-all. An agent may read
+    # only roles it declared it needs, so everything landing in `document` meant
+    # a person checked every value and no agent could then read any of it.
+    assert len(batch["files"]) == 1 and batch["files"][0]["options"]["role"] == "invoice"
     assert client.get(f"/api/workspaces/{ws}/updates").json()["total_records"] == 0
     financial = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"], "include_records": True}).json()
     batch = ingestion.get_batch(ws, financial["batch_id"])
@@ -470,3 +473,44 @@ def test_local_runner_rejects_browser_and_wrong_identity():
             "fields": ex.schema("invoice"), "pages": [{"page": 1, "text": "test", "method": "native", "warnings": []}],
             "output_schema": {}, "instruction": "untrusted"}
     assert client.post("/extract", json=body).status_code == 409
+
+
+def test_each_document_kind_is_staged_under_a_role_an_agent_can_read():
+    """A document staged under a role no agent reads is preserved, hashed and
+    citable by a person, and invisible to every agent — so extracting it and
+    checking its values buys nothing, silently. Everything used to land in
+    `document`, which nothing reads.
+    """
+    from app import roles
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    readable = {role for agent in AGENTS.values() for role in agent.roles}
+
+    for kind, staged_as in EVIDENCE_ROLE.items():
+        assert staged_as in roles.DOCUMENT_ROLES, (
+            f"{kind!r} stages as {staged_as!r}, which cannot hold a document at all")
+        if staged_as == "document":
+            continue  # the catch-all; the Document lab says nobody reads it
+        readers = sorted(a.id for a in AGENTS.values() if staged_as in a.roles)
+        assert readers, f"{kind!r} stages as {staged_as!r}, which no agent reads"
+
+
+def test_an_invoice_document_reaches_the_agent_whose_charter_covers_it():
+    """The mapping is only worth anything if it lands somewhere specific."""
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert "invoice" in AGENTS["A1"].roles, "Accounts Payable must read invoice documents"
+    assert "invoice" in AGENTS["D1"].roles, "Audit traces a payment to its source document"
+    assert EVIDENCE_ROLE["invoice"] == "invoice"
+    # And it does not leak to agents whose charter does not cover it.
+    assert "invoice" not in AGENTS["C1"].roles, "Budgeting has no business reading invoices"
+
+
+def test_a_grant_agreement_is_staged_as_the_contract_it_is():
+    from app.agents.registry import AGENTS
+    from app.extraction import EVIDENCE_ROLE
+
+    assert EVIDENCE_ROLE["grants"] == "contract"
+    assert "contract" in AGENTS["B2"].roles, "Accruals reads the terms behind a commitment"

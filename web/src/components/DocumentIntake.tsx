@@ -30,7 +30,11 @@ const input = "w-full border border-line bg-white p-2 text-sm";
  * screen where the choice is made rather than leaving someone to discover it.
  */
 const READERS: Record<string, string> = {
-  policy: "Accounts Payable, Controls Testing, Audit & Controls and the Treasurer",
+  invoice: "Accounts Payable and Audit",
+  service: "Accounts Payable and Audit",
+  policy: "Accounts Payable and Controls Testing",
+  grants: "Accruals & Adjustments and Audit, as a funding contract",
+  budget: "Budgeting and Variance Analysis",
 };
 
 function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {

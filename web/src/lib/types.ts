@@ -200,7 +200,7 @@ export type SourceRole =
   | "payroll" | "expenses"
   | "budgets" | "forecasts" | "headcount"
   | "approvals" | "period_locks" | "tax_registrations"
-  | "contract" | "policy" | "document";
+  | "contract" | "policy" | "document" | "invoice" | "service" | "budget";
 export interface IntakeWorkspace {
   id: string; name: string; kind: "synthetic" | "public";
   entity_type: "company" | "subsidiary" | "group";

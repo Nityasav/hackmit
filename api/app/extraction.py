@@ -38,6 +38,27 @@ SCHEMA_VERSION = "schooltrace.extraction.v1"
 #: reviewed it. `None` means the document type has no structured equivalent: its text
 #: is still staged as evidence, but it can never become a financial record, because
 #: there is no validated shape for it to take.
+#: Extraction kind -> the source role the reviewed evidence is staged under.
+#:
+#: This is what decides which agent can ever read the document, so it is stated
+#: rather than left to fall out of a membership test. Everything used to land
+#: in `document`, which no agent reads: the extraction ran, a person checked
+#: every value, and the result was invisible to the agents it was gathered for.
+#:
+#: A grant agreement is staged as a contract because that is what it is — a
+#: funding agreement with terms — rather than inventing a role for it. Anything
+#: absent here keeps the `document` catch-all, and the Document lab says
+#: plainly that no agent reads it.
+EVIDENCE_ROLE: dict[str, str] = {
+    "invoice": "invoice",
+    "policy": "policy",
+    "service": "service",
+    "budget": "budget",
+    "grants": "contract",
+    "payroll": "document",
+    "document": "document",
+}
+
 INTAKE_ROLE: dict[str, str | None] = {
     "invoice": "vendor_invoices",
     "payroll": "payroll",
@@ -725,7 +746,7 @@ def stage(ws: str, body: Stage, request: Request):
                 lines.append(f"Record {i+1} {key}: {obs['value']} [original page {obs['page']}, characters {obs['start']}:{obs['end']}]")
     revision = next(i + 1 for i, x in enumerate(_corrections(ws)) if x["id"] == correction["id"])
     lineage = doc.get("lineage_id", doc["id"])
-    evidence_role = doc["role"] if doc["role"] in ingestion.DOCUMENT_ROLES else "document"
+    evidence_role = EVIDENCE_ROLE.get(doc["role"], "document")
     uploads = [("reviewed-evidence.txt", "\n".join(lines).encode(), ingestion.FileOptions(role=evidence_role, source_system="reviewed-extraction", external_id=lineage, source_version=revision))]
     intake_role = INTAKE_ROLE[doc["role"]]
     if body.include_records and intake_role and intake_role not in ingestion.DOCUMENT_ROLES:
