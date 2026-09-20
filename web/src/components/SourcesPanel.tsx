@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 import sample from "../../../contracts/fixtures/intake.json";
@@ -118,6 +119,7 @@ export function SourcesPanel() {
       <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
 
       <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+        <Link href="/cfo" className="mb-3 inline-block text-sm font-semibold text-teal-700 underline">Open five-agent workflow →</Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
             <p className="mt-1 max-w-3xl text-xs text-slate-600">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>

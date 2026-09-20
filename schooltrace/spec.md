@@ -223,6 +223,24 @@ Workers write using optimistic version checks. The graph projection carries the 
 
 ## 8. Agent contracts and orchestration
 
+### Connected five-agent implementation checkpoint (2026-09-19)
+
+The `max` branch exposes a **Five-agent workflow · uploaded records** option on
+`/cfo`, linked from the Command center. A committed immutable intake snapshot flows
+through CFO planning → AP & Payments, Payroll & Budget, Grants & Compliance →
+independent Internal Auditor review → CFO report. All three specialist domains are
+assigned; absent records produce explicit gaps, not invented clean results.
+The coordinator enforces scoped evidence, deterministic calculation provenance,
+fresh Auditor reads/reperformance, bounded retries and stale-snapshot rejection.
+No payment or posting tools are exposed. Clients/budgets are invocation-local.
+
+This is a bounded investigation workflow, not the full benchmark implementation.
+AP/Grants observations are supported, but confirmed financial amounts are limited
+to the intake engine's existing payroll calculations. Results are persisted in CFO
+runs and displayed on `/cfo`; standalone findings are not silently imported or
+marked verified. Model training, generalized AP calculations, a global dollar-cost
+ceiling and held-out accuracy measurement remain future work.
+
 Five roles, shown in the UI as an Office of the CFO:
 
 | Display name | Role | Owns |

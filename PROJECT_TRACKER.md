@@ -362,3 +362,23 @@ After a meaningful slice or before a context handoff:
 - Next integration work: standardize on one snapshot/claim/review contract; connect AP to scoped intake
   data; implement AP, Grants and Auditor central adapters; then test a true five-agent live run before
   claiming the project benchmark passes. Do not substitute scripted workers to make the gate green.
+
+### Five-agent workflow connection — 2026-09-19 (`max`)
+
+- Added `workflow: five_agent` to the central live runtime and a default snapshot-backed factory.
+  CFO assigns AP & Payments, Payroll & Budget and Grants & Compliance; the independent Auditor
+  rereads cited originals and reperforms calculations before findings may enter the CFO report.
+- AP/Grants reuse the bounded specialist machinery with role prompts; no sandbox payment state or
+  write tools are exposed. Each investigation/review owns and closes its client, preventing shared
+  budgets across concurrent tasks/workspaces. Truncated originals cannot be accepted.
+- `/cfo` now defaults to the five-agent option, linked from Command center and the intake workflow
+  gate. Workspace switches reset displayed runs; saved runs cannot be shown under another workspace.
+- Verification: 282 offline tests passed, 9 opt-in/artifact tests skipped. New tests cover connected
+  roles, default API factory on committed intake, independent reads/reperformance, rejected claims,
+  task budgets, truncated sources and provider-failure cleanup. Full frontend lint/build passed.
+- Two paid synthetic five-agent smoke executions completed with three specialist tasks and 26
+  evidence calls each; both returned `needs_evidence` and zero accepted claims. Latest used two CFO
+  calls. This proves connected execution, not finding accuracy, precision/recall or the full benchmark.
+- Remaining limits: AP/Grants confirmed amounts need additional deterministic accounting engines;
+  results remain in CFO runs rather than the standalone dashboard findings feed; local training,
+  a global dollar-cost ceiling and held-out semantic evaluation are not implemented. No main merge.

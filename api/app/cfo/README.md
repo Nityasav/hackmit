@@ -154,10 +154,10 @@ automatic resume across changed snapshots is intentionally not implemented.
 
 ## Connect the adapters
 
-`app/integrations/cfo_factory.py` already registers the intake data adapter and
-the Payroll & Budget agent (`py`, see `app/agents/README.md`), which it omits
-when no specialist model is configured. Add the remaining agents to the same
-call when they exist:
+`app/integrations/cfo_factory.py` is the default live factory. It registers
+snapshot-backed AP, Payroll, Grants and independent Auditor ports when credentials
+are configured. Each invocation owns and closes its client, including concurrent
+reviews. Custom deployments can override `CFO_ADAPTER_FACTORY`:
 
 ```python
 return Adapters(
@@ -167,11 +167,26 @@ return Adapters(
 )
 ```
 
-Set `CFO_ADAPTER_FACTORY=app.integrations.cfo_factory:create_adapters` in the server
-environment. With records registered but no agents, a live run stops with a 503 that
+Without credentials, a live run stops with a 503 that
 names the missing agents; it never falls back to the scripted harness. This is trusted server configuration, not user input. The factory is
 synchronous and runs once per server process. Alternatively, set
 `app.state.cfo_runtime = CFORuntime(repository, adapters)` in your application startup.
+
+On `/cfo`, choose **Five-agent workflow · uploaded records**, or POST a run with
+`mode: "live"`, `workflow: "five_agent"` and a committed intake workspace ID.
+All three specialist roles must be assigned, with automatic independent Auditor
+review and a CFO report. Missing roles are added within the existing task budget;
+exceeding that budget fails closed. No claims means no review verdict is invented.
+`OPENAI_API_KEY` stays server-side. Model settings fall back from `SPECIALIST_MODEL`
+to `CFO_MODEL`, then `OPENAI_MODEL`, then `gpt-5.4-mini`.
+
+AP and Grants use scoped original evidence, not the AP payment sandbox. Their
+non-monetary observations can be reviewed, but confirmed amounts require an
+available deterministic calculation. The current intake calculation inventory is
+payroll-based. No automatic payment, posting, full AP arithmetic or audit opinion
+is provided. Source excerpts are bounded; truncated originals cannot be accepted
+by the connected Auditor. Run results live on this page, not the standalone
+agent-runs/dashboard findings feed.
 
 No changes to CFO internals or existing shared bundle types are needed. Map the CFO
 run result to dashboard bundles in the eventual shared integration layer.
