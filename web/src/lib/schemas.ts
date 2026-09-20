@@ -43,7 +43,7 @@ const tabIdSchema = z.enum([
 const workspaceSchema = z.object({
   id: z.string(),
   name: z.string(),
-  kind: z.enum(["synthetic", "public"]),
+  kind: z.enum(["synthetic", "open_data", "public"]),
   period: z.string(),
   mode: z.enum(["live", "not_started"]),
   snapshot_id: z.string(),

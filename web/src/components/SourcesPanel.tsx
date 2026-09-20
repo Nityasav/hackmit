@@ -402,7 +402,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             these carries that first option as `defaultValue` and the form posts what it
             always posted. */}
         <label style={fieldLayout} className="text-xs">Entity type<AnimatedDropdown name="entity_type" defaultValue="company" className="w-full" options={["company", "subsidiary", "group"].map((v) => ({ value: v, label: displayLabel(v) }))} /></label>
-        <label style={fieldLayout} className="text-xs">Data origin<AnimatedDropdown name="kind" defaultValue="synthetic" className="w-full" options={[{ value: "synthetic", label: "Synthetic records" }, { value: "public", label: "Public documents only" }]} /></label>
+        <label style={fieldLayout} className="text-xs">Data origin<AnimatedDropdown name="kind" defaultValue="synthetic" className="w-full" options={[{ value: "synthetic", label: "Synthetic records" }, { value: "open_data", label: "Published open data" }, { value: "public", label: "Public documents only" }]} /></label>
         <label style={fieldLayout} className="text-xs">Currency<AnimatedDropdown name="currency" defaultValue="USD" className="w-full" options={["USD", "CAD", "EUR", "GBP"].map((v) => ({ value: v, label: displayLabel(v) }))} /></label>
         <label style={fieldLayout} className="text-xs">Period start<input style={fieldControl} type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
         <label style={fieldLayout} className="text-xs">Period end<input style={fieldControl} type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>

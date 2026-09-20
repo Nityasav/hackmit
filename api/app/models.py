@@ -38,7 +38,7 @@ class RunBudget(BaseModel):
 class Workspace(BaseModel):
     id: WorkspaceId
     name: str
-    kind: Literal["synthetic", "public"]
+    kind: Literal["synthetic", "open_data", "public"]
     period: str
     mode: Literal["live", "not_started"]
     snapshot_id: str
