@@ -19,6 +19,29 @@ unsupported assertion. Financial amounts come exclusively from the calculation e
 """
 
 
+def build_client(provider: str, local_base_url: str):
+    """One place where a provider credential is chosen, for every agent in the system.
+
+    The hosted path pins the OpenAI endpoint. The local path accepts loopback
+    hosts only and passes a dummy credential, so a misconfigured base URL can
+    never exfiltrate OPENAI_API_KEY to an arbitrary host. Retries are disabled
+    because a bounded run accounts for every model call it makes.
+    """
+    from openai import AsyncOpenAI
+
+    if provider == "openai":
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            raise ValueError("Set OPENAI_API_KEY on the API server.")
+        return AsyncOpenAI(api_key=key, base_url="https://api.openai.com/v1", max_retries=0, timeout=60)
+    if provider == "local":
+        if urlparse(local_base_url).hostname not in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError("Local provider must use a loopback endpoint.")
+        # Never pass the real OpenAI credential to a local or alternative host.
+        return AsyncOpenAI(api_key="local-unused", base_url=local_base_url, max_retries=0, timeout=60)
+    raise ValueError("Provider must be openai or local.")
+
+
 class StructuredCFOModel:
     def __init__(self, provider: str, model: str, client):
         self.provider, self.model, self.client = provider, model, client
@@ -28,25 +51,13 @@ class StructuredCFOModel:
 
     @classmethod
     def from_env(cls):
-        from openai import AsyncOpenAI
-
         provider = os.getenv("CFO_PROVIDER", "openai")
         model = os.getenv("CFO_MODEL", "")
         if not model:
             raise ValueError("Set CFO_MODEL to an available structured-output model ID.")
-        if provider == "openai":
-            key = os.getenv("OPENAI_API_KEY")
-            if not key:
-                raise ValueError("Set OPENAI_API_KEY on the API server.")
-            client = AsyncOpenAI(api_key=key, base_url="https://api.openai.com/v1", max_retries=0, timeout=60)
-        elif provider == "local":
-            base_url = os.getenv("CFO_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1")
-            if urlparse(base_url).hostname not in {"localhost", "127.0.0.1", "::1"}:
-                raise ValueError("Local provider must use a loopback endpoint.")
-            # Never pass the real OpenAI credential to a local or alternative host.
-            client = AsyncOpenAI(api_key="local-unused", base_url=base_url, max_retries=0, timeout=60)
-        else:
+        if provider not in {"openai", "local"}:
             raise ValueError("CFO_PROVIDER must be openai or local.")
+        client = build_client(provider, os.getenv("CFO_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1"))
         return cls(provider, model, client)
 
     async def _generate(self, instruction, payload, schema):
