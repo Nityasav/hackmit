@@ -34,9 +34,6 @@ AGENTS = {
     "au": {"id": "au", "name": "Internal Auditor", "short": "AU", "role": "Independent reviewer"},
 }
 
-#: Triage run `agent` column -> roster key.
-TRIAGE_AGENTS = {"cfo": "cfo", "grants_compliance": "gr", "internal_auditor": "au"}
-
 #: Coordinator task status -> the board column the contract defines.
 TASK_COLUMN = {
     "queued": "queued", "working": "working", "auditor_review": "auditor_review", "done": "done",
@@ -53,52 +50,6 @@ PREVIEW_CHARS = 700
 # --------------------------------------------------------------------------- #
 # Snapshot triage runs
 # --------------------------------------------------------------------------- #
-
-def _triage_projection(run):
-    agent = AGENTS[TRIAGE_AGENTS[run["agent"]]]
-    output = json.loads(run["output"]) if run else {}
-    analysis = output.get("analysis", {})
-    role_ids = {"ap_payments": "ap", "payroll_budget": "py", "grants_compliance": "gr", "internal_auditor": "au"}
-    tasks = [{
-        "id": f"{run['id']}-task-{index}", "agent": role_ids[task["specialist"]], "title": task["title"],
-        "workflow": agent["name"] + " follow-up", "column": "queued", "progress": 0, "eta_s": None,
-        "started_at": None, "tool_calls": {"used": 0, "budget": 12},
-        "steps": [{"title": task["objective"], "state": "todo", "memory": False}], "todos": [],
-        "rationale": "Proposed by " + agent["name"] + "; this follow-up has not been executed.",
-        "note": "Candidate task", "note_tone": "info",
-    } for index, task in enumerate(analysis.get("next_tasks", []), 1)]
-    findings = [{
-        "id": f"{run['id']}-finding-{index}", "agent": agent["id"], "title": finding["title"],
-        "summary": agent["name"] + " candidate · independent review pending. " + finding["summary"],
-        "status": "hypothesized" if finding["status"] == "cleared" else finding["status"],
-        "amount_cents": None, "amount_note": "No independently reviewed finding amount", "verified_by": None,
-        "evidence": [{"label": f"{cite['source_id']} line {cite['line']}: {cite['quote']}",
-                      "kind": "doc", "tone": "neutral",
-                      "locator": f"{cite['source_id']} line {cite['line']}"} for cite in finding["citations"]],
-    } for index, finding in enumerate(analysis.get("findings", []), 1)]
-    decision = output.get("decision", {})
-    decisions = [{
-        "id": f"decision-{run['id']}", "run": run["id"], "time": run["completed_at"], "agent": agent["id"],
-        "action": decision.get("action", "Initial snapshot triage"),
-        "summary": decision.get("summary", analysis.get("executive_briefing", "")), "tags": [],
-        "when": {"run": run["id"], "step": agent["name"] + " review", "started": run["created_at"],
-                 "finished": run["completed_at"], "trigger": run["focus"]},
-        "how": [{"tool": item["tool"], "input": item["input_hash"], "output": item["output_ref"]}
-                for item in output.get("tool_calls", [])],
-        "why": decision.get("why", "Identify bounded follow-up work from committed evidence."),
-        "alternatives": [],
-        # Real precedent checks from the run, not a placeholder. A declined
-        # precedent is shown as prominently as an applied one — "ok: false"
-        # with a reason is the evidence that memory was re-checked rather
-        # than replayed.
-        "memory_checks": [
-            {"text": f"{check['precedent_id']}: {check['reason']}", "ok": bool(check.get("applied"))}
-            for check in analysis.get("memory_checks", [])
-        ],
-        "outcome": decision.get("outcome", "Candidate triage saved."),
-    }]
-    return tasks, findings, decisions
-
 
 # --------------------------------------------------------------------------- #
 # Coordinator runs
@@ -517,29 +468,15 @@ def _derived(ws):
     w = cov["workspace"]
     snapshot_id = cov["snapshot"]["id"] if cov["snapshot"] else None
     with db.connect() as connection:
-        # Recover abandoned runs even if only the dashboard bundle is being polled.
-        from .agents.cfo import _expire_runs
-        _expire_runs(connection, ws)
-        running = connection.execute(
-            "SELECT * FROM agent_runs WHERE ws=? AND status='running' ORDER BY created_at DESC LIMIT 1", (ws,),
-        ).fetchone()
-        triage = [row for agent in TRIAGE_AGENTS if (row := connection.execute(
-            "SELECT * FROM agent_runs WHERE ws=? AND snapshot_id=? AND agent=? AND status='completed' ORDER BY created_at DESC LIMIT 1",
-            (ws, snapshot_id, agent),
-        ).fetchone())] if snapshot_id else []
-        audit_history = connection.execute(
-            "SELECT output FROM agent_runs WHERE ws=? AND snapshot_id=? AND agent='internal_auditor' AND status='completed' ORDER BY created_at DESC LIMIT 20",
-            (ws, snapshot_id),
-        ).fetchall() if snapshot_id else []
+        # The standalone triage agent is gone: the registry-driven organization in
+        # `app/agents/` replaced it, and its runs are recorded in `agent_decisions`
+        # rather than `agent_runs`. Phase 3 rewrites this projection around the event
+        # graph; until then it reads coordinator runs only.
+        running, triage, audit_history = None, [], []
         # Same transaction, same snapshot: the whole point of moving cfo_runs here.
         coordinator = _load_runs(connection, ws, snapshot_id)
 
     tasks, findings, decisions = [], [], []
-    triage_findings = {}
-    for saved in triage:
-        t, f, d = _triage_projection(saved)
-        triage_findings[saved["id"]] = f
-        tasks.extend(t); findings.extend(f); decisions.extend(d)
 
     # Verdicts are attached only to their exact preparer-run finding IDs. Rerunning a
     # preparer cannot silently inherit an old review, even on the same source snapshot.
@@ -558,8 +495,6 @@ def _derived(ws):
     # table: a rerun cannot silently un-decide something a human already decided.
     # Triage candidates propose too, but only whether to pursue them: they carry no
     # independent review and no calculation, so they can never move money.
-    for saved in triage:
-        approvals_module.sync_triage(ws, saved["id"], snapshot_id, triage_findings[saved["id"]])
     if coordinator:
         records = financial_records(ws)["records"]
         for run in coordinator:
@@ -597,7 +532,7 @@ def _derived(ws):
     # An agent is on the roster because it did work, not because someone proposed
     # work for it. A CFO run that suggests a Grants follow-up does not make Grants
     # an agent that has run.
-    worked = {TRIAGE_AGENTS[run["agent"]] for run in triage}
+    worked = set()
     for run in coordinator:
         worked |= {state["spec"]["role"] for state in run["tasks"]}
         if run.get("plan"):
@@ -606,9 +541,8 @@ def _derived(ws):
             worked.add("au")
     agents = []
     for key, meta in AGENTS.items():
-        triage_name = next((n for n, r in TRIAGE_AGENTS.items() if r == key), None)
-        live = running is not None and triage_name is not None and running["agent"] == triage_name
-        if not live and key not in worked:
+        live = False
+        if key not in worked:
             continue
         agents.append({**meta, "status": "working" if live else "idle",
                        "doing": "Reviewing snapshot evidence" if live else

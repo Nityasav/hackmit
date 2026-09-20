@@ -12,7 +12,7 @@ import { Precedent } from "./Precedent";
 import { useInvestigation } from "./run";
 
 /**
- * The Investigation screen: five agents check one school's books.
+ * The Investigation screen: five agents check one company's books.
  *
  * The page reads top to bottom the way the work happens — ask, meet the team,
  * watch them work, read what they found. Every status, number and quotation

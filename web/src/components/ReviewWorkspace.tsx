@@ -62,9 +62,9 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     try { setSource(await intakeApi(`/api/workspaces/${ws}/sources/${encodeURIComponent(id)}?start=${start}&limit=20`)); setSourceRef({ id, start }); }
     catch (e) { setError(e instanceof Error ? e.message : "Source unavailable"); }
   }
-  if (!uploaded) return <div className="border border-line p-6"><h1 className="text-2xl font-semibold">No school is selected yet.</h1>
+  if (!uploaded) return <div className="border border-line p-6"><h1 className="text-2xl font-semibold">No company is selected yet.</h1>
     <p className="my-3 max-w-2xl text-ink-dim">Create an institution and commit its records to prepare a briefing.</p>
-    <Link href="/" className={primary + " inline-block"}>Add a school&rsquo;s records →</Link></div>;
+    <Link href="/" className={primary + " inline-block"}>Add a company&rsquo;s records →</Link></div>;
   // Money-in checks are sorted last so the heading in the list marks one contiguous group.
   const filtered = (view?.findings.filter(f => filter === "all" || (filter === "attention" ? f.status !== "pass" : filter === "rc" ? f.role === "rc" : f.status === filter)) || [])
     .sort((a, b) => Number(a.role === "rc") - Number(b.role === "rc"));

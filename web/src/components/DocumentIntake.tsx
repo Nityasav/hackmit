@@ -113,7 +113,7 @@ function Lab({ ws }: { ws: string }) {
   return <div className="space-y-4">
     {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
     {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
-    {!state ? <p className="text-[13px] text-ink-dim">Opening this school&rsquo;s documents…</p> : <>
+    {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
         <div className="flex flex-wrap items-end gap-3 text-[13px]"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
           <label>Choose document<input className={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" onChange={e => setFile(e.target.files?.[0] || null)} /></label>

@@ -21,7 +21,7 @@ from app.cfo.schemas import (
 from app.integrations.cfo_intake import IntakeDataSource
 from app.main import app
 
-from tests.test_cfo_intake import HEADERS, commit_pack
+from tests.conftest import HEADERS, commit_pack
 
 
 @pytest.fixture

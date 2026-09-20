@@ -96,7 +96,7 @@ export function agentOf(role: string): AgentId | null {
 }
 
 const PHRASE: Record<string, string> = {
-  "snapshot.started": "Pinning this school's records",
+  "snapshot.started": "Pinning this company's records",
   "plan.started": "Writing the plan",
   "plan.completed": "Finished the plan",
   "plan.accepted": "Set the plan",
@@ -231,7 +231,7 @@ export function agentState(run: CFORun | null, running: boolean, id: AgentId): A
 
 /** What the run status means, in plain words, for the line under the title. */
 export function describeRun(run: CFORun | null, running: boolean): string {
-  if (!run) return "No investigation has run for this school yet.";
+  if (!run) return "No investigation has run for this company yet.";
   if (running) return "The agents are working now.";
   if (run.status === "completed") return "The agents finished. Their accepted conclusions are below.";
   if (run.status === "partial" || run.status === "needs_evidence")

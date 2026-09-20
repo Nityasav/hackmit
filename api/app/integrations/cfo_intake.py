@@ -20,15 +20,18 @@ amount.
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from ..accounting.ap import calculations as ap_calculations
-from ..accounting.grants import calculations as grants_calculations
-from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
-from ..accounting.review import checks
 from ..cfo.schemas import Calculation, CalculationSpec, Precedent, Scope, Source, SourceSpan
 from ..ingestion import coverage, financial_records
 
 # Intake roles map onto the three specialist domains; everything else is shared context.
-DOMAINS = {"invoice": "ap", "payroll": "py", "grants": "gr"}
+# This vocabulary is the old five-agent one and is replaced in phase 3, when workers
+# become A/B/C/D and the domain literal widens with them.
+DOMAINS = {
+    "vendors": "ap", "vendor_invoices": "ap", "purchase_orders": "ap",
+    "goods_receipts": "ap", "payments": "ap",
+    "payroll": "py", "expenses": "py", "budgets": "py", "forecasts": "py", "headcount": "py",
+    "customers": "gr", "customer_invoices": "gr", "remittances": "gr",
+}
 MAX_LINES = 400
 MAX_CHARS = 20_000
 
@@ -70,41 +73,18 @@ async def _snapshot_view(workspace: str) -> dict:
         raise _unavailable(exc) from None
 
 
-async def _engine_calculations(workspace: str, available: set[str], config: dict) -> list[PayrollCalculation]:
+async def _engine_calculations(workspace: str, available: set[str], config: dict) -> list:
     """Deterministic amounts for this snapshot, restricted to readable sources.
 
-    A calculation derived from a superseded source could not be reperformed by
-    the auditor through the same evidence, so it is withheld entirely rather
-    than published with a partial basis.
-
-    `config` is the workspace record intake already holds, passed through so
-    date-bounded checks (pledge ageing reads its period end) run here exactly as
-    they do on the review path. Without it they stand themselves down, and this
-    caller consumes only amount-bearing AP and budget items, so the gap saying
-    they did not run would be filtered away unseen.
+    Empty until the phase-4 engine lands in `accounting/`. The coordinator treats an
+    empty inventory correctly on its own: `calculate` fails closed, so a specialist can
+    cite evidence and describe a finding but cannot assert an amount. That is the right
+    behaviour while the calculations are being rebuilt — better a stated gap than a
+    number with nothing behind it.
     """
-    try:
-        inputs = await run_in_threadpool(financial_records, workspace)
-    except HTTPException as exc:
-        raise _unavailable(exc) from None
-    service_present = "service" in inputs["roles"]
-    records = inputs["records"]
-    published = (payroll_calculations(records, service_present)
-                 + ap_calculations(records)
-                 + grants_calculations(records))
-    known = {calculation.id for calculation in published}
-    for item in checks(records, config):
-        if (item["amount_cents"] is not None
-                and item["id"].startswith(("ap-duplicate-", "budget-"))
-                and item["id"] not in known):
-            published.append(PayrollCalculation(
-                id=item["id"], description=item["title"],
-                source_ids=tuple(sorted({e["source_id"] for e in item["evidence"]})),
-                amount_cents=item["amount_cents"], cash_delta_cents=0,
-                category="exposure" if item["status"] == "attention" else "none",
-                basis=item["explanation"],
-            ))
-    return [c for c in published if c.source_ids and set(c.source_ids).issubset(available)]
+    # Touched so the signature stays honest about what it will read.
+    await run_in_threadpool(financial_records, workspace)
+    return []
 
 
 def _usable(source: dict) -> bool:
@@ -131,19 +111,14 @@ class IntakeDataSource:
         ]
         if not sources:
             raise ValueError("The committed snapshot exposes no readable sources.")
-        gaps = [f"{c['label']}: missing {', '.join(c['missing'])}." for c in view["capabilities"] if c["missing"]]
+        # Missing inputs come from the one registry Books also renders, so the run is
+        # told about a gap in the same words the person was asked to fill it.
+        gaps = [f"{r['label']} has not been supplied: {r['unlocks']}"
+                for r in view["requirements"] if not r["satisfied"] and not r["optional"]]
         gaps += [f"Open evidence request ({r['role']}): {r['title']}."
                  for r in view["requests"] if r["status"] in {"open", "needs_review"}]
         engine = await _engine_calculations(workspace, {s.id for s in sources}, config)
-        if engine:
-            domains = sorted({c.id.split("-", 1)[0] for c in engine})
-            missing = sorted({"payroll", "ap", "grants"} - set(domains))
-            if missing:
-                gaps.append("Deterministic amounts are published for " + ", ".join(domains)
-                            + " only; " + ", ".join(missing) + " amounts cannot be confirmed in this run.")
-            if any(c.id.startswith(("ap-duplicate-", "budget-")) for c in engine):
-                gaps.append("Amount inventory includes exact-key invoice duplicate candidates and expense budget variance where supplied. No payment confirmation, full three-way matching, statutory accounts or full-population grant compliance is implied.")
-        else:
+        if not engine:
             gaps.append("No deterministic calculation inventory is published for this workspace; "
                         "amounts cannot be confirmed in this run.")
         return Scope(

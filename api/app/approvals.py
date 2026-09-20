@@ -225,42 +225,6 @@ def sync(ws, run, records):
 
 
 # --------------------------------------------------------------------------- #
-# Proposals derived from a snapshot-triage run
-# --------------------------------------------------------------------------- #
-
-def proposals_from_triage(run_id, snapshot_id, findings):
-    """What a triage candidate may ask a person for, and nothing more.
-
-    Triage is one agent reading a snapshot alone: no independent review and no
-    deterministic calculation, so every proposal it raises is `verified: False`
-    and the Approvals tab warns that nobody re-checked it. It never carries a
-    journal or an amount — there is no calculation behind it to carry one — so
-    the only honest question is whether the candidate is worth pursuing. Without
-    this a triage-only workspace has findings no one can ever act on.
-    """
-    return [{
-        "id": f"TRI-{finding['id']}", "run_id": run_id, "task_id": None,
-        "finding_id": finding["id"], "snapshot_id": snapshot_id, "agent": finding["agent"],
-        "kind": "decision",
-        "title": f"Decide whether to pursue: {finding['title']}",
-        "summary": f"{finding['summary']} Nothing independently reviewed this candidate and no "
-                   "calculation backs an amount for it, so the only proposal is the decision to "
-                   "pursue it or drop it. Approving opens no ledger entry and pays nothing.",
-        "verified": False,
-    } for finding in findings]
-
-
-def sync_triage(ws, run_id, snapshot_id, findings):
-    """Write the pursue-or-drop proposals a completed triage run supports."""
-    proposals = proposals_from_triage(run_id, snapshot_id, findings)
-    if not proposals:
-        return
-    with db.connect() as connection:
-        for proposal in proposals:
-            store(connection, ws, proposal)
-
-
-# --------------------------------------------------------------------------- #
 # The human decision
 # --------------------------------------------------------------------------- #
 

@@ -97,7 +97,7 @@ export interface Investigation {
   error: string | null;
   /** The agent service has an address to call. */
   connected: boolean;
-  /** This school exists and can be investigated. */
+  /** This company exists and can be investigated. */
   ready: boolean;
   start: (objective: string) => Promise<void>;
 }
@@ -107,7 +107,7 @@ function reason(error: unknown, fallback: string): string {
 }
 
 /**
- * One run per school: the last one is loaded on arrival, and a new one is
+ * One run per company: the last one is loaded on arrival, and a new one is
  * polled while the agents work. There is no fixture path — a run is live or
  * it does not start.
  */
@@ -119,7 +119,7 @@ export function useInvestigation(ws: string): Investigation {
   const runId = run?.id;
   const running = isRunning(run);
 
-  // The last run for this school, so a reload continues where you were.
+  // The last run for this company, so a reload continues where you were.
   useEffect(() => {
     if (!CFO_API_URL || !ws) return;
     const controller = new AbortController();

@@ -142,7 +142,7 @@ def test_api_default_factory_runs_committed_workspace(tmp_path, monkeypatch, mod
     from app.main import app
     from app.cfo.model import StructuredCFOModel
     from app.cfo.schemas import Plan
-    from tests.test_cfo_intake import commit_pack, HEADERS
+    from tests.conftest import commit_pack, HEADERS
 
     class Planner(StubPlanner):
         async def plan(self, objective, scope):
@@ -176,7 +176,7 @@ def test_live_five_agent_snapshot(tmp_path, monkeypatch):
     from app.main import app
     from app.cfo.model import StructuredCFOModel
     from app.integrations.cfo_factory import create_adapters
-    from tests.test_cfo_intake import commit_pack, HEADERS
+    from tests.conftest import commit_pack, HEADERS
 
     monkeypatch.setenv("SCHOOLTRACE_DATA_DIR", str(tmp_path / "intake"))
     monkeypatch.setenv("CFO_MODEL", "gpt-5.4-mini")

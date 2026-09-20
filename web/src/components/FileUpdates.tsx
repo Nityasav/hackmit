@@ -30,7 +30,7 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
   const base = `/api/workspaces/${ws}/updates`;
 
   useEffect(() => {
-    // Without a school the base URL is /api/workspaces//updates, which 404s.
+    // Without a workspace the base URL is /api/workspaces//updates, which 404s.
     if (!ws) return;
     let current = true;
     intakeApi<Changes>(base)

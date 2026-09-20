@@ -141,7 +141,7 @@ function AuthForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
-              placeholder="you@school.edu"
+              placeholder="you@company.com"
             />
           </label>
 

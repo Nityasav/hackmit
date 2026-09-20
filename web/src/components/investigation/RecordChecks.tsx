@@ -69,7 +69,7 @@ export function RecordChecks({ ws }: { ws: string }) {
         </Button>
         {!view?.snapshot_id && (
           <span className="text-[13px] text-ink-dim">
-            Commit this school&rsquo;s records on Books first.
+            Commit this company&rsquo;s records on Books first.
           </span>
         )}
         {view?.scan && (

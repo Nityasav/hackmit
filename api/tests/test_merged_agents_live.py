@@ -13,7 +13,7 @@ from app.agents.payroll import PayrollBudgetSpecialist
 from app.cfo.schemas import Limits, Run, RunRequest, TaskSpec, TaskState
 from app.cfo.tools import EvidenceTools
 from app.integrations.cfo_intake import IntakeDataSource
-from .test_cfo_agent import HEADERS, committed_workspace
+from .conftest import HEADERS, committed_workspace
 
 pytestmark = pytest.mark.skipif(os.getenv("SCHOOLTRACE_LIVE_EVAL") != "1", reason="Opt-in billable merged-agent evaluation")
 

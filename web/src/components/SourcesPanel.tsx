@@ -5,24 +5,24 @@ import { displayLabel } from "@/lib/format";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { IntakeUiProgress } from "@/lib/workflow";
+import { DataRequirements } from "@/components/DataRequirements";
 import { FileUpdates } from "@/components/FileUpdates";
 import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
-import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
+import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 
 // Keyed by string rather than SourceRole: the server owns the role list, and the
 // money-in roles are offered here as soon as it accepts them.
 const ROLES: Record<string, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
-  payroll: "Payroll", grants: "Grant register", budget: "Budget", invoice: "Invoices",
-  fees: "Student fees", collections: "Collections (money received)", deposits: "Bank deposits",
-  sponsorships: "Sponsorships & pledges",
-  policy: "Award terms / policy", service: "Service evidence", document: "Other document",
-};
-const AGENTS = {
-  cfo: { label: "CFO Agent", action: "Run CFO triage", focus: "Perform an initial risk triage of the committed snapshot." },
-  grants_compliance: { label: "Grants & Compliance Agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
-  internal_auditor: { label: "Internal Auditor Agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
+  vendors: "Vendors", purchase_orders: "Purchase orders", goods_receipts: "Goods receipts",
+  vendor_invoices: "Vendor invoices", payments: "Vendor payments",
+  customers: "Customers", customer_invoices: "Customer invoices", remittances: "Customer remittances",
+  bank_transactions: "Bank transactions", processor_payouts: "Payment processor payouts",
+  payroll: "Payroll", expenses: "Employee expenses",
+  budgets: "Approved budget", forecasts: "Forecast", headcount: "Headcount",
+  approvals: "Approvals", period_locks: "Period locks", tax_registrations: "Tax registrations",
+  contract: "Contracts", policy: "Policies", document: "Other document",
 };
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
@@ -55,33 +55,26 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
-  const [allAgentRuns, setAgentRuns] = useState<AgentRun[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<AgentRun["agent"]>("cfo");
-  const agentRuns = allAgentRuns.filter((run) => run.workspace_id === ws && run.agent === selectedAgent);
-  const agentRunning = allAgentRuns.some((run) => run.workspace_id === ws && run.status === "running");
   const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
-  const [agentFocus, setAgentFocus] = useState("Perform an initial risk triage of the committed snapshot.");
-  const [agentBusy, setAgentBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const base = `/api/workspaces/${encodeURIComponent(ws)}`;
   const refresh = useCallback(async () => {
-    const [cov, imports, runs] = await Promise.all([
+    const [cov, imports] = await Promise.all([
       intakeApi<Coverage>(base + "/coverage"),
       intakeApi<typeof history>(base + "/imports"),
-      intakeApi<AgentRun[]>(base + "/agent-runs"),
     ]);
-    setCoverage(cov); setHistory(imports); setAgentRuns(runs);
+    setCoverage(cov); setHistory(imports);
   }, [base]);
   useEffect(() => {
     // Without a workspace the base URL is /api/workspaces/, which 404s. Nothing
-    // here is meaningful until someone has created a school.
+    // here is meaningful until someone has created a company.
     if (!isIntake || !ws) return;
     let mounted = true;
-    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports"), intakeApi<AgentRun[]>(base + "/agent-runs")])
-      .then(([c, h, r]) => { if (mounted) { setCoverage(c); setHistory(h); setAgentRuns(r); } })
+    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports")])
+      .then(([c, h]) => { if (mounted) { setCoverage(c); setHistory(h); } })
       .catch(() => { /* The shared API status shows outages; retry without discarding the last snapshot. */ });
     void load();
     const interval = setInterval(load, 10000);
@@ -110,9 +103,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       batchStatus: batch?.status ?? null,
       batchIssues: batch?.counts.issues ?? 0,
       hasSnapshot: Boolean(snapshot),
-      runRunning: agentRunning,
+      runRunning: false,
     });
-  }, [agentRunning, batch?.counts.issues, batch?.status, coverage, files.length, onProgressChange, snapshot]);
+  }, [batch?.counts.issues, batch?.status, coverage, files.length, onProgressChange, snapshot]);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
@@ -147,90 +140,22 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-        <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No school yet — create one to add records.")}</span>
+        <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No company yet — create one to add records.")}</span>
         <span>· {coverage?.workspace.currency}</span><span>· {coverage?.workspace.profile}</span>
         <button disabled={busy} className={button} onClick={() => act(refresh)}>Refresh sources</button>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {coverage?.capabilities.map((c) => <div key={c.id} className="border border-line p-3">
-          <div className="font-semibold">{c.label}</div>
-          <span className={`mt-1 inline-block px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-amber-50 text-amber-800"}`}>{displayLabel(c.status)}</span>
-          {c.missing.length > 0 && <p className="mt-1 text-xs">Missing: {c.missing.map((r) => ROLES[r as SourceRole] || r).join(", ")}</p>}
-          <p className="mt-1 text-[11px] text-ink-dim">{c.note}</p>
-        </div>)}
-      </div>
-      <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
+      {coverage && <DataRequirements ws={ws} coverage={coverage} onSaved={refresh} />}
+      <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
 
-      <div className="mt-5 border border-violet-200 bg-violet-50/40 p-4">
-        <Link href="/investigation" className="mb-3 inline-block text-sm font-semibold text-ink underline">Open the investigation →</Link>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">OpenAI</span></h3>
-            <p className="mt-1 max-w-3xl text-xs text-ink-dim">Review committed records with this agent. Starting a run sends selected evidence to OpenAI.</p></div>
-          {agentRuns[0] && <span className="text-[11px] text-ink-dim">Latest: {agentRuns[0].status} · {agentRuns[0].model}{agentRuns[0].current_snapshot ? "" : " · stale snapshot"}</span>}
-        </div>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <select aria-label="Investigation agent" className={input} disabled={agentBusy || agentRunning} value={selectedAgent} onChange={(e) => {
-            const agent = e.target.value as AgentRun["agent"];
-            setSelectedAgent(agent); setAgentFocus(AGENTS[agent].focus); setError(""); setMessage("");
-          }}>{Object.entries(AGENTS).map(([id, agent]) => <option key={id} value={id}>{agent.label}</option>)}</select>
-          <input aria-label="Agent focus" className={input} value={agentFocus} maxLength={500} onChange={(e) => setAgentFocus(e.target.value)} />
-          <button disabled={busy || agentBusy || agentRunning || !snapshot || !agentFocus.trim()} className={primary + " whitespace-nowrap"} onClick={async () => {
-            setAgentBusy(true); setError(""); setMessage("");
-            try {
-              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: {
-                agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
-              } });
-              setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
-              await refreshBundle();
-              setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
-            } catch (e) { setError(e instanceof Error ? e.message : "Agent request failed"); }
-            finally { setAgentBusy(false); void refresh().catch(() => {}); }
-          }}>{agentBusy || agentRunning ? "Agent working…" : AGENTS[selectedAgent].action}</button>
-        </div>
-        {!snapshot && <p className="mt-2 text-xs text-amber-700">Commit at least one valid source snapshot before running the agent.</p>}
-        {selectedAgent === "grants_compliance" && <p className="mt-2 text-xs text-ink-dim">Checks supplied award terms and payroll service periods. Payroll totals are not complete grant expenditure. Findings remain unreviewed; no compliance certification is issued.</p>}
-        {selectedAgent === "internal_auditor" && <p className="mt-2 text-xs text-ink-dim">Run CFO or Grants first. Reviews up to four findings per run using fresh source reads and calculation checks. Accept means the limited claim is supported—not approval of a transaction or an audit opinion.</p>}
-        {agentRuns[0]?.review_targets_current === false && <p className="mt-2 text-xs text-amber-700">A preparer reran or the snapshot changed. These historical verdicts do not cover all current findings; rerun the Auditor.</p>}
-        {agentRuns[0]?.error && <p className="mt-3 bg-red-50 p-2 text-xs text-accent-bad">{agentRuns[0].error}</p>}
-        {agentRuns[0]?.result.analysis && <div className="mt-4 border-t border-violet-100 pt-3">
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-dim">
-            <span>snapshot {agentRuns[0].snapshot_id}</span><span>{agentRuns[0].result.tool_calls?.length || 0} logged tool calls</span>
-            <span>{agentRuns[0].result.usage?.total_tokens || 0} tokens</span>
-          </div>
-          <p className="mt-2 text-sm"><b>Briefing:</b> {agentRuns[0].result.analysis.executive_briefing}</p>
-          <p className="mt-1 text-xs text-ink-dim">Scope: {agentRuns[0].result.analysis.scope_assessed}</p>
-          {agentRuns[0].result.review_scope && <p className="mt-2 text-xs">Reviewed {agentRuns[0].result.review_scope.reviewed_count} of {agentRuns[0].result.review_scope.candidate_count} candidate findings in this run. Remaining findings are unreviewed.</p>}
-          {agentRuns[0].result.analysis.reviews?.map((review) => <div key={review.finding_id} className="mt-3 border border-line bg-white p-3">
-            <b>Auditor verdict: {displayLabel(review.verdict)}</b>
-            <p className="break-all font-mono text-[10px] text-ink-dim">{review.finding_id}</p>
-            <p className="mt-1 text-xs">{review.rationale}</p>
-            <p className="mt-1 text-xs">Required action: {review.required_action || "No further action proposed within this limited review."}</p>
-            <div className="mt-2 flex flex-wrap gap-2">{review.citations.map((citation, index) => <button key={index} className="text-xs text-ink underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
-              Source line {citation.line}: “{citation.quote}”
-            </button>)}</div>
-          </div>)}
-          {agentRuns[0].result.analysis.findings.map((finding, index) => <div key={index} className="mt-3 border border-line bg-white p-3">
-            <div className="flex flex-wrap items-center gap-2"><b>{finding.title}</b><span className="bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">{finding.status === "cleared" ? "Proposed clearance · unreviewed" : displayLabel(finding.status)}</span></div>
-            <p className="mt-1 text-xs">{finding.summary}</p>
-            <div className="mt-2 flex flex-wrap gap-2">{finding.citations.map((citation) => <button key={`${citation.source_id}:${citation.line}`} className="text-xs text-ink underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
-              Source line {citation.line}: “{citation.quote}”
-            </button>)}</div>
-            {finding.limitations.length > 0 && <p className="mt-2 text-[11px] text-ink-dim">Limits: {finding.limitations.join("; ")}</p>}
-          </div>)}
-          {agentRuns[0].result.analysis.next_tasks.length > 0 && <div className="mt-3"><b className="text-xs">Proposed specialist work</b><ul className="mt-1 list-disc pl-5 text-xs">
-            {agentRuns[0].result.analysis.next_tasks.map((task, index) => <li key={index}><b>{task.title}</b> · {task.objective}</li>)}
-          </ul></div>}
-          {agentRuns[0].result.analysis.evidence_requests.map((request, index) => <div key={index} className="mt-3 border border-amber-200 bg-white p-3 text-xs">
-            <b>Suggested evidence: {request.title}</b><p className="my-1">{request.reason}</p>
-            <button className={button} disabled={busy || !agentRuns[0].current_snapshot || Boolean(coverage?.requests.some((r) => r.task_id === agentRuns[0].id && r.title === request.title))}
-              onClick={() => act(async () => {
-                setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: {
-                  title: request.title, role: request.role, task_id: agentRuns[0].id,
-                } }));
-              })}>Add evidence request</button>
-          </div>)}
-          {agentRuns[0].result.analysis.limitations.length > 0 && <p className="mt-3 text-xs text-ink-dim"><b>Run limitations:</b> {agentRuns[0].result.analysis.limitations.join("; ")}</p>}
-        </div>}
+      <div className="mt-5 border border-line bg-surface-2 p-4">
+        <h3 className="font-semibold">Running the agents</h3>
+        <p className="mt-1 max-w-prose text-xs text-ink-dim">
+          Books is where the records go in. The agents are started from Investigation, so
+          there is one place a paid run can begin rather than two.
+        </p>
+        <Link href="/investigation" className="mt-3 inline-block text-sm font-semibold text-ink underline">
+          Open the investigation &rarr;
+        </Link>
       </div>
 
       <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
@@ -353,7 +278,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
         <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
-        <label className="text-xs">Institution type<select name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label className="text-xs">Entity type<select name="entity_type" className={input}>{["company", "subsidiary", "group"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
         <label className="text-xs">Data origin<select name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
         <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
         <label className="text-xs">Period start<input type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>

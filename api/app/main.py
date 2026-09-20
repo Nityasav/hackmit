@@ -21,7 +21,7 @@ from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from . import approvals, ingestion, projection
-from .agents import cfo
+from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
 from .reviews import router as review_router
@@ -50,6 +50,7 @@ app.include_router(review_router)
 app.include_router(security.router)
 app.include_router(extraction_router)
 app.include_router(updates_router)
+app.include_router(agents_api.router)
 
 # A hosted web app is a different origin from a hosted API, so the browser blocks every call
 # until that origin is named here. Local development keeps working with no configuration.
@@ -189,6 +190,22 @@ def coverage(ws: str):
     return ingestion.coverage(ws)
 
 
+@app.get("/api/workspaces/{ws}/requirements")
+def workspace_requirements(ws: str):
+    """What the agents need from this workspace, and what is still missing.
+
+    Books renders this list directly, so an agent can never depend on data nobody
+    was asked to supply.
+    """
+    return ingestion.coverage(ws)
+
+
+@app.patch("/api/workspaces/{ws}/settings")
+def settings(ws: str, body: ingestion.SettingsUpdate):
+    """Answer the requirements that are a single value rather than a file."""
+    return ingestion.update_settings(ws, body)
+
+
 @app.get("/api/workspaces/{ws}/sources/{sid}")
 def source(ws: str, sid: str, start: int = Query(default=1, ge=1), limit: int = Query(default=100, ge=1, le=200)):
     return ingestion.source_view(ws, sid, start, limit)
@@ -222,14 +239,3 @@ def evidence_request(ws: str, body: ingestion.EvidenceCreate):
 @app.post("/api/workspaces/{ws}/evidence-requests/{rid}/responses")
 def evidence_response(ws: str, rid: str, body: ingestion.EvidenceResponse):
     return ingestion.respond(ws, rid, body)
-
-
-@app.get("/api/workspaces/{ws}/agent-runs")
-def agent_runs(ws: str):
-    return cfo.list_runs(ws)
-
-
-@app.post("/api/workspaces/{ws}/agent-runs", status_code=201)
-async def run_snapshot_agent(ws: str, body: cfo.RunRequest):
-    """Run an allowlisted read-only agent against the current immutable snapshot."""
-    return await run_in_threadpool(cfo.run, ws, body)

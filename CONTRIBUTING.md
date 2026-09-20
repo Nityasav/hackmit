@@ -1,0 +1,132 @@
+# Working on this together
+
+Read this before your first commit on the rework. It says what is stable, what is about
+to be rewritten, and where the best parallel work is.
+
+Background: [schooltrace/AGENT_SYSTEM_PLAN.md](schooltrace/AGENT_SYSTEM_PLAN.md) — the
+plan, the phases and why each decision was taken.
+
+## The pivot, stated plainly
+
+The product is now an **agentic office of the CFO for a SaaS company**: one orchestrator,
+four worker agents and seventeen subagents over vendors, purchase orders, goods receipts,
+customers, bank activity and processor payouts.
+
+The **school-finance domain is gone** — fees, collections, deposits, sponsorships, grants
+and everything under the name "money-in". That was a deliberate removal, not an oversight.
+`accounting/{payroll,grants,collections,ap,review}.py` and `agents/{cfo,grants,auditor}.py`
+were deleted with their tests.
+
+If you have money-in work in flight, stop and talk to the team before writing more. The
+question is not how to merge it; it is whether the pivot is agreed.
+
+## Safe to build on
+
+These are stable. Build against them freely.
+
+| Area | Files |
+| --- | --- |
+| Record vocabulary | `api/app/roles.py` |
+| What Books asks for | `api/app/requirements.py` |
+| Schema (v6) | `api/app/db.py` |
+| Exact money | `api/app/accounting/money.py` |
+| Matching, duplicates, policy | `api/app/accounting/match.py` |
+| Agent organization | `api/app/agents/registry.py`, `schemas.py`, `budget.py` |
+| Data generation | `fixtures/generate_saas.py` |
+| Books requirement UI | `web/src/components/DataRequirements.tsx` |
+
+## Do not touch yet
+
+These are being rewritten in phase 3. Changing them now guarantees a conflict.
+
+| File | Why |
+| --- | --- |
+| `api/app/agents/runtime.py` | The conversation loop moves into LangGraph |
+| `api/app/projection.py` | Rewritten as an event-graph reader |
+| `api/app/cfo/` | Deleted; the coordinator is replaced by the graph |
+| `web/src/components/investigation/` | Becomes a chat surface |
+| `AgentId` in `api/app/models.py` + `web/src/lib/types.ts` | Breaking, and changes in lockstep |
+
+**One coordination rule.** `AgentId` exists in three places — `api/app/models.py`,
+`web/src/lib/types.ts` and `contracts/`. Whoever changes it changes all three in one
+commit. A bundle that fails to parse renders an error instead of a workspace, so a
+half-done rename takes the whole dashboard down.
+
+## The best parallel work
+
+**The deterministic accounting modules.** Roughly half the system, no dependency on
+LangGraph, and therefore no possible collision with phase 3.
+
+| Module | Agent | Job |
+| --- | --- | --- |
+| `accounting/reconcile.py` | A3 | Agree bank activity to the ledger; decompose processor payouts |
+| `accounting/statements.py` | B3 | Income statement, balance sheet, cash flow, from the ledger |
+| `accounting/variance.py` | C3 | Decompose budget-to-actual into named drivers |
+| `accounting/close.py` | B1 | Close checklist state and readiness |
+| `accounting/controls.py` | D2 | Duplicate vendors, self-approval, post-close entries, policy breaches (exists, returns `[]`) |
+
+Each is a pure function over `(records, config)` returning plain dicts. Testable with no
+model and no network. **Copy `accounting/match.py`** — it is the worked example, and its
+docstrings explain the conventions below.
+
+Second-best: defect injection in `fixtures/generate_saas.py` (`--defects` is already a
+flag that plants nothing). Self-contained, and it is what makes precision measurable.
+
+### Wiring a new module in
+
+1. Write the pure function in `accounting/`.
+2. Add a method to `Toolbox` in `agents/tools.py` that calls it and charges a tool call.
+3. Add one line to `dispatch()` and one entry to `tool_definitions()`.
+4. Name the tool in the agent's `tools=(...)` in `agents/registry.py`.
+
+If the agent needs a record type nobody uploads yet, add a `Requirement` in
+`requirements.py` first. The registry check fails at import otherwise — on purpose.
+
+## Conventions that are not negotiable
+
+These are load-bearing. Breaking one is a bug even when the tests pass.
+
+1. **Money is integer cents.** Never a float, anywhere, for any reason. `money.py` owns
+   parsing and allocation. The UI is the only place that formats.
+2. **No model writes a number.** Agent prose is validated to contain no digits or
+   currency symbols. Deterministic code produces every figure; the renderer inserts it.
+3. **Confidence is computed, never claimed.** It comes from the weighted rubric in
+   `match.py`, and every input is recorded so a person can re-derive the score.
+   `AgentResult` has no confidence field, deliberately.
+4. **An agent cites only what it retrieved.** `Toolbox.validate_citations` rejects a
+   result pointing at a record the agent never read.
+5. **Only a human decision writes memory.** `approvals.decide()` is the sole writer of
+   precedent, so an agent cannot promote its own conclusion into guidance for its next run.
+6. **No demo data, ever.** No seeding, no "load sample data", no fixture in the runtime
+   database. The generator writes files to disk; a person uploads them through Books like
+   any other records. This is what keeps "the agents found this" honest.
+7. **A finding's id names what it is, not which rows are in it.** Ids derived from group
+   membership move when the group gains a row, orphaning a reviewer's note and
+   re-presenting the finding as new.
+8. **Say what a check does not establish.** An unreconciled difference is not a loss. A
+   duplicate candidate is not a duplicate payment. Amounts from different checks are
+   never summed.
+
+## Running it
+
+```bash
+cd api && uv sync && uv run pytest          # 227 passing, 2 skipped
+cd api && uv run uvicorn app.main:app --reload --port 8000
+cd web && bun install && bun dev            # http://localhost:3000
+cd web && npx tsc --noEmit && npx eslint src
+
+# Generate records to upload through Books. Nothing is seeded.
+python fixtures/generate_saas.py --out ./generated --seed 7
+```
+
+Put `OPENAI_API_KEY=...` in ignored `api/.env.local`. Without it, intake and every
+deterministic check still work; only agent runs refuse, with a message saying why.
+
+## Budget
+
+Agent runs cost money and the meter is enforced in code: **$10 per run**, **$75 per day**,
+both configurable through `AGENT_RUN_CAP_CENTS` and `AGENT_DAY_CAP_CENTS`. A breach stops
+the work and reports it rather than returning a thinner answer. Every run response carries
+what it cost.
+
+Keep roughly $300 of the credit for demo day.

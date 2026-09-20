@@ -19,7 +19,7 @@ function Tracker() {
     last.current = key;
 
     // The dashboard store persists under this key; reading it keeps a page view
-    // attributed to the school being looked at without re-rendering on every change.
+    // attributed to the workspace being looked at without re-rendering on every change.
     let workspaceId: string | null = null;
     try {
       const saved: unknown = JSON.parse(localStorage.getItem("schooltrace.dashboard") ?? "null");

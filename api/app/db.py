@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS records (
     role TEXT NOT NULL, system TEXT NOT NULL, record_key TEXT NOT NULL,
     version INTEGER NOT NULL, payload TEXT NOT NULL,
     source_id TEXT NOT NULL REFERENCES sources(id), locator INTEGER NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1, event_id TEXT,
     UNIQUE(ws, role, system, record_key, version)
 );
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -117,7 +117,66 @@ CREATE TABLE IF NOT EXISTS extraction_active (
     ws TEXT PRIMARY KEY REFERENCES workspaces(id), model_id TEXT NOT NULL,
     version INTEGER NOT NULL, evaluation_id TEXT NOT NULL
 );
+-- Invariant 1: one transaction, one identity. An economic event is the thing that
+-- happened in the business; the invoice, the receipt, the payment, the bank line and
+-- the journal entries are all *views* of it. Every artifact carries this id, so
+-- "what else touched this?" is an indexed lookup rather than a reconstruction, and
+-- two agents cannot end up holding different opinions about the same transaction.
+CREATE TABLE IF NOT EXISTS economic_events (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    kind TEXT NOT NULL, title TEXT NOT NULL, occurred_on TEXT NOT NULL,
+    period TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL
+);
+-- Typed edges, carrying HOW each was established. `method` is the honest part: an
+-- exact reference match and a fuzzy description match are both links, and a reader
+-- must be able to tell them apart. `confidence` is computed by a rubric in code
+-- (see accounting/match.py); no model writes this column.
+CREATE TABLE IF NOT EXISTS links (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    event_id TEXT REFERENCES economic_events(id),
+    from_type TEXT NOT NULL, from_id TEXT NOT NULL,
+    to_type TEXT NOT NULL, to_id TEXT NOT NULL,
+    kind TEXT NOT NULL, method TEXT NOT NULL,
+    confidence INTEGER NOT NULL DEFAULT 100, rationale TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+    UNIQUE(ws, from_type, from_id, to_type, to_id, kind)
+);
+-- The defensible decision trail (Invariant 2). One row per material action: what an
+-- agent did, on what evidence, with what confidence, who reviewed it, and whether a
+-- human was asked. This is what an evidence pack is assembled from, so it is written
+-- as the work happens rather than reconstructed afterwards.
+CREATE TABLE IF NOT EXISTS agent_decisions (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    event_id TEXT REFERENCES economic_events(id),
+    thread_id TEXT, run_id TEXT, agent TEXT NOT NULL, parent_agent TEXT,
+    action TEXT NOT NULL, summary TEXT NOT NULL, why TEXT NOT NULL DEFAULT '',
+    confidence INTEGER, evidence TEXT NOT NULL DEFAULT '[]',
+    reviewer TEXT, review_verdict TEXT, escalated INTEGER NOT NULL DEFAULT 0,
+    model TEXT NOT NULL DEFAULT '', cost_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_events ON economic_events(ws, period);
+CREATE INDEX IF NOT EXISTS event_links ON links(ws, event_id);
+CREATE INDEX IF NOT EXISTS link_endpoints ON links(ws, from_type, from_id);
+CREATE INDEX IF NOT EXISTS event_decisions ON agent_decisions(ws, event_id);
+CREATE INDEX IF NOT EXISTS thread_decisions ON agent_decisions(ws, thread_id);
 """ + f"PRAGMA user_version = {SCHEMA_VERSION};"
+
+#: Columns added to tables that predate them. `CREATE TABLE IF NOT EXISTS` cannot add a
+#: column to a table that already exists, so an older database would silently keep the
+#: old shape and fail on first write. Each entry is idempotent and additive.
+ADDED_COLUMNS = (
+    ("records", "event_id", "TEXT"),
+    ("sources", "event_hint", "TEXT"),
+)
+
+
+def _add_missing_columns(connection) -> None:
+    for table, column, kind in ADDED_COLUMNS:
+        existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+        if existing and column not in existing:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
 
 def uid(prefix: str) -> str:
@@ -146,6 +205,7 @@ def connect():
         connection.close()
         raise RuntimeError("Database is newer than this application; refusing to downgrade")
     connection.executescript(SCHEMA)
+    _add_missing_columns(connection)
     try:
         # Serialize preview/mapping/commit changes, including revision checks.
         connection.execute("BEGIN IMMEDIATE")

@@ -16,7 +16,7 @@ from app.cfo.repository import RunRepository
 from app.cfo.schemas import AcceptedClaim, Calculation, Review
 
 from app.main import app
-from tests.test_cfo_intake import HEADERS, SAMPLE, commit_pack
+from tests.conftest import HEADERS, SAMPLE, commit_pack
 from tests.test_projection import _claim, _run, _snapshot_id
 
 
@@ -252,46 +252,6 @@ def test_a_pending_proposal_against_a_superseded_snapshot_says_so(client):
     assert not approvals_now[decided]["title"].startswith("Superseded")
 
 
-def _triage_run(ws, snapshot, run_id="run-triage-1", source_id="s1"):
-    """A completed snapshot-triage run: one agent, no independent review, no calculation."""
-    output = {"analysis": {
-        "memory_checks": [], "executive_briefing": "Triage briefing.", "scope_assessed": "September close.",
-        "limitations": ["Population completeness is not verified."],
-        "findings": [{"title": "Invoice may lack a receipt", "status": "hypothesized",
-                      "summary": "The register shows no matching goods receipt.",
-                      "citations": [{"source_id": source_id, "line": 2, "quote": "INV-1001"}],
-                      "limitations": ["No independent review."]}],
-        "evidence_requests": [], "next_tasks": []}, "tool_calls": [], "usage": {}}
-    with db.connect() as connection:
-        connection.execute(
-            "INSERT INTO agent_runs(id,ws,agent,snapshot_id,status,model,focus,created_at,completed_at,output)"
-            " VALUES(?,?,?,?,'completed','test-model','September close',?,?,?)",
-            (run_id, ws, "cfo", snapshot, db.now(), db.now(), db.encode(output)))
-
-
-def test_a_triage_candidate_can_be_pursued_or_dropped_by_a_human(client):
-    """Triage produced findings nobody could ever act on: no proposal was written.
-
-    The candidate has no independent review and no calculation, so the only
-    honest proposal is whether to pursue it, and it must not claim otherwise.
-    """
-    ws = commit_pack(client, later=True)
-    _triage_run(ws, _snapshot_id(ws))
-
-    bundle = client.get(f"/api/workspaces/{ws}/bundle").json()
-    finding = bundle["findings"][0]
-    proposal = bundle["approvals"][0]
-    assert proposal["finding_id"] == finding["id"], "the candidate is reachable from its proposal"
-    assert proposal["kind"] == "decision" and proposal["status"] == "pending"
-    assert proposal["verified"] is False, "nobody re-read the sources; the UI warns about exactly this"
-    assert proposal["journal"] is None, "no calculation stands behind it, so no amount and no journal"
-    assert proposal["title"].startswith("Decide whether to pursue: ")
-
-    after = client.post(f"/api/approvals/{proposal['id']}/decision",
-                        json={"workspace": ws, "decision": "approved"}).json()
-    assert after["approvals"][0]["status"] == "approved"
-    assert next(f for f in after["findings"] if f["id"] == finding["id"])["amount_cents"] is None
-
 
 def test_an_unreviewed_proposal_may_never_carry_a_journal(client):
     """A journal moves money between funds; triage has not earned the right to propose one."""
@@ -305,13 +265,6 @@ def test_an_unreviewed_proposal_may_never_carry_a_journal(client):
                             {"account": "Salary expense", "fund": "B", "debit_cents": 0, "credit_cents": 100}]})
     assert "unreviewed_journal" in str(caught.value.detail)
 
-
-def test_no_triage_proposal_is_built_with_a_journal(client):
-    """Structural, not incidental: the triage builder emits nothing a ledger could accept."""
-    proposals = approvals.proposals_from_triage("run-1", "snapshot-1", [
-        {"id": "run-1-finding-1", "agent": "cfo", "title": "Candidate", "summary": "Unreviewed."}])
-    assert [p.get("journal") for p in proposals] == [None]
-    assert [p["verified"] for p in proposals] == [False]
 
 
 def test_two_workspaces_in_one_database_both_keep_their_proposals(client):

@@ -15,7 +15,7 @@ const DEFAULT_OBJECTIVE =
 /**
  * Starting a run, and watching one happen.
  *
- * There is one mode: a run reads this school's committed records and makes
+ * There is one mode: a run reads this company's committed records and makes
  * paid model calls, or it does not start. Nothing here is rendered before the
  * service has reported it.
  */
@@ -51,7 +51,7 @@ export function StartInvestigation({ state }: { state: Investigation }) {
 
       {!state.ready && (
         <p className="mt-4 border-t border-line pt-3 text-[13.5px]">
-          There are no committed records for this school yet.{" "}
+          There are no committed records for this company yet.{" "}
           <Link href="/" className="underline">
             Add them on Books
           </Link>{" "}

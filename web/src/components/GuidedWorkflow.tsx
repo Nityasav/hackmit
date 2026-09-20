@@ -57,7 +57,7 @@ export function GuidedWorkflow({ bundle, intake }: { bundle: Bundle; intake?: In
             )}
             {guide.action !== "create" && (
               <button type="button" onClick={() => runAction("create")} className="min-h-10 border border-ink px-4 text-[13px] font-semibold hover:bg-surface-2">
-                Add another school
+                Add another company
               </button>
             )}
           </div>
