@@ -44,6 +44,21 @@ def _prepared(client):
     return ws
 
 
+def test_submission_schema_satisfies_strict_function_calling():
+    """Regression: adding memory_checks with default_factory=list made it
+    optional, and OpenAI strict function-calling rejects any schema whose
+    `properties` has a key missing from `required` — so every live run 400'd
+    while all 336 fake-response tests still passed. Fake responses never see
+    the provider's schema validation, so this asserts the rule directly."""
+    from app.agents.cfo import CfoResult
+
+    schema = CfoResult.model_json_schema()
+    assert set(schema["properties"]) == set(schema.get("required", [])), (
+        "every property must be required for strict function calling; "
+        f"missing: {set(schema['properties']) - set(schema.get('required', []))}"
+    )
+
+
 def test_no_precedent_exists_before_a_human_decides(client):
     ws = _prepared(client)
     with db.connect() as connection:

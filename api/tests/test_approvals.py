@@ -254,7 +254,7 @@ def test_a_pending_proposal_against_a_superseded_snapshot_says_so(client):
 def _triage_run(ws, snapshot, run_id="run-triage-1", source_id="s1"):
     """A completed snapshot-triage run: one agent, no independent review, no calculation."""
     output = {"analysis": {
-        "executive_briefing": "Triage briefing.", "scope_assessed": "September close.",
+        "memory_checks": [], "executive_briefing": "Triage briefing.", "scope_assessed": "September close.",
         "limitations": ["Population completeness is not verified."],
         "findings": [{"title": "Invoice may lack a receipt", "status": "hypothesized",
                       "summary": "The register shows no matching goods receipt.",

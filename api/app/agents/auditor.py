@@ -193,7 +193,10 @@ class AuditorTools(GrantsTools):
                 if not expected.issubset(self.reperformed):
                     errors.append("Acceptance requires independently rerunning the candidate's required calculations.")
             # Apply verbatim source and currency guards to review rationale and quotations too.
+            # A throwaway object built only to reuse the source/currency guards,
+            # so it carries no precedent checks of its own.
             proxy = cfo.CfoResult(executive_briefing=review.rationale, scope_assessed="Independent review",
+                                  memory_checks=[],
                                   limitations=[review.required_action], evidence_requests=[], next_tasks=[],
                                   findings=[cfo.CandidateFinding(title="Review", status="needs_evidence", summary="Evidence check",
                                              citations=review.citations, limitations=[])])

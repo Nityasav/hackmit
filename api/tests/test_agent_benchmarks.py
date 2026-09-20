@@ -87,6 +87,6 @@ def test_money_guard_never_rounds_an_unsupported_subcent_claim(client, amount):
     tools = cfo.SnapshotTools(ws)
     tools.context()
     tools.compute_ledger_totals()
-    result = cfo.CfoResult(executive_briefing=f"Total: {amount}", scope_assessed="Test",
+    result = cfo.CfoResult(memory_checks=[], executive_briefing=f"Total: {amount}", scope_assessed="Test",
                            limitations=[], findings=[], evidence_requests=[], next_tasks=[])
     assert tools.validate_result(result)

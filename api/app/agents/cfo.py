@@ -83,7 +83,12 @@ class CfoResult(StrictModel):
     findings: list[CandidateFinding] = Field(max_length=20)
     evidence_requests: list[EvidenceRequest] = Field(max_length=20)
     next_tasks: list[NextTask] = Field(max_length=20)
-    memory_checks: list[MemoryCheckClaim] = Field(default_factory=list, max_length=20)
+    # Required, not defaulted. OpenAI strict function-calling rejects a schema
+    # whose `properties` contains a key missing from `required`, so a
+    # default_factory here makes every live run fail with a 400 while
+    # fake-response tests still pass. Requiring it is also the better contract:
+    # an empty list has to be an explicit "I checked nothing", not an omission.
+    memory_checks: list[MemoryCheckClaim] = Field(max_length=20)
 
 
 class RunRequest(StrictModel):
