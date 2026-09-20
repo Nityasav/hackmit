@@ -48,20 +48,30 @@ KINDS = {
 #: options, and a model call buys nothing here but latency and a way to be wrong.
 #: Longest phrases first, so "one page summary" is not caught by "summary".
 _ASKS: tuple[tuple[str, str], ...] = (
+    # Anything that names slides is a deck, however it is counted or spelled. "Make a
+    # 2 slide report" asked for slides and got nothing, because the list held "slides"
+    # and not "slide" — a vocabulary that narrow is a vocabulary that mostly says no.
+    ("slide deck", "deck"), ("slideshow", "deck"), ("slide show", "deck"),
+    ("slides", "deck"), ("slide", "deck"), ("deck", "deck"),
+    ("presentation", "deck"), ("board pack", "deck"), ("powerpoint", "deck"),
+
     ("one-pager", "one_pager"), ("one pager", "one_pager"),
     ("one-page", "one_pager"), ("one page", "one_pager"),
     ("1-pager", "one_pager"), ("1 pager", "one_pager"),
     ("snapshot", "one_pager"), ("summary sheet", "one_pager"),
-    ("slide deck", "deck"), ("slideshow", "deck"), ("slide show", "deck"),
-    ("slides", "deck"), ("deck", "deck"), ("presentation", "deck"),
-    ("board pack", "deck"),
+    ("write-up", "one_pager"), ("write up", "one_pager"),
+    ("briefing", "one_pager"), ("report", "one_pager"),
+    ("summary", "one_pager"), ("pdf", "one_pager"),
 )
 
 #: A kind named without any of these is a mention, not a request. "The one-pager was
-#: wrong" should not silently produce a second one-pager.
+#: wrong" should not silently produce a second one-pager, and this is what carries most
+#: of the weight now that the vocabulary above is broad: "report on the payables" names
+#: a kind and asks for nothing.
 _VERBS = ("make", "create", "build", "generate", "produce", "prepare", "draft",
           "give me", "i want", "i need", "can you do", "put together", "assemble",
-          "export", "write me", "send me", "turn this into", "turn that into")
+          "export", "write me", "send me", "turn this into", "turn that into",
+          "let me have", "i'd like", "id like", "could you do", "hand me", "save as")
 
 
 def requested(message: str) -> str | None:

@@ -266,3 +266,63 @@ def test_a_run_that_escalates_nothing_never_pauses(ws):
     # insufficient_evidence does escalate by design, so this asserts the weaker and
     # more useful property: whatever it did, it is not silently pending forever.
     assert final["status"] in {"waiting_on_you", "needs_you", "completed", "no_findings"}
+
+
+# --------------------------------------------------------------------------- #
+# Two screens, one question
+# --------------------------------------------------------------------------- #
+
+def test_a_question_answered_on_the_approvals_page_still_resumes_the_run(ws):
+    """An approval row and a paused run are two halves of one question, and they can be
+    answered from two screens. Deciding on the approvals page marked it decided; coming
+    back to the chat then failed with "already approved", the graph never advanced, and
+    the run was stranded on a question that had in fact been answered.
+    """
+    final = _run(ws, _escalating_model())
+    waiting = final["waiting_on_you"]
+    assert waiting, "this needs a paused run"
+    approval_id = waiting[0]["approval_id"]
+
+    # Decided somewhere else entirely, the way the approvals page does it.
+    approvals.decide(ws, approval_id, "approved")
+
+    resumed = asyncio.run(resume_investigation(
+        ws, final["thread_id"], "approved", approval_id=approval_id,
+        client=_escalating_model()))
+
+    assert resumed["status"] != "waiting_on_you" or approval_id not in {
+        item["approval_id"] for item in resumed.get("waiting_on_you", [])}
+
+
+def test_answering_differently_from_what_is_on_record_is_refused(ws):
+    """Overwriting silently would lose a decision somebody made."""
+    final = _run(ws, _escalating_model())
+    approval_id = final["waiting_on_you"][0]["approval_id"]
+    approvals.decide(ws, approval_id, "approved")
+
+    with pytest.raises(ValueError, match="already approved"):
+        asyncio.run(resume_investigation(
+            ws, final["thread_id"], "rejected", approval_id=approval_id,
+            client=_escalating_model()))
+
+
+def test_a_decision_is_never_recorded_twice(ws):
+    """Deciding on both screens must leave one decision, not two, and one precedent."""
+    final = _run(ws, _escalating_model())
+    approval_id = final["waiting_on_you"][0]["approval_id"]
+    approvals.decide(ws, approval_id, "approved")
+
+    asyncio.run(resume_investigation(
+        ws, final["thread_id"], "approved", approval_id=approval_id,
+        client=_escalating_model()))
+
+    with db.connect() as connection:
+        decided = connection.execute(
+            "SELECT COUNT(*) FROM events WHERE ws=? AND kind='approval_decided'"
+            " AND payload LIKE ?", (ws, f'%{approval_id}%')).fetchone()[0]
+        precedents = connection.execute(
+            "SELECT COUNT(*) FROM precedents WHERE ws=? AND source_approval_id=?",
+            (ws, approval_id)).fetchone()[0]
+
+    assert decided == 1
+    assert precedents <= 1
