@@ -5,6 +5,7 @@ import { displayLabel } from "@/lib/format";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import { Deliverables } from "@/components/investigation/Deliverables";
@@ -180,9 +181,9 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           <p className="mb-4 text-sm text-ink-dim print:hidden">Produced when you ask the Chief Financial Agent for one. Every figure is computed from the ledger in exact cents; nothing on them was written by a model.</p>
           <Deliverables ws={ws} />
         </section>
-        <details className="border border-line p-5 print:hidden"><summary className="cursor-pointer font-semibold">Working briefing (.md)</summary>
+        <AnimatedDisclosure className="border border-line p-5 print:hidden" summaryClassName="font-semibold" summary="Working briefing (.md)">
           <div className="mt-4"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a></div>
-          <pre className="mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></details>
+          <pre className="mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></AnimatedDisclosure>
       </> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <AnimatedDropdown buttonClassName="h-9" value={filter} onChange={setFilter} options={[
           { value: "attention", label: "Attention + gaps" },
@@ -209,7 +210,8 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
             <FollowUpForm key={`${current.id}-${current.snapshot_id}-${current.follow_up?.version || 0}`} ws={ws} finding={current} saved={refresh} />
           </article>}</div>
       </>}
-      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</summary>
+      <AnimatedDisclosure className="border border-line p-4" summaryClassName="font-semibold"
+        summary={<>Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</>}>
         <div className="mt-3 flex flex-wrap items-end gap-3 text-xs">
           <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
           <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
@@ -228,8 +230,8 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
         {shownHistory.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
           <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
           <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${agentName(e.agent)}` : "record check, no agent"}</p>
-        </div>)}</details>
-      <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
+        </div>)}</AnimatedDisclosure>
+      <AnimatedDisclosure className="border border-line p-4" defaultOpen summaryClassName="font-semibold" summary="Scope & limitations"><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></AnimatedDisclosure>
     </>}
   </div>;
 }

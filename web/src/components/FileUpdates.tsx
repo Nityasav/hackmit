@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { intakeApi } from "@/lib/data";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 
 type Changes = {
   snapshot_id: string | null;
@@ -80,12 +81,11 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
         {changes.rules_scan_current ? "The last check covers these records." : "These records have not been checked yet."}
       </p>
       {changes.added_or_revised.length > 0 && (
-        <details>
-          <summary className="cursor-pointer text-[13px]">What changed?</summary>
+        <AnimatedDisclosure summary="What changed?" summaryClassName="text-[13px]">
           <ul className="my-2 list-disc pl-5 text-[12px]">
             {changes.added_or_revised.map((r) => <li key={r.id}>{r.role}: {r.record_key} · version {r.version}</li>)}
           </ul>
-        </details>
+        </AnimatedDisclosure>
       )}
       <label className="my-3 flex items-start gap-2 text-[13px]">
         <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />

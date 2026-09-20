@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { intakeApi, useData } from "@/lib/data";
 import type { Approval } from "@/lib/types";
 
@@ -110,10 +111,11 @@ export function Decisions() {
       )}
 
       {decided.length > 0 && (
-        <details className="mt-4">
-          <summary className="cursor-pointer text-sm">
-            Already decided ({decided.length})
-          </summary>
+        <AnimatedDisclosure
+          className="mt-4"
+          summaryClassName="text-sm"
+          summary={<>Already decided ({decided.length})</>}
+        >
           <ul className="mt-2 space-y-1 text-sm">
             {decided.map((approval) => (
               <li key={approval.id} className="border-b border-line py-1.5">
@@ -128,7 +130,7 @@ export function Decisions() {
               </li>
             ))}
           </ul>
-        </details>
+        </AnimatedDisclosure>
       )}
     </section>
   );

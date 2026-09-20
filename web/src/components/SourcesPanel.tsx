@@ -9,6 +9,7 @@ import type { IntakeUiProgress } from "@/lib/workflow";
 import { DataRequirements } from "@/components/DataRequirements";
 import { FileUpdates } from "@/components/FileUpdates";
 import { StarterPacks } from "@/components/StarterPacks";
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
@@ -272,8 +273,8 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         <p className="my-2 text-xs">{batch.counts.parsed} source rows/lines · {batch.counts.valid_records} valid records · {batch.counts.new_records} new · {batch.counts.duplicate_records} duplicates · {batch.counts.issues} issues</p>
         <p className="text-xs">Validated debit total: {(batch.totals.debit_cents / 100).toFixed(2)} · credit: {(batch.totals.credit_cents / 100).toFixed(2)} {coverage?.workspace.currency}</p>
         <p className="mt-1 text-[11px] text-ink-dim">Totals combine opening and activity files for import control only; they are not a financial statement. {batch.coverage_note}</p>
-        {batch.files.map((f) => <details key={f.id} className="mt-3 bg-surface-2 p-3">
-          <summary className="cursor-pointer font-semibold">{f.name} · {f.row_count} rows/lines {f.duplicate_of ? "· identical bytes already uploaded" : ""}</summary>
+        {batch.files.map((f) => <AnimatedDisclosure key={f.id} className="mt-3 bg-surface-2 p-3" summaryClassName="font-semibold"
+          summary={<>{f.name} · {f.row_count} rows/lines {f.duplicate_of ? "· identical bytes already uploaded" : ""}</>}>
           <button className={button + " mt-2"} onClick={() => act(() => viewSource(f.id))}>View original</button>
           {batch.status !== "committed" && draft[f.id] && <>
             <div className="my-2 grid gap-2 sm:grid-cols-3">
@@ -297,7 +298,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             <thead><tr><th className="p-1">Source line</th><th className="p-1">Normalized record (amounts in cents)</th></tr></thead>
             <tbody>{f.preview.map((row, i) => <tr key={i}><td className="p-1 align-top"><button className="text-ink underline" onClick={() => act(() => viewSource(f.id, row.locator))}>{row.locator}</button></td><td className="p-1"><pre className="max-w-[650px] whitespace-pre-wrap break-all">{JSON.stringify(row.payload, null, 2)}</pre></td></tr>)}</tbody>
           </table></div>}
-        </details>)}
+        </AnimatedDisclosure>)}
         {batch.issues.length > 0 && <ul className="mt-3 space-y-1" aria-label="Validation issues">{batch.issues.map((i, n) => <li key={n} className="bg-red-50 p-2 text-xs text-accent-bad">
           <b>{i.code}</b>: {i.message} {i.field && `(${i.field})`}
           {i.source_id !== "batch" && <button className="ml-2 underline" onClick={() => act(() => viewSource(i.source_id, i.locator || 1))}>Open source {i.locator ? `line ${i.locator}` : ""}</button>}
@@ -331,7 +332,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           </label>
         </li></ul>}
         {batch.issues_truncated && <p className="text-xs">Showing the first 500 issues; resolve these and revalidate.</p>}
-        {batch.changes.length > 0 && <details className="my-2"><summary className="font-semibold">Review {batch.changes.length} superseding record changes</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(batch.changes, null, 2)}</pre></details>}
+        {batch.changes.length > 0 && <AnimatedDisclosure className="my-2" summaryClassName="font-semibold" summary={<>Review {batch.changes.length} superseding record changes</>}><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(batch.changes, null, 2)}</pre></AnimatedDisclosure>}
         {batch.status !== "committed" ? <div className="mt-3 flex flex-wrap gap-2">
           <button disabled={busy} className={button} onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/mapping", {
             method: "PATCH", body: { expected_version: batch.version, files: draft },
@@ -361,24 +362,24 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       </div>}
 
       <div className="mt-5 space-y-3">
-        <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Committed sources ({coverage?.sources.length || 0})</summary>
+        <AnimatedDisclosure className="border border-line p-3" summaryClassName="font-semibold" summary={<>Committed sources ({coverage?.sources.length || 0})</>}>
           {!coverage?.sources.length && <p className="mt-2 text-xs text-ink-dim">No committed sources yet.</p>}
           {coverage?.sources.map((s) => <button key={s.id} className="mt-2 flex w-full justify-between gap-2 border border-line p-2 text-left text-xs hover:bg-surface-2" onClick={() => act(() => viewSource(s.id))}>
             <span>{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
           </button>)}
-        </details>
-        <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Evidence requests ({coverage?.requests.length || 0})</summary>
+        </AnimatedDisclosure>
+        <AnimatedDisclosure className="border border-line p-3" summaryClassName="font-semibold" summary={<>Evidence requests ({coverage?.requests.length || 0})</>}>
           <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
             act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
             <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
-            <AnimatedDropdown name="role" defaultValue="service" aria-label="Requested evidence role" className="w-full" options={ROLE_OPTIONS} />
+            <AnimatedDropdown name="role" defaultValue="chart" aria-label="Requested evidence role" className="w-full" options={ROLE_OPTIONS} />
             <button disabled={busy} className={button}>Add request</button>
           </form>
           {coverage?.requests.map((r) => <div key={r.id} className="mt-3 border border-line p-3">
             <b>{r.title}</b><span className="ml-2 text-xs text-ink-dim">{displayLabel(r.status)}</span>
             <AnimatedDropdown aria-label={`Attach evidence for ${r.title}`} disabled={busy} className="mt-2 w-full" value=""
-              placeholder={`Attach a committed ${ROLES[r.role].toLowerCase()} source…`}
+              placeholder={`Attach a committed ${(ROLES[r.role] ?? r.role).toLowerCase()} source…`}
               options={coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => ({ value: s.id, label: s.name }))}
               onChange={(id) => {
                 if (!id) return;
@@ -388,7 +389,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
               }} />
             {r.source_id && <button className="mt-1 text-xs text-ink underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
           </div>)}
-        </details>
+        </AnimatedDisclosure>
       </div>
     </>}
 

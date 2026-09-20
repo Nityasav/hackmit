@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AnimatedDisclosure } from "@/components/ui/animated-disclosure";
 import { intakeApi } from "@/lib/api";
 import type { Coverage, DataRequirement } from "@/lib/types";
 
@@ -45,10 +46,13 @@ export function DataRequirements({
 
   return (
     <section className="mt-4" aria-label="What the agents need">
-      <details className="border border-line p-3">
-        <summary className="cursor-pointer text-sm font-semibold">What the agents need
+      <AnimatedDisclosure
+        className="border border-line p-3"
+        summaryClassName="text-sm font-semibold"
+        summary={<>What the agents need
           <span className="ml-3 text-xs font-normal text-ink-dim">{coverage.satisfied_count}/{coverage.required_count} required items supplied · {missingRequired.length} remaining</span>
-        </summary>
+        </>}
+      >
 
       {missingRequired.length === 0 && (
         <p className="mt-2 max-w-prose text-xs text-ink-dim">
@@ -57,8 +61,12 @@ export function DataRequirements({
         </p>
       )}
 
-      {groups.map(group => <details key={group.label} className="mt-3 border-t border-line pt-3">
-        <summary className="cursor-pointer text-xs font-semibold">{group.label} ({group.items.length})</summary>
+      {groups.map(group => <AnimatedDisclosure
+        key={group.label}
+        className="mt-3 border-t border-line pt-3"
+        summaryClassName="text-xs font-semibold"
+        summary={<>{group.label} ({group.items.length})</>}
+      >
         <div className="mt-3 grid items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {group.items.map((requirement) =>
           requirement.kind === "setting" ? (
@@ -68,8 +76,8 @@ export function DataRequirements({
           ),
         )}
         </div>
-      </details>)}
-      </details>
+      </AnimatedDisclosure>)}
+      </AnimatedDisclosure>
     </section>
   );
 }

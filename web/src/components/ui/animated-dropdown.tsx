@@ -103,9 +103,16 @@ export function AnimatedDropdown({
       <button
         type="button"
         disabled={disabled}
+        // A button's implicit role does not take aria-activedescendant, so the active option went
+        // unannounced. The combobox role is the one that carries it, and it is what a collapsed
+        // select-like control is meant to be.
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        // Without this the highlighted row is visible but unannounced: a screen reader follows
+        // focus, which stays on the trigger while the arrow keys move through the list.
+        aria-activedescendant={open && options[active] ? `${listId}-${active}` : undefined}
         aria-label={ariaLabel}
         onClick={() => setOpen((was) => !was)}
         onKeyDown={onKeyDown}
@@ -151,6 +158,7 @@ export function AnimatedDropdown({
               {options.map((option, index) => (
                 <motion.button
                   key={option.value}
+                  id={`${listId}-${index}`}
                   type="button"
                   role="option"
                   aria-selected={option.value === selected}
