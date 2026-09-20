@@ -266,10 +266,53 @@ def infer(model, doc):
         _inference_slots.release()
 
 
+def sync_configured_models(c, ws: str) -> None:
+    """Register the server's configured extractors against this workspace.
+
+    Which extractors exist is a property of the server — `SCHOOLTRACE_EXTRACTORS`
+    names them and `model_config` re-validates one on every call — so requiring
+    a separate registration per workspace added a manual step that guarded
+    nothing. A new company could upload a PDF and find the lab quietly unable
+    to read it, with registration the missing step and no way to know.
+
+    Registering is not promoting. This makes a model *selectable*; making one
+    the silent default still requires passing the policy gate, which is where
+    the judgement about whether it is good enough actually belongs.
+
+    It also repairs a registration whose config has moved. A registration
+    records the exact weights and endpoint it was made against, so restarting
+    the extractor on another port leaves the old row naming weights that are no
+    longer being served, and `infer` correctly refuses it. Re-registering under
+    the current config is the fix, and there is no reason a person should have
+    to know that.
+
+    A configuration that does not validate is skipped rather than raised: a
+    broken extractor entry should not take the whole documents screen down.
+    """
+    retired = {r["model_id"] for r in items(c, ws, "retirement")}
+    known = {(m["name"], m["config_hash"]) for m in items(c, ws, "model")
+             if m["id"] not in retired}
+    for name in json.loads(os.environ.get("SCHOOLTRACE_EXTRACTORS", "{}")):
+        try:
+            config = model_config(name)
+        except HTTPException:
+            continue
+        if (name, digest(config)) in known:
+            continue
+        put(c, ws, "model", {
+            "name": name, "config_hash": digest(config),
+            "manifest": {k: v for k, v in config.items() if k != "endpoint"},
+            "note": "Registered automatically from the extractors this server is "
+                    "configured with. Nobody has evaluated it here: it is selectable "
+                    "per document, not the default.",
+        }, "server configuration")
+
+
 @router.get("")
 def overview(ws: str, request: Request):
     with db.connect() as c:
         ingestion.workspace(c, ws)
+        sync_configured_models(c, ws)
         docs = [document(c, ws, r[0]) for r in c.execute("SELECT id FROM extraction_documents WHERE ws=? ORDER BY rowid DESC", (ws,))]
         active = c.execute("SELECT * FROM extraction_active WHERE ws=?", (ws,)).fetchone()
         history = {kind: items(c, ws, kind) for kind in ("prediction", "correction", "dataset", "model", "evaluation", "release", "staging", "retirement", "benchmark_job")}
