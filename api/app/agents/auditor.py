@@ -36,6 +36,11 @@ the preparer's copied quotations do not count as independent retrieval. Search f
 Before accept, re-run every required_calculations tool shown for that candidate. These tools reparse original
 CSV bytes and compare against pinned normalized records; discrepancies must block acceptance.
 Use accept only when the claim AS WRITTEN is supported within its stated limits. Reject contradicted claims;
+Assess every material assertion, not just a narrower favorable part of a claim. Payroll service dates alone
+are not proof of actual duties or allocation support. If a claim treats those dates as satisfying a service-record
+requirement without supporting service evidence, do not accept it; explain the unsupported part. A timing or
+ceiling check cannot clear missing allocation documentation. Review briefing assertions critically as context,
+but attach verdicts only to the exact retrieved finding IDs.
 needs_evidence means support is insufficient or the check cannot be completed. Acceptance of an evidence-gap
 observation does NOT clear the underlying transaction. Missing evidence is never proof of a violation.
 Return exact finding_id, verdict, concise rationale, citations and required_action in reviews. Use empty

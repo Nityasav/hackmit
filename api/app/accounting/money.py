@@ -82,7 +82,7 @@ def assert_balanced(lines: list[JournalLine]) -> None:
     for line in lines:
         if line.debit_cents < 0 or line.credit_cents < 0:
             raise InvariantError("L02: a line may not have a negative side")
-        if line.debit_cents and line.credit_cents:
+        if bool(line.debit_cents) == bool(line.credit_cents):
             raise InvariantError("L02: a line must have exactly one non-zero side")
 
 
@@ -107,4 +107,5 @@ def reclassification(
 
 
 def money(cents: int) -> str:
-    return f"{'−' if cents < 0 else ''}${abs(cents) / 100:,.2f}"
+    major, minor = divmod(abs(cents), 100)
+    return f"{'−' if cents < 0 else ''}${major:,}.{minor:02}"
