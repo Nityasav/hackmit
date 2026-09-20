@@ -116,7 +116,7 @@ def test_a_sentence_reaches_the_organization_and_comes_back_answered(client, ws,
     reply = response.json()["reply"]
     assert reply["routed_to"] == ["Treasurer"]
     assert reply["findings"]
-    assert reply["thread_id"]
+    assert reply["run_id"]
 
 
 def test_a_question_that_stops_for_a_person_can_be_answered_and_the_run_continues(
@@ -132,8 +132,9 @@ def test_a_question_that_stops_for_a_person_can_be_answered_and_the_run_continue
     assert queue.status_code == 200
     assert queue.json()["count"] >= 1
 
+    # Addressed to the run, not the conversation: the investigation is what paused.
     answered = client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
-        "thread_id": started["thread_id"], "decision": "approved",
+        "thread_id": started["run_id"], "decision": "approved",
         "approval_id": waiting[0]["approval_id"]})
 
     assert answered.status_code == 200, answered.text
@@ -147,7 +148,7 @@ def test_one_answer_does_not_resolve_a_question_it_was_not_given_for(client, ws,
     assert len(started["reply"]["escalations"]) > 1, "this needs more than one question"
 
     response = client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
-        "thread_id": started["thread_id"], "decision": "approved"})
+        "thread_id": started["run_id"], "decision": "approved"})
 
     assert response.status_code == 409, response.text
     assert "ambiguous_decision" in response.text
@@ -334,7 +335,7 @@ def test_the_document_is_made_after_the_run_not_before(client, ws, monkeypatch):
     document = client.get(
         f"/api/workspaces/{ws}/deliverables/{body['reply']['deliverable']['id']}").json()
 
-    assert document["thread_id"] == body["thread_id"]
+    assert document["thread_id"] == body["run_id"]
     assert document["payload"]["records"] > 0
 
 
@@ -370,3 +371,75 @@ def test_every_field_the_escalation_card_renders_is_sent(client, ws, monkeypatch
     for field in ("approval_id", "agent", "title", "summary", "reasons"):
         assert field in waiting, field
     assert isinstance(waiting["reasons"], list)
+
+
+def test_a_question_already_answered_says_so_instead_of_no_paused_run(client, ws, monkeypatch):
+    """"No paused run with that thread id" is true and useless. The usual cause is a
+    question already answered — from the other screen, or from a card left on an older
+    message — and a person reading that has no idea whether their decision landed."""
+    from app import approvals
+
+    _scripted(monkeypatch, "insufficient")
+    started = talk(client, ws, "Review payables and cash.").json()
+    waiting = started["reply"]["escalations"]
+    assert waiting
+
+    for question in waiting:
+        approvals.decide(ws, question["approval_id"], "approved")
+    # And the run itself is carried past them, the way answering in the chat does.
+    client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
+        "thread_id": started["run_id"], "decision": "approved",
+        "approval_id": waiting[0]["approval_id"]})
+
+    response = client.post(f"/api/workspaces/{ws}/agents/escalations/decide", json={
+        "thread_id": started["run_id"], "decision": "approved",
+        "approval_id": waiting[0]["approval_id"]})
+
+    assert response.status_code in (200, 409), response.text
+    if response.status_code == 409:
+        assert "already approved" in response.text
+        assert "nothing needs doing again" in response.text.lower()
+
+
+def test_the_queue_is_what_says_a_question_is_still_open(client, ws, monkeypatch):
+    """The escalations inside a turn are frozen when the reply is written. The screen
+    reads the live queue to decide which still have buttons, so this has to stay the
+    authoritative answer to "is this outstanding"."""
+    from app import approvals
+
+    _scripted(monkeypatch, "insufficient")
+    started = talk(client, ws, "Review payables and cash.").json()
+    first = started["reply"]["escalations"][0]["approval_id"]
+
+    before = client.get(f"/api/workspaces/{ws}/agents/escalations").json()["escalations"]
+    approvals.decide(ws, first, "approved")
+    after = client.get(f"/api/workspaces/{ws}/agents/escalations").json()["escalations"]
+
+    assert first in {item["approval_id"] for item in before}
+    assert first not in {item["approval_id"] for item in after}
+
+
+def test_a_second_message_starts_its_own_investigation(client, ws, monkeypatch):
+    """A conversation and a run are not the same thing. They shared one id, so every
+    message resumed the previous run's checkpoint instead of starting its own."""
+    _scripted(monkeypatch)
+
+    first = talk(client, ws, "Review payables and cash.").json()
+    second = talk(client, ws, "And check the bank.",
+                  thread_id=first["thread_id"]).json()
+
+    assert second["thread_id"] == first["thread_id"], "the exchange continues"
+    assert second["run_id"] != first["run_id"], "the investigation does not"
+
+
+def test_a_turn_names_the_run_a_decision_should_be_addressed_to(client, ws, monkeypatch):
+    """The browser answers a question against the run, never the conversation: only one
+    investigation is paused on it."""
+    _scripted(monkeypatch)
+    body = talk(client, ws, "Review payables and cash.").json()
+
+    turns = client.get(f"/api/workspaces/{ws}/chat").json()["turns"]
+
+    assert body["reply"]["run_id"] == body["run_id"]
+    assert all(turn["run_id"] for turn in turns)
+    assert turns[-1]["run_id"] == body["run_id"]

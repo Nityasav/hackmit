@@ -22,6 +22,40 @@ def _merge_dicts(left: dict, right: dict) -> dict:
     return {**left, **right}
 
 
+def _add_once(left: list, right: list) -> list:
+    """Append what is new, and never a conclusion already in the list.
+
+    A checkpointed graph replays. Resuming an interrupt re-runs the node that raised it,
+    and invoking a thread again re-applies writes the checkpoint already holds — so a
+    plain `operator.add` concatenated the same findings on every resume. Three
+    conclusions became the same three twice, then four times, and the counts built on
+    them ("3 conclusions recorded") inflated with them.
+
+    A decision id names one recorded decision, so identity is exact and this is a
+    deduplication rather than a guess. Order is preserved: the first sighting wins, and
+    a later copy is dropped rather than replacing it.
+    """
+    combined = list(left)
+    seen = {item.get("decision_id") for item in combined if item.get("decision_id")}
+    for item in right:
+        identity = item.get("decision_id")
+        if identity and identity in seen:
+            continue
+        if identity:
+            seen.add(identity)
+        combined.append(item)
+    return combined
+
+
+def _union(left: list, right: list) -> list:
+    """Append, keeping each value once. For plain id lists that replay the same way."""
+    combined = list(left)
+    for item in right:
+        if item not in combined:
+            combined.append(item)
+    return combined
+
+
 def _keep_first(left: Any, right: Any) -> Any:
     """For values set once at the start of a run and never legitimately changed.
 
@@ -75,9 +109,11 @@ class RunState(TypedDict, total=False):
     event_ids: list[str]
 
     # --- accumulated by concurrent agents ---------------------------------
-    findings: Annotated[list[Finding], operator.add]
-    events_touched: Annotated[list[str], operator.add]
-    unresolved: Annotated[list[str], operator.add]
+    findings: Annotated[list[Finding], _add_once]
+    events_touched: Annotated[list[str], _union]
+    # Unions too: a replayed branch re-reports the same gap, and the same sentence
+    # twice on a screen reads as two problems.
+    unresolved: Annotated[list[str], _union]
     #: agent id -> its raw result, for the run detail view.
     results: Annotated[dict[str, dict], _merge_dicts]
 

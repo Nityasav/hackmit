@@ -74,13 +74,24 @@ def _process(data, suffix, page_number=None):
                         page.close()
                 method, warnings = "native", []
                 if len(text.strip()) < 20:
-                    from rapidocr_onnxruntime import RapidOCR
+                    # `rapidocr`, not `rapidocr_onnxruntime`: the older package is
+                    # capped at Python <3.13 and 1.4.4 was its last release, so on
+                    # 3.14 it cannot be installed at all and every scanned page
+                    # failed to decode. The successor supports >=3.8 and returns
+                    # the lines on `.txts` rather than as rows to index into.
+                    from rapidocr import RapidOCR
                     import numpy as np
                     if ocr is None:
-                        ocr = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+                        # One thread each, as before. This runs inside a spawned
+                        # worker with a wall-clock timeout, and letting the runtime
+                        # take every core starves the request that is waiting on it.
+                        ocr = RapidOCR(params={
+                            "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+                            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+                        })
                     im = _render(pdf, index) if pdf else _image(data)
-                    result, _ = ocr(np.asarray(im)[:, :, ::-1])
-                    text = "\n".join(row[1] for row in result or [])
+                    result = ocr(np.asarray(im)[:, :, ::-1])
+                    text = "\n".join(getattr(result, "txts", None) or [])
                     method = "ocr"
                     warnings = ["OCR transcription requires comparison with the original page."]
                 if not text.strip():

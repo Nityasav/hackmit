@@ -31,6 +31,10 @@ function reason(error: unknown, fallback: string) {
 
 export function Orchestrator({ ws }: { ws: string }) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  // Which questions are *still* open, read live. The escalations inside a turn are
+  // frozen at the moment the reply was written, so a question answered since — here,
+  // or on the approvals page — kept offering buttons that could only fail.
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,8 +42,12 @@ export function Orchestrator({ ws }: { ws: string }) {
   const bottom = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const body = await intakeApi<{ turns: ChatTurn[] }>(`/api/workspaces/${ws}/chat`);
+    const [body, queue] = await Promise.all([
+      intakeApi<{ turns: ChatTurn[] }>(`/api/workspaces/${ws}/chat`),
+      intakeApi<{ escalations: Escalation[] }>(`/api/workspaces/${ws}/agents/escalations`),
+    ]);
     setTurns(body.turns);
+    setOpen(new Set(queue.escalations.map((item) => item.approval_id)));
   }, [ws]);
 
   useEffect(() => {
@@ -82,13 +90,14 @@ export function Orchestrator({ ws }: { ws: string }) {
     }
   }
 
-  async function decide(threadId: string, approvalId: string, decision: "approved" | "rejected") {
+  // `runId`, not the conversation: the paused investigation is what resumes.
+  async function decide(runId: string, approvalId: string, decision: "approved" | "rejected") {
     setDeciding(approvalId);
     setError("");
     try {
       await intakeApi(`/api/workspaces/${ws}/agents/escalations/decide`, {
         method: "POST",
-        body: { thread_id: threadId, approval_id: approvalId, decision },
+        body: { thread_id: runId, approval_id: approvalId, decision },
       });
     } catch (e) {
       setError(reason(e, "The decision was not recorded"));
@@ -124,8 +133,10 @@ export function Orchestrator({ ws }: { ws: string }) {
             <Reply
               key={turn.id}
               turn={turn}
+              open={open}
               deciding={deciding}
-              onDecide={(approvalId, decision) => void decide(turn.thread_id, approvalId, decision)}
+              onDecide={(approvalId, decision) =>
+                void decide(turn.run_id || turn.thread_id, approvalId, decision)}
             />
           ),
         )}
@@ -165,15 +176,21 @@ export function Orchestrator({ ws }: { ws: string }) {
 
 function Reply({
   turn,
+  open,
   deciding,
   onDecide,
 }: {
   turn: ChatTurn;
+  open: Set<string>;
   deciding: string;
   onDecide: (approvalId: string, decision: "approved" | "rejected") => void;
 }) {
   const body = turn.body as ChatReply & { text: string; code?: string };
-  const waiting = body.escalations ?? [];
+  const asked = body.escalations ?? [];
+  // Only what is still open gets buttons. The rest is shown as answered rather than
+  // removed: a question that vanishes leaves a person unsure it was ever theirs.
+  const waiting = asked.filter((item) => open.has(item.approval_id));
+  const settled = asked.filter((item) => !open.has(item.approval_id));
   const findings = body.findings ?? [];
 
   return (
@@ -193,7 +210,7 @@ function Reply({
       {findings.length > 0 && (
         <ul className="mt-3 space-y-2">
           {findings.map((finding) => (
-            <li key={finding.decision_id ?? finding.agent_id} className="border-l-2 border-line pl-3">
+            <li key={`${turn.id}-${finding.decision_id ?? finding.agent_id}`} className="border-l-2 border-line pl-3">
               <p className="text-[13px] font-semibold">
                 {finding.agent_name}
                 {finding.confidence !== null && finding.confidence !== undefined && (
@@ -215,6 +232,13 @@ function Reply({
           busy={deciding === question.approval_id}
           onDecide={(decision) => onDecide(question.approval_id, decision)}
         />
+      ))}
+
+      {settled.map((question) => (
+        <p key={question.approval_id} className="mt-3 border-l-2 border-line pl-3 text-[13px] text-ink-dim">
+          {question.agent?.name ?? "An agent"} asked about this and it has since been
+          answered. Nothing is outstanding.
+        </p>
       ))}
 
       {body.deliverable && (

@@ -87,8 +87,9 @@ function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fi
 /**
  * Getting a PDF into the books.
  *
- * A scan or a photo needs character recognition, which is not installed here,
- * so those are refused at upload rather than guessed at.
+ * A scanned PDF carrying no text layer is read by character recognition
+ * instead, and the page records that it was, so a reviewer checking the values
+ * knows the text is a reading of the page rather than the page itself.
  *
  * A document is preserved byte for byte, read into page text, and then a person
  * checks every extracted value against the page it came from before any of it
@@ -301,10 +302,10 @@ function Lab({ ws }: { ws: string }) {
       </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
         {!state.model.length && <p className="my-2 max-w-prose text-[12.5px] text-amber-800">
-          No extraction model is registered for this company, so the values cannot be read
-          automatically — a model is registered per company, and a new one starts without. You can
-          still check every value against the pages yourself below, which is the same review a
-          model&rsquo;s output would need anyway.
+          This server has no extraction model configured, so the values cannot be read
+          automatically. You can still check every value against the pages yourself below, which
+          is the same review a model&rsquo;s output would need anyway — a model produces a first
+          draft, never an accepted answer.
         </p>}
         <div className="my-3 flex flex-wrap gap-2"><AnimatedDropdown aria-label="Extraction model" buttonClassName="min-h-11" placeholder={`Active model ${state.active ? `(${state.active.model_id})` : "— none configured"}`} options={[{ value: "", label: `Active model ${state.active ? `(${state.active.model_id})` : "— none configured"}` }, ...availableModels.map(m => ({ value: m.id, label: m.name }))]} value={model} onChange={setModel} />
           {/* The local model takes roughly half a minute per document, so this

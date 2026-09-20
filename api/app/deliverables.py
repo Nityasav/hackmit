@@ -59,9 +59,12 @@ _ASKS: tuple[tuple[str, str], ...] = (
     ("one-page", "one_pager"), ("one page", "one_pager"),
     ("1-pager", "one_pager"), ("1 pager", "one_pager"),
     ("snapshot", "one_pager"), ("summary sheet", "one_pager"),
-    ("write-up", "one_pager"), ("write up", "one_pager"),
-    ("briefing", "one_pager"), ("report", "one_pager"),
-    ("summary", "one_pager"), ("pdf", "one_pager"),
+    ("write up", "one_pager"), ("briefing", "one_pager"),
+    ("report", "one_pager"), ("summary", "one_pager"), ("pdf", "one_pager"),
+    ("page", "one_pager"), ("pager", "one_pager"),
+    # A kind nobody named. Asking for "a deliverable" is asking for the default one
+    # rather than for nothing, and refusing on a technicality helps no one.
+    ("deliverable", "one_pager"), ("document", "one_pager"), ("handout", "one_pager"),
 )
 
 #: A kind named without any of these is a mention, not a request. "The one-pager was
@@ -74,6 +77,30 @@ _VERBS = ("make", "create", "build", "generate", "produce", "prepare", "draft",
           "let me have", "i'd like", "id like", "could you do", "hand me", "save as")
 
 
+#: Counts people put in front of a kind. "A 2 slide report" and "a two slide report"
+#: are the same request, and a vocabulary that reads one and not the other is a
+#: vocabulary that mostly says no. The number itself is not honoured — a deck has the
+#: slides its content needs — so it is removed rather than parsed.
+_COUNTS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+           "a couple of", "a few", "several", "single", "short", "brief", "quick")
+
+
+def _normalised(message: str) -> str:
+    """The sentence with counts and punctuation flattened, for matching only.
+
+    Digits become spaces and written counts are dropped, so "1 page", "2-slide" and "a
+    few slides" all reduce to the kind being asked for. Nothing here changes what is
+    produced; it only decides what the person meant.
+    """
+    text = (message or "").lower()
+    text = "".join(" " if character.isdigit() else character for character in text)
+    for separator in ("-", "/", ",", ".", "!", "?", ";", ":"):
+        text = text.replace(separator, " ")
+    for count in _COUNTS:
+        text = text.replace(f" {count} ", " ")
+    return " " + " ".join(text.split()) + " "
+
+
 def requested(message: str) -> str | None:
     """Which deliverable this sentence asks for, or None.
 
@@ -81,8 +108,9 @@ def requested(message: str) -> str | None:
     their books has not asked for a document, and producing one anyway fills a screen
     with artifacts nobody wanted and makes the ones they did want harder to find.
     """
-    text = (message or "").lower()
-    kind = next((k for phrase, k in _ASKS if phrase in text), None)
+    text = _normalised(message)
+    kind = next((k for phrase, k in _ASKS if f" {phrase} " in text
+                 or phrase in text.replace(" ", "")), None)
     if kind is None:
         return None
     return kind if any(verb in text for verb in _VERBS) else None
