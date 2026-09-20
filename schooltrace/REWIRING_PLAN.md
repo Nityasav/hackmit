@@ -220,7 +220,17 @@ and rejecting it records the reason.
 
 ---
 
-## Phase 5 — Agent board
+## Phase 5 — Agent board — **DONE**
+
+Step 1 went further than planned: the board was the only consumer of `kanban.tsx`, `badge-2.tsx`,
+`button-1.tsx` and `avatar.tsx`, all of which arrived with the template. Once the board stopped
+dragging, dnd-kit had no purpose, so 1,232 lines of unused vendor component and three dependencies
+went with it. The board is built from the app's own primitives instead.
+
+Outstanding: **the rendering has not been checked in a browser.** TypeScript, lint and the
+production build pass, and the data path was proven end to end in Phase 2, but no one has looked at
+the page.
+
 
 1. Delete the template body of `web/src/app/board/page.tsx` (the hardcoded `columns` state at
    `:108`). Keep the `Kanban` primitives from `components/ui/kanban` — they are fine, only the data
