@@ -71,7 +71,7 @@ function AuthForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-6">
       <div className="w-full max-w-[400px]">
-        <div className="mb-5 flex items-center gap-3"><SherlockMark size={54} /><div><h1 className="text-3xl font-semibold tracking-tight">Sherlock</h1><p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-ink-dim">Follow the evidence.</p></div></div>
+        <div className="mb-5 flex items-center gap-3"><SherlockMark size={42} /><div><h1 className="text-3xl font-semibold leading-none tracking-[-0.035em]">Sherlock</h1><p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-ink-dim">Follow the evidence.</p></div></div>
         <p className="mt-2 font-accent text-[14px] text-ink-dim">
           An Office of the CFO for schools, run by AI agents.
         </p>

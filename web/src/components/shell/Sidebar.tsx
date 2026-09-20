@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import {
   Bot,
   Brain,
+  Settings,
   FileSearch,
   FileText,
   LayoutDashboard,
@@ -91,14 +92,15 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
   const current = workspaces[currentIndex] ?? { name: bundle.workspace.name, short: initials(bundle.workspace.name) };
   const nextWorkspace = workspaces[(currentIndex + 1) % workspaces.length];
 
-  const links = TABS.map((tab) => ({
+  const primaryTabs = [TABS[0], { id: "workflows" as const, label: "Scan", href: "/scan" }, TABS[3], { ...TABS[4], label: "Follow-up" }, TABS[5]];
+  const links = primaryTabs.map((tab) => ({
     id: tab.id,
     label: tab.label,
     href: tab.href,
     icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
     active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows", "learning"].includes(tab.id)),
-    badge: tab.id === "approvals" && pending > 0 ? String(pending) : tab.tag,
+    disabled: tab.href !== "/scan" && bundle.workspace.disabled_tabs.includes(tab.id) && !(bundle.workspace.intake && ["approvals", "workflows", "learning"].includes(tab.id)),
+    badge: tab.id === "approvals" && !bundle.workspace.intake && pending > 0 ? String(pending) : undefined,
   }));
 
   return (
@@ -147,7 +149,7 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
                   {link.badge}
                 </motion.span>
               )}
-              {link.id === "approvals" && pending > 0 && !open && (
+              {link.id === "approvals" && !bundle.workspace.intake && pending > 0 && !open && (
                 <span className="pointer-events-none absolute left-1/2 top-0.5 ml-[7px] h-2 w-2 rounded-none bg-ink ring-2 ring-surface-2" />
               )}
             </div>
@@ -156,6 +158,8 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
       </div>
 
       <div className="flex flex-col gap-1">
+        <SidebarLink link={{ label: "Documents & model tools", href: "/documents", icon: <Brain className="h-7 w-7 shrink-0 p-1 text-ink-dim" /> }} />
+        <SidebarLink link={{ label: "Access & data", href: "/access", icon: <Settings className="h-7 w-7 shrink-0 p-1 text-ink-dim" /> }} />
         <SidebarLink
           link={{
             label: bundle.workspace.intake ? "Five-agent review & activity" : `${bundle.agents.length} agents · ${bundle.workspace.model}`,
@@ -218,11 +222,11 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <SherlockMark size={30} />
+      <SherlockMark size={28} />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="whitespace-pre font-medium text-ink"
+        className="whitespace-nowrap text-xl font-semibold leading-none tracking-[-0.035em] text-ink"
       >
         Sherlock
       </motion.span>
@@ -237,7 +241,7 @@ export const LogoIcon = () => {
       aria-label="Sherlock home"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <SherlockMark size={30} />
+      <SherlockMark size={28} />
     </Link>
   );
 };
