@@ -116,8 +116,19 @@ class Narrative(Contract):
 class Limits(Contract):
     max_tasks: int = Field(default=8, ge=1, le=8)
     concurrency: int = Field(default=2, ge=1, le=2)
-    tool_calls_per_agent_task: int = Field(default=12, ge=1, le=24)
-    max_tool_calls: int = Field(default=100, ge=1, le=300)
+    #: Charged per actor per task, so a preparer and the auditor reviewing it
+    #: each get this many. 12 was set for the preparer's own work and is too
+    #: small for the reviewer: reperforming one claim costs a fresh read of
+    #: every cited source plus a recalculation, so five claims exhausts it and
+    #: the task fails with BudgetExceeded mid-review — taking any task that
+    #: depends on it down as blocked. The reviewer is the expensive actor
+    #: because it is not allowed to trust what it is reviewing.
+    tool_calls_per_agent_task: int = Field(default=24, ge=1, le=24)
+    #: Raised with it, so the run-level cap does not simply become the next
+    #: thing to fail on: six actor-task pairs at 24 each can ask for 144.
+    #: These are local source reads and recalculations, not model calls —
+    #: `max_model_calls` is what bounds spend, and it is unchanged.
+    max_tool_calls: int = Field(default=150, ge=1, le=300)
     review_cycles: int = Field(default=2, ge=1, le=2)
     call_timeout_s: float = Field(default=60, gt=0, le=180)
     max_model_calls: int = Field(default=12, ge=2, le=30)
