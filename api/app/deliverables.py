@@ -23,7 +23,10 @@ figures on it were derived, and the same inputs give the same page.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import json
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from . import db, ingestion, roles as role_registry
 from .accounting import accruals, close, controls, reconcile, statements, variance
@@ -34,13 +37,53 @@ router = APIRouter(prefix="/api/workspaces/{ws}", tags=["Deliverables"])
 #: being one page. The rest are counted, never silently dropped.
 PAGE_LIMIT = 6
 
+#: What can be asked for, and what each is called once it exists.
+KINDS = {
+    "one_pager": "One-page snapshot",
+    "deck": "Board deck",
+}
 
-@router.get("/deliverables/snapshot")
-def snapshot(ws: str):
-    """The period on one page: result, position, close, exceptions, drivers.
+#: Phrases that name a kind. Matched rather than inferred by a model, for the same
+#: reason the orchestrator routes on keywords: this is a choice between two known
+#: options, and a model call buys nothing here but latency and a way to be wrong.
+#: Longest phrases first, so "one page summary" is not caught by "summary".
+_ASKS: tuple[tuple[str, str], ...] = (
+    ("one-pager", "one_pager"), ("one pager", "one_pager"),
+    ("one-page", "one_pager"), ("one page", "one_pager"),
+    ("1-pager", "one_pager"), ("1 pager", "one_pager"),
+    ("snapshot", "one_pager"), ("summary sheet", "one_pager"),
+    ("slide deck", "deck"), ("slideshow", "deck"), ("slide show", "deck"),
+    ("slides", "deck"), ("deck", "deck"), ("presentation", "deck"),
+    ("board pack", "deck"),
+)
 
-    Deterministic and free. Nothing here calls a model, so a person can regenerate this
-    as often as they like and get the same document from the same books.
+#: A kind named without any of these is a mention, not a request. "The one-pager was
+#: wrong" should not silently produce a second one-pager.
+_VERBS = ("make", "create", "build", "generate", "produce", "prepare", "draft",
+          "give me", "i want", "i need", "can you do", "put together", "assemble",
+          "export", "write me", "send me", "turn this into", "turn that into")
+
+
+def requested(message: str) -> str | None:
+    """Which deliverable this sentence asks for, or None.
+
+    None is the common case and the important one. A person asking a question about
+    their books has not asked for a document, and producing one anyway fills a screen
+    with artifacts nobody wanted and makes the ones they did want harder to find.
+    """
+    text = (message or "").lower()
+    kind = next((k for phrase, k in _ASKS if phrase in text), None)
+    if kind is None:
+        return None
+    return kind if any(verb in text for verb in _VERBS) else None
+
+
+def figures_for(ws: str) -> dict:
+    """Everything any deliverable draws on: result, position, close, exceptions, drivers.
+
+    Deterministic and free. Nothing here calls a model, so the same books give the same
+    document every time — which is what makes freezing one at a moment meaningful rather
+    than arbitrary.
     """
     config = ingestion.workspace_config(ws)
     records = ingestion.financial_records(ws)["records"]
@@ -139,4 +182,100 @@ def snapshot(ws: str):
             "Every figure was computed from the ledger in exact cents. No figure on this "
             "page was written by a language model.",
         ],
+    }
+
+
+class Request(BaseModel):
+    kind: str = Field(min_length=1, max_length=40)
+    #: The sentence that asked for it, kept so a document can say why it exists.
+    requested_by: str = Field(default="", max_length=2000)
+    thread_id: str = Field(default="", max_length=100)
+
+
+def create(ws: str, kind: str, *, requested_by: str = "", thread_id: str = "") -> dict:
+    """Build one deliverable and freeze it.
+
+    The figures are stored, not a pointer to recompute them. A document is of a moment:
+    regenerating it next week from the same title gives a different document, and two of
+    those saying different things is exactly what a dated, filed report exists to avoid.
+    """
+    if kind not in KINDS:
+        raise HTTPException(422, f"No such deliverable: {kind!r}. "
+                                 f"Available: {', '.join(sorted(KINDS))}.")
+    payload = figures_for(ws)
+    if not payload["records"]:
+        raise HTTPException(409, "There are no committed records to report on. Commit "
+                                 "this company's books first.")
+    row = {
+        "id": db.uid("doc"),
+        "kind": kind,
+        "title": f"{KINDS[kind]} · {payload['workspace']['period']}",
+        "requested_by": requested_by,
+        "thread_id": thread_id,
+        "snapshot_id": payload["snapshot_id"],
+        "created_at": db.now(),
+    }
+    with db.connect() as connection:
+        connection.execute(
+            "INSERT INTO deliverables (id, ws, kind, title, requested_by, thread_id,"
+            " payload, snapshot_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (row["id"], ws, kind, row["title"], requested_by, thread_id,
+             db.encode(payload), row["snapshot_id"], row["created_at"]))
+    return row | {"payload": payload}
+
+
+@router.post("/deliverables", status_code=201)
+def make(ws: str, body: Request):
+    """Produce a deliverable. Free and instant: no model is called."""
+    ingestion.workspace_config(ws)
+    return create(ws, body.kind, requested_by=body.requested_by, thread_id=body.thread_id)
+
+
+@router.get("/deliverables")
+def listing(ws: str, limit: int = 50):
+    """What has been produced for this company, newest first.
+
+    Nothing is produced on its own. An empty list means nobody asked for anything, which
+    is a different statement from having nothing to say.
+    """
+    ingestion.workspace_config(ws)
+    current = ingestion.coverage(ws).get("snapshot") or {}
+    with db.connect() as connection:
+        rows = connection.execute(
+            "SELECT id, kind, title, requested_by, thread_id, snapshot_id, created_at"
+            " FROM deliverables WHERE ws=? ORDER BY rowid DESC LIMIT ?",
+            (ws, min(limit, 200))).fetchall()
+    return {
+        "deliverables": [
+            dict(row) | {
+                # A document drawn from records that have since been superseded is not
+                # wrong, it is historical — and saying which is the reader's business.
+                "stale": bool(current.get("id")) and row["snapshot_id"] != current["id"],
+                "kind_label": KINDS.get(row["kind"], row["kind"]),
+            } for row in rows],
+        "kinds": [{"id": k, "label": v} for k, v in sorted(KINDS.items())],
+        "note": "Nothing is produced unless it was asked for. An empty list means nobody "
+                "asked, not that there is nothing to report.",
+    }
+
+
+@router.get("/deliverables/{document_id}")
+def read(ws: str, document_id: str):
+    """One deliverable, exactly as it was when it was made."""
+    ingestion.workspace_config(ws)
+    current = ingestion.coverage(ws).get("snapshot") or {}
+    with db.connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM deliverables WHERE ws=? AND id=?", (ws, document_id)).fetchone()
+    if row is None:
+        raise HTTPException(404, "No such deliverable in this company.")
+    return {
+        "id": row["id"], "kind": row["kind"], "kind_label": KINDS.get(row["kind"], row["kind"]),
+        "title": row["title"], "requested_by": row["requested_by"],
+        "thread_id": row["thread_id"], "snapshot_id": row["snapshot_id"],
+        "created_at": row["created_at"],
+        "stale": bool(current.get("id")) and row["snapshot_id"] != current["id"],
+        # Frozen at creation. Deliberately not recomputed on read: a document that
+        # changes when you reopen it is not a document.
+        "payload": json.loads(row["payload"]),
     }

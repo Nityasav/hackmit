@@ -289,3 +289,50 @@ def test_an_unknown_event_is_refused_rather_than_answered_emptily(client, ws):
     response = client.get(f"/api/workspaces/{ws}/agents/timeline/EVT-NOPE")
 
     assert response.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Documents, when they were asked for
+# --------------------------------------------------------------------------- #
+
+def test_asking_for_a_one_pager_produces_one(client, ws, monkeypatch):
+    _scripted(monkeypatch)
+
+    body = talk(client, ws, "Review payables, then make me a one pager.").json()
+
+    assert body["reply"]["deliverable"]["kind"] == "one_pager"
+    assert "one-page snapshot" in body["reply"]["text"].lower()
+    rows = client.get(f"/api/workspaces/{ws}/deliverables").json()["deliverables"]
+    assert [r["kind"] for r in rows] == ["one_pager"]
+    assert rows[0]["requested_by"] == "Review payables, then make me a one pager."
+
+
+def test_asking_for_a_deck_produces_a_deck(client, ws, monkeypatch):
+    _scripted(monkeypatch)
+
+    body = talk(client, ws, "Review payables and build a slide deck.").json()
+
+    assert body["reply"]["deliverable"]["kind"] == "deck"
+
+
+def test_asking_for_nothing_produces_nothing(client, ws, monkeypatch):
+    """The important one. A question about the books is not a request for a document."""
+    _scripted(monkeypatch)
+
+    body = talk(client, ws, "Review payables and cash.").json()
+
+    assert body["reply"]["deliverable"] is None
+    assert client.get(f"/api/workspaces/{ws}/deliverables").json()["deliverables"] == []
+
+
+def test_the_document_is_made_after_the_run_not_before(client, ws, monkeypatch):
+    """A report of the books as they were before this turn's work would describe a
+    period the person did not just ask about."""
+    _scripted(monkeypatch)
+
+    body = talk(client, ws, "Make me a one pager.").json()
+    document = client.get(
+        f"/api/workspaces/{ws}/deliverables/{body['reply']['deliverable']['id']}").json()
+
+    assert document["thread_id"] == body["thread_id"]
+    assert document["payload"]["records"] > 0

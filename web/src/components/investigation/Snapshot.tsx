@@ -1,8 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { ApiError, intakeApi } from "@/lib/api";
 import { Button } from "@/components/ui";
 import type { PeriodSnapshot } from "@/lib/types";
 
@@ -13,11 +10,11 @@ import type { PeriodSnapshot } from "@/lib/types";
  * accounting modules. This file formats them and writes nothing — which is what makes
  * printing it to PDF and handing it to a board a defensible thing to do.
  *
- * ## It is one read, deliberately
+ * ## It renders; it does not fetch
  *
- * Four fetches would assemble a document out of four moments, and a commit landing
- * between the first and the last gives you a page where every figure is true and the
- * page as a whole is of no particular period. One read, one snapshot id, one timestamp.
+ * The figures arrive as a frozen payload, stored when the document was asked for. A page
+ * that re-fetched on open would change under the reader between one viewing and the
+ * next, and a document that does that is not a document.
  *
  * ## What it refuses to do
  *
@@ -36,36 +33,7 @@ const signed = (cents: number) => (cents < 0 ? "−" : "") + money(Math.abs(cent
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
-function reason(error: unknown, fallback: string) {
-  if (error instanceof ApiError) return error.message;
-  return error instanceof Error ? error.message : fallback;
-}
-
-export function Snapshot({ ws }: { ws: string }) {
-  const [data, setData] = useState<PeriodSnapshot | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      setLoading(true);
-      try {
-        const body = await intakeApi<PeriodSnapshot>(`/api/workspaces/${ws}/deliverables/snapshot`);
-        if (live) { setData(body); setError(""); }
-      } catch (e) {
-        if (live) setError(reason(e, "The snapshot could not be prepared"));
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => { live = false; };
-  }, [ws]);
-
-  if (loading && !data) return <p className="text-[13.5px] text-ink-dim">Preparing the snapshot…</p>;
-  if (error) return <p role="alert" className="border border-line bg-surface p-4 text-[13.5px] text-red-800">{error}</p>;
-  if (!data) return null;
-
+export function Snapshot({ data, stale }: { data: PeriodSnapshot; stale?: boolean }) {
   const { workspace: w, result, position, checks, close, controls, variance } = data;
   const tied = checks.trial_balance_balances && checks.balance_sheet_balances && checks.cash_flow_ties;
 
@@ -78,6 +46,13 @@ export function Snapshot({ ws }: { ws: string }) {
           and footers off.
         </p>
       </div>
+
+      {stale && (
+        <p role="status" className="border-l-4 border-amber-500 bg-amber-50 p-4 text-[13.5px] print:hidden">
+          Records have been committed since this was prepared. It is still a correct
+          account of the books it was drawn from — it is historical, not wrong.
+        </p>
+      )}
 
       {!tied && (
         <p role="alert" className="border-l-4 border-red-700 bg-red-50 p-4 text-[13.5px] text-red-900 print:hidden">

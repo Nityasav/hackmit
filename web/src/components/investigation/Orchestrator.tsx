@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, intakeApi } from "@/lib/api";
@@ -215,6 +216,19 @@ function Reply({
           onDecide={(decision) => onDecide(question.approval_id, decision)}
         />
       ))}
+
+      {body.deliverable && (
+        <div className="mt-3 border border-ink bg-white p-4">
+          <p className="text-[13px] font-semibold">{body.deliverable.title}</p>
+          <p className="mt-1 text-[13px] text-ink-dim">
+            Ready on the Briefing tab, where it opens and prints to PDF. Every figure on
+            it was computed from the ledger; none was written by a model.
+          </p>
+          <Link href="/briefing" className="mt-2 inline-block text-[13px] underline">
+            Open the Briefing tab &rarr;
+          </Link>
+        </div>
+      )}
 
       {body.note && <p className="mt-3 text-[12.5px] text-ink-dim">{body.note}</p>}
     </div>

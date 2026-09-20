@@ -27,7 +27,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import db, ingestion
+from .. import db, deliverables, ingestion
 from .budget import BudgetExceeded, Meter, RUN_CAP_CENTS
 from .registry import AGENTS
 from .runtime import AgentFailed
@@ -60,7 +60,7 @@ def _finish(connection, ws: str, turn_id: str, body: dict, status: str) -> None:
         (db.encode(body), status, ws, turn_id))
 
 
-def reply_for(run: dict) -> dict:
+def reply_for(run: dict, document: dict | None = None) -> dict:
     """What to say back, counted from the run rather than composed about it.
 
     Deliberately flat prose over deliberately exact numbers. The temptation here is a
@@ -96,6 +96,9 @@ def reply_for(run: dict) -> dict:
     else:
         lines.append("No agent reached a conclusion. That is not a clean result; it means "
                      "nothing was concluded.")
+    if document:
+        lines.append(f"I have made you a {deliverables.KINDS[document['kind']].lower()}. "
+                     "It is on the Briefing tab, and it prints to PDF.")
     lines += unresolved
     if waiting:
         lines.append("Answer the question(s) below and the run continues from where it "
@@ -111,6 +114,11 @@ def reply_for(run: dict) -> dict:
         "status": run.get("status"),
         "spend": run.get("spend"),
         "thread_id": run.get("thread_id"),
+        # Absent unless one was asked for. A person asking about their books has not
+        # asked for a document, and producing one anyway fills the screen with artifacts
+        # nobody wanted and buries the ones they did.
+        "deliverable": ({"id": document["id"], "kind": document["kind"],
+                         "title": document["title"]} if document else None),
         "note": "Every sentence above is a count of what the run produced or a line an "
                 "agent recorded. Nothing in this reply was written by a model.",
     }
@@ -170,7 +178,22 @@ async def talk(ws: str, body: Message):
     except AgentFailed as exc:
         return _failed(ws, answer_id, thread_id, str(exc), 409, "agent_failed")
 
-    reply = reply_for(run)
+    # Produced only when the sentence asked for one, and after the run, so a document
+    # reflects the work this turn did rather than the books as they were before it.
+    document = None
+    wanted = deliverables.requested(body.message)
+    if wanted:
+        try:
+            document = deliverables.create(ws, wanted, requested_by=body.message,
+                                           thread_id=thread_id)
+        except HTTPException as exc:
+            # The investigation still happened. Losing its result because the document
+            # could not be built would throw away the part that cost money.
+            run.setdefault("unresolved", []).append(
+                f"The {deliverables.KINDS[wanted].lower()} could not be prepared: "
+                f"{exc.detail}")
+
+    reply = reply_for(run, document)
     with db.connect() as connection:
         _finish(connection, ws, answer_id, reply,
                 "waiting_on_you" if reply["escalations"] else "done")

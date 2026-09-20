@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -162,6 +162,19 @@ CREATE TABLE IF NOT EXISTS agent_decisions (
     memory_checks TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL
 );
+-- A document someone asked for, frozen at the moment they asked.
+-- `payload` holds the figures as they stood, not a pointer to recompute them later. A
+-- deliverable is a document of a moment: regenerating it next week from the same books
+-- gives a different document under the same title, and two of those saying different
+-- things is the failure this table exists to prevent. `snapshot_id` records which
+-- version of the records it was drawn from, so a reader can tell when it went stale.
+CREATE TABLE IF NOT EXISTS deliverables (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    kind TEXT NOT NULL, title TEXT NOT NULL,
+    requested_by TEXT NOT NULL DEFAULT '', thread_id TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL, snapshot_id TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_deliverables ON deliverables(ws, created_at);
 -- What was asked and what came back, written as it happens. A turn is recorded before
 -- its run starts and updated when it ends, so a run that crashed or is still going leaves
 -- the question on the record: a turn that only appears once it succeeds makes a failure

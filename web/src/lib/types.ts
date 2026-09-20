@@ -347,6 +347,8 @@ export interface ChatReply {
     escalated: boolean; decision_id?: string;
   }[];
   escalations?: Escalation[];
+  /** Absent unless the sentence asked for one. Nothing is produced on its own. */
+  deliverable?: { id: string; kind: string; title: string } | null;
   unresolved?: string[];
   status?: string;
   spend?: { spent_cents: number; cap_cents: number; remaining_cents: number };
@@ -416,4 +418,19 @@ export interface PeriodSnapshot {
   bank: { bank_lines: number; matched: number; unmatched_bank: number;
           unmatched_book: number; differing: number } | null;
   limitations: string[];
+}
+
+/** A document someone asked for, frozen at the moment they asked. */
+export interface DeliverableRow {
+  id: string; kind: string; kind_label: string; title: string;
+  requested_by: string; thread_id: string; snapshot_id: string | null;
+  created_at: string;
+  /** Drawn from records since superseded: historical rather than wrong. */
+  stale: boolean;
+}
+
+export interface Deliverable extends DeliverableRow {
+  /** Frozen at creation, never recomputed on read: a document that changes when you
+   *  reopen it is not a document. */
+  payload: PeriodSnapshot;
 }

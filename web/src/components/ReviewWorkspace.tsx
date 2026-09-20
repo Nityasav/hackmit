@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
 import { API_URL, intakeApi, useData } from "@/lib/data";
-import { Snapshot } from "@/components/investigation/Snapshot";
+import { Deliverables } from "@/components/investigation/Deliverables";
 import type { SourceDetail } from "@/lib/types";
 
 type FollowUp = { version: number; owner: string; status: string; note: string; actor: string };
@@ -147,9 +147,9 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
         {/* The deliverable comes first. The raw briefing below it is the working text
             someone edits; this is the thing they hand over. */}
         <section className="border border-line bg-surface-2 p-5 print:border-0 print:bg-transparent print:p-0">
-          <h2 className="font-semibold print:hidden">One-page snapshot</h2>
-          <p className="mb-4 text-sm text-ink-dim print:hidden">Every figure computed from the ledger in exact cents. Nothing on it was written by a model.</p>
-          <Snapshot ws={ws} />
+          <h2 className="font-semibold print:hidden">Documents</h2>
+          <p className="mb-4 text-sm text-ink-dim print:hidden">Produced when you ask the Chief Financial Agent for one. Every figure is computed from the ledger in exact cents; nothing on them was written by a model.</p>
+          <Deliverables ws={ws} />
         </section>
         <details className="border border-line p-5 print:hidden"><summary className="cursor-pointer font-semibold">Working briefing (.md)</summary>
           <div className="mt-4"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a></div>
