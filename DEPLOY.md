@@ -61,8 +61,17 @@ volume and its own half of your data.
 **From the dashboard**
 
 1. **New Project → Deploy from GitHub repo →** `Nityasav/hackmit`.
-2. Open the service → **Settings → Root Directory** → `api`. Railway then finds `railway.json`
-   and `Dockerfile` itself; leave the build and start commands empty, since the image sets both.
+2. Open the service → **Settings → Root Directory** → `api`. This is the step everything else
+   depends on. Railway auto-detects a Dockerfile at the root of the service's source directory, so
+   with the root set it reports `Using detected Dockerfile!` and picks up `railway.json` beside it.
+   Leave the build and start commands empty; the image sets both.
+
+   **If the build log says `Railpack` and `Detected Python`, the root directory is not set.**
+   Railway looked at the repo root, found no Dockerfile, and fell back to its own builder — which
+   then fails with `No start command detected`, because the start command lives in the image.
+   Setting the root directory to `api` fixes it. Do not instead set `RAILWAY_DOCKERFILE_PATH` to
+   `api/Dockerfile` while the root stays at the repo: that finds the file but leaves the build
+   context at the repo root, and the `COPY pyproject.toml uv.lock ./` line then has nothing to copy.
 3. **Settings → Networking → Generate Domain.** Copy the hostname it gives you, e.g.
    `sherlock-api-production.up.railway.app`. You need it before the first successful boot, because
    the API refuses any hostname not in `SCHOOLTRACE_PUBLIC_HOSTS`.
