@@ -111,7 +111,7 @@ function SidebarContent() {
           title={`Switch to ${nextWorkspace.name}`}
           className="group/sidebar mt-4 flex items-center justify-start gap-2 rounded-md px-1 py-2 hover:bg-surface-3"
         >
-          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-ink text-[10px] font-bold text-white">
+          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-md bg-ink text-[12px] font-bold text-white">
             {current.short}
           </span>
           <motion.span
@@ -129,7 +129,7 @@ function SidebarContent() {
                 link={link}
                 className={cn(
                   "rounded-md px-2 transition-colors hover:bg-surface-3",
-                  link.active && "bg-green-100 [&_span]:!font-semibold [&_span]:!text-accent-good",
+                  link.active && "bg-surface-3 [&_span]:!font-semibold [&_span]:!text-ink",
                   link.disabled && "opacity-50",
                 )}
               />
@@ -137,8 +137,8 @@ function SidebarContent() {
                 <motion.span
                   animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
                   className={cn(
-                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[10px] font-bold",
-                    link.id === "approvals" ? "bg-ink text-white" : "bg-green-200 text-green-800",
+                    "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-[12px] font-bold",
+                    link.id === "approvals" ? "bg-ink text-white" : "bg-surface-3 text-ink-dim",
                   )}
                 >
                   {link.badge}
@@ -179,7 +179,7 @@ function isActive(pathname: string, href: string) {
 
 function NavIcon({ tab, active }: { tab: TabId; active: boolean }) {
   const Icon = ICON[tab];
-  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-accent-good" : "text-ink-dim")} />;
+  return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-ink" : "text-ink-dim")} />;
 }
 
 export const Logo = () => {

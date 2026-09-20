@@ -11,7 +11,7 @@ export function TabGate({ tab, children }: { tab: TabId; children: React.ReactNo
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-2 text-center">
       <div className="text-3xl text-ink-faint">⊘</div>
       <div className="font-semibold">Not available for {bundle.workspace.name}</div>
-      <p className="max-w-sm text-[12.5px] text-ink-dim">
+      <p className="max-w-sm text-[14px] text-ink-dim">
         {bundle.workspace.intake
           ? "Your records are stored, but the agent investigation and approval runtime is not connected yet. Manage sources and evidence requests in the Command center."
           : "This is a read-only public report. Agents can read and reconcile it, but there are no transactions to run workflows on, approve, or learn from."}
@@ -19,7 +19,7 @@ export function TabGate({ tab, children }: { tab: TabId; children: React.ReactNo
       <button
         type="button"
         onClick={() => setWs("sandbox")}
-        className="mt-1 cursor-pointer rounded-[7px] bg-ink px-3 py-1.5 text-[11.5px] font-semibold text-white"
+        className="mt-1 cursor-pointer rounded-[7px] bg-ink px-3 py-2.5 text-[13.5px] font-semibold text-white"
       >
         Switch to Sandbox University
       </button>

@@ -34,7 +34,7 @@ export default function ApprovalsPage() {
   return (
     <TabGate tab="approvals">
       <PageHeader title="Approvals" subtitle="Agents propose. You decide. Nothing moves without you." />
-      <div className="grid gap-2.5 min-[900px]:grid-cols-[1fr_1.1fr]">
+      <div className="grid gap-4 min-[900px]:grid-cols-[1fr_1.1fr]">
         <Card>
           <CardTitle right={`${pending.length} pending`}>Waiting on you</CardTitle>
           {pending.length === 0 && (
@@ -71,7 +71,7 @@ export default function ApprovalsPage() {
             {selected.journal && (
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="text-[10px] text-ink-dim">
+                  <tr className="text-[12px] text-ink-dim">
                     <th className="border-b border-line p-1.5 text-left font-semibold">Account</th>
                     <th className="border-b border-line p-1.5 text-left font-semibold">Fund</th>
                     <th className="border-b border-line p-1.5 text-right font-semibold">Debit</th>
@@ -98,16 +98,16 @@ export default function ApprovalsPage() {
             {selected.effects && (
               <div className="mt-2">
                 {selected.effects.map((e) => (
-                  <div key={e.label} className="flex justify-between py-0.5 text-[11.5px]">
+                  <div key={e.label} className="flex justify-between py-0.5 text-[13.5px]">
                     <span>{e.label}</span>
-                    <b className={e.tone === "good" ? "text-accent-good" : ""}>{e.value}</b>
+                    <b className={e.tone === "good" ? "text-ink" : ""}>{e.value}</b>
                   </div>
                 ))}
               </div>
             )}
 
             {selected.status === "pending" ? (
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Button primary onClick={() => decide(selected.id, "approved")}>
                   {selected.kind === "payment" ? "Release (simulated)" : selected.kind === "evidence" ? "Mark provided" : "Approve"}
                 </Button>
@@ -115,17 +115,17 @@ export default function ApprovalsPage() {
                 <Button disabled title="Wired to the orchestrator in the live build">✦ Ask the agent</Button>
               </div>
             ) : (
-              <div className="mt-2.5">
+              <div className="mt-4">
                 <Pill tone={selected.status === "approved" ? "green" : "red"}>
                   {selected.status === "approved" ? "Approved by you" : "Rejected by you"}
                 </Pill>
-                <span className="ml-2 text-[11px] text-ink-dim">
+                <span className="ml-2 text-[13px] text-ink-dim">
                   Dependent schedules and the close pack recompute from this decision.
                 </span>
               </div>
             )}
 
-            <div className="mt-2.5 text-[11px] text-ink-dim">
+            <div className="mt-4 text-[13px] text-ink-dim">
               Approving applies the change to the synthetic scenario only. The as-reported baseline stays intact, and no
               real payment, payroll change or ERP posting happens.
             </div>
@@ -144,7 +144,7 @@ function Row({ approval, active, onClick }: { approval: Approval; active: boolea
       type="button"
       onClick={onClick}
       className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border p-2 text-left ${
-        active ? "border-green-300 bg-green-50" : "border-transparent hover:bg-surface-2"
+        active ? "border-ink bg-surface-2" : "border-transparent hover:bg-surface-2"
       }`}
     >
       <AgentAvatar id={approval.agent} size="sm" />

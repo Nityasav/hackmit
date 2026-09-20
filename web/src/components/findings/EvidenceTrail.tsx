@@ -15,13 +15,13 @@ const KIND_ICON: Record<EvidenceNode["kind"], string> = {
 const TONE_STYLE: Record<EvidenceNode["tone"], string> = {
   neutral: "border-line bg-surface hover:border-surface-3",
   bad: "border-red-300 bg-red-50 hover:border-accent-bad",
-  good: "border-green-300 bg-green-50 hover:border-accent-good/70",
+  good: "border-ink bg-surface-2 hover:border-ink",
 };
 
 const TONE_DOT: Record<EvidenceNode["tone"], string> = {
   neutral: "bg-surface-3",
   bad: "bg-red-400",
-  good: "bg-accent-good",
+  good: "bg-ink",
 };
 
 export function EvidenceTrail({ finding }: { finding: Finding }) {
@@ -31,7 +31,7 @@ export function EvidenceTrail({ finding }: { finding: Finding }) {
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-[14px] font-semibold">
         Evidence trail · {finding.id}
         <AiTag>
           found by {AGENT_NAME[finding.agent]}
@@ -56,31 +56,31 @@ export function EvidenceTrail({ finding }: { finding: Finding }) {
                 disabled={!hasSource}
                 aria-expanded={isOpen}
                 onClick={() => setOpenIndex(isOpen ? null : i)}
-                className={`mb-0.5 flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-[11px] transition disabled:cursor-default ${TONE_STYLE[n.tone]} ${
-                  isOpen ? "ring-2 ring-green-300" : ""
+                className={`mb-0.5 flex w-full items-center gap-2 rounded-md border px-2 py-2.5 text-left text-[13px] transition disabled:cursor-default ${TONE_STYLE[n.tone]} ${
+                  isOpen ? "ring-2 ring-ink" : ""
                 }`}
               >
                 <span aria-hidden>{KIND_ICON[n.kind]}</span>
                 <span className="min-w-0 flex-1">{n.label}</span>
-                {hasSource && <span className="flex-none text-[9.5px] text-ink-faint">{isOpen ? "hide source" : "open source"}</span>}
+                {hasSource && <span className="flex-none text-[11px] text-ink-faint">{isOpen ? "hide source" : "open source"}</span>}
               </button>
 
               {isOpen && open && (
-                <div className="mb-1.5 animate-fade-in rounded-md border border-line bg-surface-2 px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink">
-                  <div className="mb-1 text-[9.5px] uppercase tracking-wider text-accent-good">{open.locator ?? "source"}</div>
+                <div className="mb-1.5 animate-fade-in rounded-md border border-line bg-surface-2 px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-ink">
+                  <div className="mb-1 text-[11px] uppercase tracking-wider text-ink">{open.locator ?? "source"}</div>
                   {open.source_preview ?? "No excerpt stored for this node yet."}
                 </div>
               )}
 
-              {n.edge && <div className="pb-1 pl-1 font-mono text-[9.5px] text-ink-faint">↓ {n.edge}</div>}
+              {n.edge && <div className="pb-1 pl-1 font-mono text-[11px] text-ink-faint">↓ {n.edge}</div>}
             </li>
           );
         })}
       </ol>
 
-      <div className="mt-2 flex items-center gap-1.5 border-t border-line pt-2">
+      <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
         <AgentAvatar id={finding.verified_by ?? finding.agent} size="sm" />
-        <span className="text-[11px] text-ink-dim">
+        <span className="text-[13px] text-ink-dim">
           {finding.amount_note ? `Amount basis: ${finding.amount_note}. ` : ""}
           Amounts come from the calculation engine, never from the model.
         </span>

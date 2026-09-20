@@ -14,7 +14,7 @@ export default function FindingsPage() {
   return (
     <>
       <PageHeader title="Findings" subtitle="What the agents found, and the evidence behind it" />
-      <div className="grid gap-2.5 min-[900px]:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-4 min-[900px]:grid-cols-[1.4fr_1fr]">
         <Card>
           {bundle.findings.length === 0 && (
             <EmptyState title="No findings yet">The agents are still working. Findings appear here once the Auditor has reviewed them.</EmptyState>
@@ -26,7 +26,7 @@ export default function FindingsPage() {
               aria-pressed={f.id === selected?.id}
               onClick={() => setSelectedId(f.id)}
               className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
-                f.id === selected?.id ? "border-green-300 bg-green-50" : "border-transparent hover:bg-surface-2"
+                f.id === selected?.id ? "border-ink bg-surface-2" : "border-transparent hover:bg-surface-2"
               }`}
             >
               <AgentAvatar id={f.agent} size="sm" />
@@ -34,7 +34,7 @@ export default function FindingsPage() {
                 <b className="block truncate">{f.title}</b>
                 <span className="text-ink-dim">{f.summary}</span>
               </div>
-              <span className="ml-auto flex flex-none items-center gap-1.5">
+              <span className="ml-auto flex flex-none items-center gap-2">
                 {f.amount_cents != null && <b className="tabular-nums">{money(f.amount_cents)}</b>}
                 <FindingStatusPill status={f.status} />
               </span>

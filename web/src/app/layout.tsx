@@ -18,13 +18,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${raleway.variable} ${playfair.variable} ${jetbrains.variable}`}>
-      <body className="font-sans text-[12.5px] leading-snug antialiased">
+      <body className="font-sans text-[14px] leading-snug antialiased">
         <DataProvider>
           <div className="flex h-screen flex-col overflow-hidden md:flex-row">
             <AppSidebar />
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar />
-              <main className="relative flex-1 overflow-auto px-5 py-4">{children}</main>
+              <main className="relative flex-1 overflow-auto px-6 py-6">{children}</main>
             </div>
           </div>
         </DataProvider>

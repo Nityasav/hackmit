@@ -69,31 +69,31 @@ export const Component = () => {
   return (
     <section className="w-full">
       <div className="mb-3 flex max-w-2xl flex-col gap-2">
-        <div className="flex w-fit items-center gap-1.5 rounded-full border border-green-300 bg-green-50 px-2.5 py-1">
-          <Sparkles className="h-3.5 w-3.5 text-accent-good" aria-hidden />
-          <span className="text-[11px] font-semibold text-green-800">
+        <div className="flex w-fit items-center gap-2 rounded-full border border-ink bg-surface-2 px-2.5 py-1">
+          <Sparkles className="h-3.5 w-3.5 text-ink" aria-hidden />
+          <span className="text-[13px] font-semibold text-ink">
             {workspace.mode === "live" ? "Running live" : `Mode: ${workspace.mode}`}
           </span>
         </div>
         <h2 className="font-display text-xl font-bold">How the agents learn</h2>
-        <p className="text-[12.5px] leading-relaxed text-ink-dim">
+        <p className="text-[14px] leading-relaxed text-ink-dim">
           Agents write playbooks from cases they have seen before. A playbook only takes
           effect once a replay of earlier months adds no false positives and you approve it.
         </p>
       </div>
 
-      <div className="grid gap-2.5 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4">
         {/* Who is on the books */}
         <div className="flex flex-col gap-3 rounded-[10px] border border-line bg-surface p-3 md:col-span-2">
           <div>
-            <div className="mb-2 flex w-fit items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 py-1 text-[10.5px] font-semibold text-ink-dim">
+            <div className="mb-2 flex w-fit items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1 text-[12.5px] font-semibold text-ink-dim">
               <Lightbulb className="h-3.5 w-3.5" aria-hidden />
               The finance office
             </div>
-            <h3 className="text-[12.5px] font-semibold">Pick an agent to see its brief</h3>
+            <h3 className="text-[14px] font-semibold">Pick an agent to see its brief</h3>
           </div>
 
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {agents.map((agent, i) => (
               <button
                 key={agent.id}
@@ -101,16 +101,16 @@ export const Component = () => {
                 aria-pressed={activeAgent === i}
                 onClick={() => setActiveAgent(i)}
                 className={cn(
-                  "flex cursor-pointer flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition",
+                  "flex cursor-pointer flex-col items-start gap-2 rounded-lg border p-2.5 text-left transition",
                   i === agents.length - 1 && agents.length % 2 === 1 && "col-span-2",
                   activeAgent === i
-                    ? "border-accent-good bg-surface-2"
-                    : "border-line bg-surface hover:border-accent-good",
+                    ? "border-ink bg-surface-2"
+                    : "border-line bg-surface hover:border-ink",
                 )}
               >
                 <AgentAvatar id={agent.id} size="sm" />
-                <span className="text-[11px] font-semibold">{agent.name}</span>
-                <span className="line-clamp-1 text-[10.5px] text-ink-dim">
+                <span className="text-[13px] font-semibold">{agent.name}</span>
+                <span className="line-clamp-1 text-[12.5px] text-ink-dim">
                   {agent.status}
                 </span>
               </button>
@@ -119,11 +119,11 @@ export const Component = () => {
 
           {active && (
             <div className="rounded-lg border border-line bg-surface-2 p-2.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <AgentAvatar id={active.id} size="sm" />
-                <p className="text-[12.5px] font-semibold">{AGENT_NAME[active.id]}</p>
+                <p className="text-[14px] font-semibold">{AGENT_NAME[active.id]}</p>
               </div>
-              <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-dim">
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-dim">
                 {active.doing}
               </p>
             </div>
@@ -134,12 +134,12 @@ export const Component = () => {
         <div className="rounded-[10px] border border-line bg-surface p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="rounded-md border border-line bg-surface-2 p-1.5">
-              <ChartColumn className="h-4 w-4 text-accent-good" aria-hidden />
+              <ChartColumn className="h-4 w-4 text-ink" aria-hidden />
             </div>
             {ablation?.example && <Badge variant="outline">Example numbers</Badge>}
           </div>
-          <h3 className="text-[12.5px] font-semibold">Memory on vs off</h3>
-          <p className="mb-2 text-[10.5px] text-ink-dim">
+          <h3 className="text-[14px] font-semibold">Memory on vs off</h3>
+          <p className="mb-2 text-[12.5px] text-ink-dim">
             {ablation ? ablation.note : "The evaluator has not run yet."}
           </p>
 
@@ -153,16 +153,16 @@ export const Component = () => {
                 className={cn(
                   "w-full cursor-pointer rounded-lg border p-1.5 text-left transition",
                   selectedMetric === i
-                    ? "border-accent-good bg-surface-2"
-                    : "border-line bg-surface hover:border-accent-good",
+                    ? "border-ink bg-surface-2"
+                    : "border-line bg-surface hover:border-ink",
                 )}
               >
-                <p className="text-[10.5px] text-ink-dim">{m.label}</p>
+                <p className="text-[12.5px] text-ink-dim">{m.label}</p>
                 <div className="mt-0.5 flex items-baseline justify-between gap-2">
-                  <span className="text-[11.5px] font-semibold tabular-nums">
+                  <span className="text-[13.5px] font-semibold tabular-nums">
                     {m.with}
                   </span>
-                  <span className="text-[10.5px] tabular-nums text-ink-faint">
+                  <span className="text-[12.5px] tabular-nums text-ink-faint">
                     was {m.without}
                   </span>
                 </div>
@@ -174,22 +174,22 @@ export const Component = () => {
         {/* What the agents are allowed to call */}
         <div className="rounded-[10px] border border-line bg-surface p-3">
           <div className="mb-2 w-fit rounded-md border border-line bg-surface-2 p-1.5">
-            <Layers className="h-4 w-4 text-accent-good" aria-hidden />
+            <Layers className="h-4 w-4 text-ink" aria-hidden />
           </div>
-          <h3 className="text-[12.5px] font-semibold">Tools they may call</h3>
-          <p className="mb-2 text-[10.5px] text-ink-dim">
+          <h3 className="text-[14px] font-semibold">Tools they may call</h3>
+          <p className="mb-2 text-[12.5px] text-ink-dim">
             Every call is typed and logged. Nothing else is reachable.
           </p>
           <ul className="flex flex-wrap gap-1">
             {tools.map((tool) => (
               <li
                 key={tool}
-                className="rounded border border-line bg-surface-2 px-1.5 py-1 font-mono text-[10px] text-ink-dim"
+                className="rounded border border-line bg-surface-2 px-1.5 py-1 font-mono text-[12px] text-ink-dim"
               >
                 {tool}
               </li>
             ))}
-            <li className="flex items-center gap-1 rounded border border-line bg-surface-2 px-1.5 py-1 text-[10px] text-ink-faint">
+            <li className="flex items-center gap-1 rounded border border-line bg-surface-2 px-1.5 py-1 text-[12px] text-ink-faint">
               <Lock className="h-3 w-3" aria-hidden />
               everything else
             </li>
@@ -198,13 +198,13 @@ export const Component = () => {
 
         {/* A real decision record */}
         <div className="rounded-[10px] border border-line bg-surface p-3 md:col-span-4">
-          <div className="mb-2 flex items-center gap-1.5">
+          <div className="mb-2 flex items-center gap-2">
             <div className="rounded-md border border-line bg-surface-2 p-1.5">
-              <Terminal className="h-4 w-4 text-accent-good" aria-hidden />
+              <Terminal className="h-4 w-4 text-ink" aria-hidden />
             </div>
-            <h3 className="text-[12.5px] font-semibold">The newest decision record</h3>
+            <h3 className="text-[14px] font-semibold">The newest decision record</h3>
           </div>
-          <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-canvas p-2.5 font-mono text-[11px] leading-relaxed">
+          <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-canvas p-2.5 font-mono text-[13px] leading-relaxed">
             {recordLines.map((line, i) => (
               <div key={i} className="flex gap-2">
                 <span className="w-5 flex-none select-none text-right text-ink-faint">
@@ -219,17 +219,17 @@ export const Component = () => {
         </div>
       </div>
 
-      <div className="mt-2.5 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
             <div
               key={stat.label}
-              className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-accent-good"
+              className="rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-ink"
             >
-              <Icon className="mb-2 h-4 w-4 text-accent-good" aria-hidden />
-              <p className="text-[10.5px] text-ink-dim">{stat.label}</p>
-              <p className="mt-0.5 font-display text-xl font-bold">
+              <Icon className="mb-2 h-4 w-4 text-ink" aria-hidden />
+              <p className="text-[12.5px] text-ink-dim">{stat.label}</p>
+              <p className="mt-0.5 text-xl font-bold tabular-nums">
                 {stat.value}
               </p>
             </div>

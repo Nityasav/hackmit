@@ -47,18 +47,18 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           >
             ✕
           </button>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <AgentAvatar id={task.agent} size="sm" />
-            <b className="text-[12.5px]">{AGENT_NAME[task.agent]}</b>
+            <b className="text-[14px]">{AGENT_NAME[task.agent]}</b>
             <Pill tone={running ? "teal" : task.column === "needs_you" ? "amber" : "gray"}>{COLUMN_LABEL[task.column]}</Pill>
-            <span className="text-[11px] text-ink-dim">· {task.workflow} workflow</span>
+            <span className="text-[13px] text-ink-dim">· {task.workflow} workflow</span>
           </div>
-          <div className="my-1.5 text-[15px] font-bold">{task.title}</div>
+          <div className="my-1.5 text-[17px] font-bold">{task.title}</div>
           <div className="flex items-center gap-2">
             <ProgressBar value={task.progress} className="h-2 flex-1" />
             <b className="tabular-nums">{task.progress}%</b>
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
+          <div className="mt-2 grid grid-cols-3 gap-2">
             <Stat label="Step" value={`${Math.min(doneSteps + 1, task.steps.length)} of ${task.steps.length}`} />
             <Stat label={running ? "Done in" : "Started"} value={running ? `~${duration(task.eta_s)}` : (task.started_at ?? "—")} />
             <Stat label="Tool budget" value={`${task.tool_calls.used} / ${task.tool_calls.budget}`} />
@@ -70,20 +70,20 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           {task.steps.map((s, i) => (
             <div key={i} className="grid grid-cols-[20px_1fr] gap-2 py-1">
               <span
-                className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-bold ${
+                className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[12px] font-bold ${
                   s.state === "done"
-                    ? "bg-green-100 text-accent-good"
+                    ? "bg-surface-2 text-ink"
                     : s.state === "running"
-                      ? "animate-ping-soft bg-accent-good text-white"
+                      ? "animate-ping-soft bg-ink text-white"
                       : "bg-surface-2 text-ink-faint"
                 }`}
               >
                 {s.state === "done" ? "✓" : s.state === "running" ? "●" : ""}
               </span>
               <div>
-                <div className={`text-[11.5px] font-medium ${s.state === "todo" ? "text-ink-dim" : ""}`}>{s.title}</div>
+                <div className={`text-[13.5px] font-medium ${s.state === "todo" ? "text-ink-dim" : ""}`}>{s.title}</div>
                 {s.detail && (
-                  <div className={`font-mono text-[10.5px] ${s.memory ? "text-ink-dim" : "text-ink-dim"}`}>{s.detail}</div>
+                  <div className={`font-mono text-[12.5px] ${s.memory ? "text-ink-dim" : "text-ink-dim"}`}>{s.detail}</div>
                 )}
               </div>
             </div>
@@ -93,7 +93,7 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
             <>
               <Section className="mt-3">Agent to-dos</Section>
               {task.todos.map((t) => (
-                <div key={t} className="flex items-start gap-2 py-1 text-[11.5px]">
+                <div key={t} className="flex items-start gap-2 py-1 text-[13.5px]">
                   <i className="mt-0.5 h-3 w-3 flex-none rounded border-[1.5px] border-line" />
                   {t}
                 </div>
@@ -104,11 +104,11 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
           {task.rationale && (
             <>
               <Section className="mt-3">Why (decision rationale)</Section>
-              <div className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 text-[11.5px]">{task.rationale}</div>
+              <div className="rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-[13.5px]">{task.rationale}</div>
             </>
           )}
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button disabled title="Wired to the orchestrator in the live build">⏸ Pause</Button>
             {task.approval_id && (
               <Link href="/approvals">
@@ -127,15 +127,15 @@ export function TaskDrawer({ task, onClose }: { task: Task | null; onClose: () =
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[7px] bg-surface-2 px-2 py-1.5">
-      <small className="block text-[10px] text-ink-dim">{label}</small>
-      <b className="text-[13px] tabular-nums">{value}</b>
+    <div className="rounded-[7px] bg-surface-2 px-2 py-2.5">
+      <small className="block text-[12px] text-ink-dim">{label}</small>
+      <b className="text-[15px] tabular-nums">{value}</b>
     </div>
   );
 }
 
 function Section({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</div>
+    <div className={`mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</div>
   );
 }

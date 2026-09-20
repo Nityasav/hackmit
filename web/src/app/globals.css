@@ -66,9 +66,9 @@
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes ping-soft {
-    0% { box-shadow: 0 0 0 0 rgb(21 128 61 / 0.4); }
-    70% { box-shadow: 0 0 0 7px rgb(21 128 61 / 0); }
-    100% { box-shadow: 0 0 0 0 rgb(21 128 61 / 0); }
+    0% { box-shadow: 0 0 0 0 rgb(9 9 11 / 0.35); }
+    70% { box-shadow: 0 0 0 7px rgb(9 9 11 / 0); }
+    100% { box-shadow: 0 0 0 0 rgb(9 9 11 / 0); }
   }
   @keyframes shimmer {
     from { background-position: 200% 0; }
@@ -113,7 +113,7 @@ body {
 
 /* Animated text for "what the agent is doing right now". */
 .shimmer-text {
-  background: linear-gradient(90deg, #15803d 0%, #6ee7a8 50%, #15803d 100%);
+  background: linear-gradient(90deg, #52525b 0%, #b8bcc4 50%, #52525b 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;

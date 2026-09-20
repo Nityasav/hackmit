@@ -38,14 +38,14 @@ export default function CommandCenter() {
       <SourcesPanel key={workspace.id} />
 
       {/* CFO agent briefing */}
-      <div className="mb-2.5 rounded-xl border border-green-300 bg-gradient-to-b from-green-50 to-transparent p-3.5">
+      <div className="mb-4 rounded-xl border border-line bg-surface p-5">
         <div className="flex items-center gap-2">
           <AgentAvatar id="cfo" />
           <b>CFO Agent</b>
           <AiTag>AI briefing</AiTag>
-          <span className="ml-auto text-[11px] text-ink-dim">generated {briefing.generated_at}</span>
+          <span className="ml-auto text-[13px] text-ink-dim">generated {briefing.generated_at}</span>
         </div>
-        <p className="my-2.5 text-[13.5px]">
+        <p className="my-2.5 text-[15px]">
           {highlights(briefing.text).map(([part, strong], i) =>
             strong ? (
               <b key={i} className="rounded-[3px] bg-surface-3 px-0.5 font-semibold">
@@ -56,7 +56,7 @@ export default function CommandCenter() {
             ),
           )}
         </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {briefing.actions.map((a) => (
             <Link key={a.label} href={TAB_HREF[a.href]}>
               <Button primary={a.primary}>{a.label}</Button>
@@ -66,27 +66,27 @@ export default function CommandCenter() {
       </div>
 
       {/* The team: one card, divided, so it stays one object at any width */}
-      <Card className="mb-2.5 grid grid-cols-1 divide-y divide-line p-0 sm:grid-cols-2 sm:divide-x lg:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
+      <Card className="mb-4 grid grid-cols-1 divide-y divide-line p-0 sm:grid-cols-2 sm:divide-x lg:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
         {agents.map((a) => (
           <div key={a.id} className="p-2.5">
-            <div className="flex items-center gap-1.5 text-[11.5px] font-semibold">
+            <div className="flex items-center gap-2 text-[13.5px] font-semibold">
               <AgentAvatar id={a.id} size="sm" />
               {a.name}
               {a.status === "working" && <Pulse className="ml-auto" />}
             </div>
-            <div className={`mt-1.5 text-[11px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
+            <div className={`mt-1.5 text-[13px] ${a.status === "working" ? "shimmer-text" : "text-ink-dim"}`}>
               {a.doing}
             </div>
           </div>
         ))}
       </Card>
 
-      <div className="grid gap-2.5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         {workflows.length > 0 ? (
           <Card>
             <CardTitle right={<Link href="/workflows">open →</Link>}>Financial workflows this close</CardTitle>
             {workflows.map((w) => (
-              <div key={w.id} className="grid grid-cols-[160px_1fr_34px] items-center gap-2 py-1 text-[11.5px]">
+              <div key={w.id} className="grid grid-cols-[minmax(0,220px)_1fr_46px] items-center gap-2 py-1 text-[13.5px]">
                 <span className="truncate">{w.name}</span>
                 <ProgressBar value={w.progress} />
                 <b className="text-right tabular-nums">{w.progress}%</b>
@@ -96,7 +96,7 @@ export default function CommandCenter() {
         ) : (
           <Card>
             <CardTitle right={<Link href="/findings">evidence →</Link>}>Source</CardTitle>
-            <div className="text-[12.5px]">
+            <div className="text-[14px]">
               <b>MIT FY2025 Uniform Guidance report</b> · year ended June 30, 2025 · independent auditor PwC.
               <div className="mt-1 text-ink-dim">
                 Agents read this published PDF only. They have no access to MIT&apos;s internal ledger, and nothing
@@ -107,7 +107,7 @@ export default function CommandCenter() {
                   href={workspace.source_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-block font-semibold text-accent-good underline"
+                  className="mt-2 inline-block font-semibold text-ink underline"
                 >
                   Open the report ↗
                 </a>
@@ -119,26 +119,26 @@ export default function CommandCenter() {
         <Card className="grid grid-cols-2 divide-x divide-y divide-line p-0">
           {kpis.map((k) => (
             <div key={k.label} className="p-3">
-              <small className="block text-[10.5px] text-ink-dim">{k.label}</small>
-              <b className="font-display text-xl font-bold">{k.value}</b>
-              <em className={`block text-[10.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-accent-good"}`}>
+              <small className="block text-[12.5px] text-ink-dim">{k.label}</small>
+              <b className="text-xl font-bold">{k.value}</b>
+              <em className={`block text-[12.5px] not-italic ${k.tone === "warn" ? "text-ink-dim" : "text-ink"}`}>
                 {k.note}
               </em>
             </div>
           ))}
           <div className="p-3">
-            <small className="block text-[10.5px] text-ink-dim">Tasks done</small>
-            <b className="font-display text-xl font-bold">
+            <small className="block text-[12.5px] text-ink-dim">Tasks done</small>
+            <b className="text-xl font-bold tabular-nums">
               {done} / {tasks.length}
             </b>
-            <em className="block text-[10.5px] not-italic text-ink-dim">
+            <em className="block text-[12.5px] not-italic text-ink-dim">
               {findings.length} findings · {pending} waiting on you
             </em>
           </div>
         </Card>
       </div>
 
-      <div className="mt-2.5 grid gap-2.5 min-[900px]:grid-cols-2">
+      <div className="mt-4 grid gap-4 min-[900px]:grid-cols-2">
         <Card>
           <CardTitle right={<Link href="/approvals">all →</Link>}>Waiting on you</CardTitle>
           {pendingApprovals.length === 0 ? (
@@ -149,13 +149,13 @@ export default function CommandCenter() {
             </EmptyState>
           ) : (
             pendingApprovals.slice(0, 4).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 border-t border-line py-1.5 first:border-t-0">
+              <div key={a.id} className="flex items-center gap-2 border-t border-line py-2.5 first:border-t-0">
                 <AgentAvatar id={a.agent} size="sm" />
                 <div className="min-w-0">
-                  <Link href="/approvals" className="block truncate font-semibold hover:text-accent-good">
+                  <Link href="/approvals" className="block truncate font-semibold hover:text-ink">
                     {a.title}
                   </Link>
-                  <span className="block truncate text-[11px] text-ink-dim">{a.summary}</span>
+                  <span className="block truncate text-[13px] text-ink-dim">{a.summary}</span>
                 </div>
                 <span className="ml-auto flex-none">
                   <Button
@@ -178,13 +178,13 @@ export default function CommandCenter() {
             <Link
               key={d.id}
               href={`/reasoning?q=${encodeURIComponent(d.id)}`}
-              className="flex items-start gap-2 border-t border-line py-1.5 first:border-t-0 hover:bg-surface-2"
+              className="flex items-start gap-2 border-t border-line py-2.5 first:border-t-0 hover:bg-surface-2"
             >
-              <span className="pt-0.5 font-mono text-[10px] text-ink-faint">{d.time}</span>
+              <span className="pt-0.5 font-mono text-[12px] text-ink-faint">{d.time}</span>
               <AgentAvatar id={d.agent} size="sm" />
               <span className="min-w-0">
                 <b className="block truncate">{d.action}</b>
-                <span className="block truncate text-[11px] text-ink-dim">{d.summary}</span>
+                <span className="block truncate text-[13px] text-ink-dim">{d.summary}</span>
               </span>
             </Link>
           ))}

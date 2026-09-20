@@ -44,13 +44,13 @@ function Reasoning() {
         subtitle="Every decision every agent made, and why. Click one to expand it."
       />
 
-      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 focus-within:border-ink">
-        <span className="text-accent-good">✦</span>
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2.5 focus-within:border-ink">
+        <span className="text-ink">✦</span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Ask why… searches actions, reasons, tools, evidence IDs"
-          className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-ink-faint"
+          className="w-full bg-transparent text-[14px] outline-none placeholder:text-ink-faint"
         />
         {q && (
           <button type="button" onClick={() => setQ("")} className="cursor-pointer text-ink-faint">
@@ -59,7 +59,7 @@ function Reasoning() {
         )}
       </div>
 
-      <div className="mb-2.5 flex flex-wrap gap-1.5">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Chip active={agent === "all"} onClick={() => setAgent("all")}>
           All agents
         </Chip>
@@ -88,7 +88,7 @@ function Reasoning() {
 
       {grouped.map((g) => (
         <div key={g.run}>
-          <div className="mb-1.5 mt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-dim">{g.run}</div>
+          <div className="mb-1.5 mt-4 text-[12.5px] font-semibold uppercase tracking-wider text-ink-dim">{g.run}</div>
           {g.items.map((d) => (
             <DecisionCard key={d.id} decision={d} defaultOpen={filtered.length === 1} />
           ))}
@@ -121,8 +121,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] ${
-        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-accent-good"
+      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[13px] ${
+        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-ink"
       }`}
     >
       {children}

@@ -30,26 +30,26 @@ export default function LearningPage() {
         }
       />
 
-      <div className="mb-2.5 grid gap-1.5 md:grid-cols-5">
+      <div className="mb-4 grid gap-2 md:grid-cols-5">
         {LOOP.map((s) => (
-          <div key={s.n} className={`rounded-[9px] border p-2 text-[11px] ${s.gate ? "border-accent-good bg-green-50" : "border-line bg-surface"}`}>
-            <span className="text-[10px] font-bold text-accent-good">{s.n}</span>
-            <b className="mb-0.5 block text-[11.5px]">{s.title}</b>
+          <div key={s.n} className={`rounded-[9px] border p-2 text-[13px] ${s.gate ? "border-ink bg-surface-2" : "border-line bg-surface"}`}>
+            <span className="text-[12px] font-bold text-ink">{s.n}</span>
+            <b className="mb-0.5 block text-[13.5px]">{s.title}</b>
             {s.body}
           </div>
         ))}
       </div>
 
-      <div className="mb-2.5">
+      <div className="mb-4">
         <LearningBento />
       </div>
 
-      <div className="grid gap-2.5 min-[900px]:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-4 min-[900px]:grid-cols-[1.4fr_1fr]">
         <Card>
           <CardTitle right={`${active} active · ${playbooks.length} total`}>Playbooks the agents wrote</CardTitle>
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[10px] text-ink-dim">
+              <tr className="text-[12px] text-ink-dim">
                 <th className="border-b border-line p-1.5 text-left font-semibold">Playbook</th>
                 <th className="border-b border-line p-1.5 text-left font-semibold">Replay gate</th>
                 <th className="border-b border-line p-1.5 text-left font-semibold">Used</th>
@@ -60,7 +60,7 @@ export default function LearningPage() {
               {playbooks.map((p) => (
                 <tr key={p.id} className="align-top">
                   <td className="border-b border-line p-1.5">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <AgentAvatar id={p.proposed_by} size="sm" />
                       <b>{p.id}</b> {p.title}
                     </div>
@@ -78,7 +78,7 @@ export default function LearningPage() {
               ))}
             </tbody>
           </table>
-          <div className="mt-2 text-[11px] text-ink-dim">
+          <div className="mt-2 text-[13px] text-ink-dim">
             A playbook is reviewed procedural memory. Agents never edit their own prompts and nothing is fine-tuned.
           </div>
         </Card>
@@ -89,11 +89,11 @@ export default function LearningPage() {
             {ablation.rows.map((r) => {
               const max = Math.max(r.with, r.without) || 1;
               return (
-                <div key={r.metric} className="grid grid-cols-[120px_1fr_54px] items-center gap-2 py-1 text-[11px]">
+                <div key={r.metric} className="grid grid-cols-[120px_1fr_54px] items-center gap-2 py-1 text-[13px]">
                   <span>{r.metric}</span>
                   <span>
                     <div className="h-2 rounded bg-surface-3" style={{ width: `${(r.without / max) * 100}%` }} />
-                    <div className="mt-0.5 h-2 rounded bg-accent-good" style={{ width: `${(r.with / max) * 100}%` }} />
+                    <div className="mt-0.5 h-2 rounded bg-ink" style={{ width: `${(r.with / max) * 100}%` }} />
                   </span>
                   <b className="text-right tabular-nums">
                     {r.without}→{r.with}
@@ -101,15 +101,15 @@ export default function LearningPage() {
                 </div>
               );
             })}
-            <div className="mt-1.5 text-[10.5px] text-ink-dim">
+            <div className="mt-1.5 text-[12.5px] text-ink-dim">
               <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-surface-3" /> no memory
-              <span className="ml-2 mr-1 inline-block h-2 w-2 rounded-sm bg-accent-good" /> with reviewed memory · {ablation.note}
+              <span className="ml-2 mr-1 inline-block h-2 w-2 rounded-sm bg-ink" /> with reviewed memory · {ablation.note}
             </div>
           </Card>
         )}
       </div>
 
-      <div className="mt-2.5 text-[11px] text-ink-dim">
+      <div className="mt-4 text-[13px] text-ink-dim">
         Proposed by: {[...new Set(playbooks.map((p) => AGENT_NAME[p.proposed_by]))].join(", ") || "—"}
       </div>
     </TabGate>
