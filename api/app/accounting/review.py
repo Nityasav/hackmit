@@ -2,6 +2,7 @@
 from collections import defaultdict
 from hashlib import sha256
 
+from .collections import collection_checks
 from .payroll import calculations as payroll_calculations
 
 
@@ -108,4 +109,5 @@ def checks(records, config):
         add("grant-inputs", "Grant register missing", "gr", "gap", "Award eligibility and ceilings cannot be confirmed without award definitions.")
     add("grant-eligibility", "Purpose and service eligibility", "gr", "gap",
         "Period and ceiling checks cover supplied payroll allocations only. Award purpose, invoice-funded charges, service allocation, amendments and full-population completeness require independent review.", by_role["policy"])
+    collection_checks(by_role, config, add)
     return result

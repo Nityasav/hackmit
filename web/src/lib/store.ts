@@ -20,7 +20,6 @@ function emptyBundle(id: string, info?: IntakeWorkspace): Bundle {
       period: info ? `${info.start} — ${info.end}` : "Loading",
       mode: "not_started",
       snapshot_id: "No records loaded",
-      disabled_tabs: [],
       model: "Not configured",
       run_budget: { used: 0, total: 0 },
       intake: true,

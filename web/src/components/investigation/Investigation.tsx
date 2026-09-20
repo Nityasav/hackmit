@@ -2,10 +2,12 @@
 
 import { Section } from "@/components/ui";
 
+import { AgentBoard } from "./AgentBoard";
 import { AgentTeam } from "./AgentTeam";
 import { BeforeAnyRun, RunProgress, StartInvestigation } from "./CfoRun";
 import { describeRun } from "./agents";
 import { RunFindings } from "./Findings";
+import { RecordChecks } from "./RecordChecks";
 import { Precedent } from "./Precedent";
 import { useInvestigation } from "./run";
 
@@ -38,6 +40,10 @@ export function Investigation({ ws }: { ws: string }) {
         )}
       </header>
 
+      <Section title="Record checks">
+        <RecordChecks ws={ws} />
+      </Section>
+
       <Section title="Review scope">
         <StartInvestigation state={state} />
       </Section>
@@ -48,6 +54,10 @@ export function Investigation({ ws }: { ws: string }) {
 
       <Section title={run ? "Progress" : "Review process"}>
         {run ? <RunProgress run={run} running={running} /> : <BeforeAnyRun />}
+      </Section>
+
+      <Section title="Agent tasks">
+        <AgentBoard />
       </Section>
 
       {run && (

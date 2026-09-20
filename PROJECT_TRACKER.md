@@ -35,7 +35,7 @@ This tracker replaces accumulated historical checkpoints that contradicted the c
 - Frontend lint and production build passed after the preset cleanup and form spacing changes.
 - Browser showed no preset workspace or schema banner; institution form spacing was visually checked.
 - These checks establish software behavior, not held-out agent or extraction accuracy.
-- Current work is on `max` with pending local edits. Verify Git status before committing; this tracker does not imply a push or main merge.
+- The cleanup is committed and integrated with main's agent board, deterministic record checks, money-in accounting and opt-in hosting support. Verify branch references and deployment status directly before further work.
 
 ## Next work to scope
 

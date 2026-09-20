@@ -1,6 +1,6 @@
 # Sherlock — current product and implementation specification
 
-Updated: 2026-09-20. This is the canonical specification for the current working tree, including the uncommitted cleanup on `max`. Read this before changing the product. Repository-root `SPEC.md` points here; `PROJECT_TRACKER.md` records status and the next handoff. Code is the evidence for implementation claims. Historical plans are design context, not proof that a feature exists.
+Updated: 2026-09-20. This is the canonical specification for the merged implementation. Read this before changing the product. Repository-root `SPEC.md` points here; `PROJECT_TRACKER.md` records status and the next handoff. Code is the evidence for implementation claims. Historical plans are design context, not proof that a feature exists.
 
 ## 1. Product and user intent
 
@@ -46,6 +46,8 @@ The normal sequence is create → upload → preview/map → commit → investig
 | Web identity | `web/src/lib/supabase/`, `web/src/proxy.ts` | Supabase session validation; separate from API authorization |
 
 The runtime uses a custom Python coordinator, not LangGraph. LangGraph was previously proposed; it is not an installed orchestration dependency. Keep the existing structure compact and avoid creating parallel stores or alternative bundle builders.
+
+The latest main integration adds `AgentBoard` and `TaskDrawer` within Investigation, plus `RecordChecks` for deterministic results. `accounting/collections.py` supplies money-in checks over fees, collections, deposits and sponsorships. Default coordinator limits are 24 tool calls per actor/task and 150 per run, with 12 coordinator model calls. These are execution limits, not benchmark results.
 
 ## 4. Documents, financial records and updates
 
@@ -117,7 +119,7 @@ Start the web app in `web/` with `bun install` then `bun dev`; start the API in 
 | `SCHOOLTRACE_USERS` | Optional local API password accounts, roles and workspace access |
 | `SCHOOLTRACE_EXTRACTORS` | Registered local extraction endpoint/artifact configuration |
 
-Supabase authenticates the web app, but the FastAPI access layer separately uses loopback restrictions and optional local accounts. A web login does not establish API tenant isolation. Deploying the frontend to Vercel alone does not host this Python API or make a visitor's localhost available. A hosted backend, matched authorization, allowed origins and persistent storage remain required for a usable public deployment.
+Supabase authenticates the web app, but FastAPI separately uses password accounts and workspace permissions. By default it accepts loopback traffic. Hosted access is opt-in through `SCHOOLTRACE_PUBLIC_HOSTS` and requires `SCHOOLTRACE_USERS`; unconfigured hosted access fails closed. `SCHOOLTRACE_ALLOWED_ORIGINS` and `SCHOOLTRACE_ALLOWED_ORIGIN_REGEX` configure allowed web origins. Hosted cookies use Secure and SameSite=None. A web login does not establish API tenant isolation. `api/Dockerfile`, `api/railway.json` and `DEPLOY.md` provide deployment support; this does not establish that a remote deployment is configured or healthy. Persistent storage and separate API sign-in are still required. The API loads ignored `.env.local` as well as `.env`.
 
 Compatibility names such as `SCHOOLTRACE_*`, the reviewer header, SQLite filename and schema identifiers remain where needed. Product branding is Sherlock. Do not rename persisted contracts casually.
 

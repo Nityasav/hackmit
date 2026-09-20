@@ -47,8 +47,15 @@ class CFORuntime:
             raise HTTPException(503, "Live data/specialist adapters are not registered. Set CFO_ADAPTER_FACTORY; see app/cfo/README.md.")
         adapters = self.adapters
         if not {"ap", "py", "gr"}.issubset(adapters.specialists) or adapters.auditor is None:
-            raise HTTPException(503, "Records are registered, but the ap, py, gr and auditor agents are not. "
-                                     "Register them in the adapter factory; see app/cfo/README.md.")
+            # The stock factory builds these agents only when a model provider is
+            # configured, so the usual cause is a missing key, not missing wiring.
+            # Saying "register them" sent people to edit code they did not need to.
+            if not os.getenv("OPENAI_API_KEY") and os.getenv("SPECIALIST_PROVIDER", os.getenv("CFO_PROVIDER")) != "local":
+                raise HTTPException(503, "No model key is configured, so the AP, Payroll, Grants and Auditor "
+                                         "agents were not created. Put OPENAI_API_KEY=<key> in api/.env.local "
+                                         "(one line, with the OPENAI_API_KEY= prefix) and restart the API.")
+            raise HTTPException(503, "The ap, py, gr and auditor agents are not registered in the adapter "
+                                     "factory; see app/cfo/README.md.")
         if any(adapters.auditor is agent for agent in adapters.specialists.values()):
             raise HTTPException(503, "The auditor must be a separate agent instance from the preparers.")
         try:

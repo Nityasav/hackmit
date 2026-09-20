@@ -6,7 +6,7 @@ Documents are evidence, never executable instructions or automatic postings.
 from __future__ import annotations
 
 import csv
-from datetime import date
+from datetime import date, timedelta
 import hashlib
 import io
 import json
@@ -25,8 +25,13 @@ MAX_BATCH = 50 * 1024 * 1024
 MAX_FILES = 20
 MAX_ROWS = 50_000
 PROFILE = "US_DISTRICT_MANAGEMENT_ACCRUAL_V1"
-Role = Literal["chart", "opening", "ledger", "payroll", "grants", "budget", "invoice", "service", "policy", "document"]
+Role = Literal["chart", "opening", "ledger", "payroll", "grants", "budget", "invoice", "fees", "collections", "deposits", "sponsorships", "service", "policy", "document"]
 DOCUMENT_ROLES = {"service", "policy", "document"}
+# Money coming in: what a family or sponsor owes, what was received, and where it landed.
+MONEY_IN_ROLES = {"fees", "collections", "deposits", "sponsorships"}
+# Banking lags the till: cash taken on the last days of a period reaches the bank after it closes. A banking
+# week is this intake's stated convention for how long that lag may run, not a rule of law or a policy finding.
+DEPOSIT_GRACE_DAYS = 7
 FIELDS = {
     "chart": ["account", "name", "type", "report_mapping", "effective_from"],
     "opening": ["record_id", "account", "balance_date", "debit", "credit"],
@@ -35,10 +40,16 @@ FIELDS = {
     "grants": ["award_id", "name", "ceiling", "valid_from", "valid_to"],
     "budget": ["record_id", "account", "amount", "approval_reference"],
     "invoice": ["record_id", "vendor_id", "invoice_number", "service_date", "amount"],
+    "fees": ["record_id", "student_ref", "fee_type", "charge_date", "amount"],
+    "collections": ["record_id", "collected_by", "collection_date", "method", "amount"],
+    "deposits": ["record_id", "deposit_date", "bank_reference", "amount"],
+    "sponsorships": ["record_id", "sponsor_id", "program", "pledge_date", "due_date", "amount"],
 }
 MONEY_FIELDS = {"debit", "credit", "gross", "deductions", "net", "employer_cost", "award_amount", "ceiling", "amount"}
-DATE_FIELDS = {"date", "balance_date", "service_start", "service_end", "pay_date", "valid_from", "valid_to", "effective_from", "effective_to", "service_date"}
-OPTIONAL_FIELDS = ["currency", "school", "fund", "department", "award_id", "ledger_entry_id", "ledger_line_id", "effective_to", "po_id", "receipt_id"]
+DATE_FIELDS = {"date", "balance_date", "service_start", "service_end", "pay_date", "valid_from", "valid_to", "effective_from", "effective_to", "service_date",
+               "charge_date", "collection_date", "deposit_date", "pledge_date", "due_date"}
+OPTIONAL_FIELDS = ["currency", "school", "fund", "department", "award_id", "ledger_entry_id", "ledger_line_id", "effective_to", "po_id", "receipt_id",
+                   "student_ref", "fee_record_id", "deposit_reference", "collection_reference", "program", "waiver_reference", "due_date"]
 
 
 def fail(code: str, message: str, status: int = 422, **details):
@@ -148,6 +159,10 @@ def iso_date(raw: str) -> str:
     return date.fromisoformat(raw).isoformat()
 
 
+def deposit_cutoff(period_end: str) -> str:
+    return (date.fromisoformat(period_end) + timedelta(days=DEPOSIT_GRACE_DAYS)).isoformat()
+
+
 def issue(code, message, source_id, locator=None, field=None):
     return {"code": code, "message": message, "source_id": source_id, "locator": locator, "field": field}
 
@@ -221,7 +236,7 @@ def parse_source(source, config):
                         row_errors.append(issue("opening_date", "Opening balance date must equal the start of the period (before activity)", sid, locator))
                 if options.role == "chart" and payload.get("type") not in {"asset", "liability", "equity", "revenue", "expense"}:
                     row_errors.append(issue("account_type", "Use asset, liability, equity, revenue or expense", sid, locator, "type"))
-                for start, end in [("valid_from", "valid_to"), ("effective_from", "effective_to"), ("service_start", "service_end")]:
+                for start, end in [("valid_from", "valid_to"), ("effective_from", "effective_to"), ("service_start", "service_end"), ("pledge_date", "due_date")]:
                     if payload.get(start) and payload.get(end) and payload[start] > payload[end]:
                         row_errors.append(issue("date_order", f"{start} must not be after {end}", sid, locator))
                 if options.role == "payroll" and not row_errors:
@@ -231,6 +246,18 @@ def parse_source(source, config):
                         row_errors.append(issue("allocation_exceeds_cost", "Award allocation exceeds total payroll cost", sid, locator))
                     if payload["service_end"] < config["start"] or payload["service_start"] > config["end"]:
                         row_errors.append(issue("period_mismatch", "Payroll service period does not overlap workspace period", sid, locator))
+                if options.role in MONEY_IN_ROLES and not row_errors:
+                    if payload["amount_cents"] <= 0:
+                        row_errors.append(issue("nonpositive_amount", "A charge, receipt, deposit or pledge of zero is a data error, not a record", sid, locator, "amount"))
+                    # Cash movement is what the period bounds. A fee may be charged long before the review
+                    # window opens and still be settled inside it, so charge_date stays unconstrained.
+                    if payload.get("collection_date") and not config["start"] <= payload["collection_date"] <= config["end"]:
+                        row_errors.append(issue("period_mismatch", "Cash movement date falls outside the selected period", sid, locator, "collection_date"))
+                    # Refusing a deposit banked just after period end would withhold the record that answers an
+                    # undeposited-cash difference, so the check reports a gap it created. Before the period opens
+                    # is still an error: no deposit banks money that had not yet been received.
+                    if payload.get("deposit_date") and not config["start"] <= payload["deposit_date"] <= deposit_cutoff(config["end"]):
+                        row_errors.append(issue("period_mismatch", f"Deposit date falls outside the selected period and the {DEPOSIT_GRACE_DAYS}-day banking window supplied after it", sid, locator, "deposit_date"))
                 result["issues"].extend(row_errors)
                 if row_errors:
                     continue
@@ -550,6 +577,7 @@ def coverage(ws):
             ("payroll_allocation_confirmation", "Payroll / grant evidence", {"payroll", "grants", "policy", "service"}),
             ("management_statements", "Management statements", {"chart", "opening", "ledger"}),
             ("budget_variance", "Budget versus actual", {"chart", "opening", "ledger", "budget"}),
+            ("collections_reconciliation", "Collections reconciled to deposits", {"collections", "deposits"}),
         ]:
             missing = sorted(required - roles)
             if key == "document_explanation":
@@ -562,6 +590,9 @@ def coverage(ws):
             if key == "payroll_allocation_confirmation" and not missing:
                 status = "needs_review"
                 note = "Documents are supplied, not independently verified. Auditor review and allocation calculation are still required."
+            if key == "collections_reconciliation" and not missing:
+                status = "needs_review"
+                note = "Receipts and deposits are supplied records, not a verified complete set. A difference between them is unreconciled, not evidence of loss."
             if config["kind"] == "public" and key != "document_explanation":
                 status, note = "unsupported", "Public-document workspace; no transaction accounting."
             capabilities.append({"id": key, "label": label, "status": status, "missing": missing, "note": note})

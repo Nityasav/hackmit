@@ -21,6 +21,21 @@ other, and hand you a decision. You approve, and every affected report updates a
 - **Grants & Compliance** tests charges against the award terms
 - **Internal Auditor** re-reads the sources and redoes the math, and rejects claims that don't hold up
 
+Money going out is only half of it. Money coming **in** is commonly tracked outside the finance system — a
+collection log, a sign-up sheet, a deposit book — so a receipt written there has nothing in the finance
+system to be reconciled against. Sherlock takes inbound school money as first-class input:
+
+- **Fees** — what a family was charged: student reference, fee type, charge date, amount
+- **Collections** — what was actually received: who collected it, when, by which method, and optionally the
+  fee it settles, the pledge it settles and the deposit reference it was banked under
+- **Deposits** — what reached the bank: deposit date, bank reference, amount
+- **Sponsorships** — what a sponsor pledged to a program, when it was pledged and when it falls due
+
+The headline check is **receipted with no matching deposit**: money recorded as collected that no supplied
+deposit record accounts for. That is an unreconciled difference, never theft — a break can equally be
+a slip banked under a reference nobody wrote down, or a deposit record we were never given. Each check says
+what it does not establish, and amounts from different checks are never added together or called recovered.
+
 Two things make it more than a dashboard:
 
 1. **You can see why.** Every action emits a decision record: when, how (the tool calls), why, and what it
@@ -90,6 +105,19 @@ structured three-way matching, model training, or posting an approved change to 
 approval records a decision, it does not move money. Input availability is not an audit conclusion.
 Excel files and live financial connectors remain deferred.
 
+Money coming in runs through the same intake and the same deterministic engine. Upload fee charges,
+collections, deposits and sponsor pledges as CSV, and `api/app/accounting/collections.py` traces each
+receipt by reference — to the charge or pledge it settles, and to the deposit it was banked under. It
+reports collections that no supplied deposit answers, deposits smaller than the collections recorded against
+them, deposits larger than them, receipts carrying no deposit reference at all, deposits that no supplied
+receipt accounts for, deposits dated before the receipts they would have banked, receipts banked outside a
+five-day window that is a supplied demo convention rather than a rule, the uncollected remainder of fee
+charges, receipts naming an obligation absent from the registers, and the unreceived remainder of pledges
+that fell due within the period. Each result is a rules-based check over supplied records, not an Auditor
+verdict and not a loss. There is no bank feed, payment processor or point-of-collection connector; refunds
+and payment plans are not modelled; a fee's `waiver_reference` is stored but read by no check, so a waived
+fee is still reported as outstanding; and money-in is not posted to the general ledger.
+
 ## Getting started
 
 ```bash
@@ -126,8 +154,8 @@ data directory. The app is for synthetic/public data on localhost; the reviewer 
 authentication. Imports stay local until you explicitly click **Run CFO triage**; that action sends source
 spans and normalized records selected by the agent's scoped tools to the configured OpenAI model.
 
-After committing records, choose **CFO Agent** or **Grants & Compliance agent** in the Command center's
-**Investigation agent** selector, then run it. Grants reviews supplied terms, payroll service periods and
+After committing records, choose **CFO Agent** or **Grants & Compliance agent** in the records panel's
+**Investigation agent** selector on **/**, then run it. Grants reviews supplied terms, payroll service periods and
 award ceilings, with deterministic payroll-subset totals—not a full grant expenditure schedule or
 compliance certification. `GRANTS_MODEL` optionally overrides the default model. Candidate findings link to the
 original lines; suggested evidence can be added to the existing request queue. Runs are saved with
@@ -185,7 +213,8 @@ mismatch. Parsing is synchronous and bounded for local operation. Staging, valid
 are atomic, persisted operations; a crash rolls back the active operation and previously saved previews
 can be resumed. There is no extra worker service or queue yet.
 
-CSV roles: chart, opening, ledger, payroll, grants, budget, invoice. Text roles: service, policy, document.
+CSV roles: chart, opening, ledger, payroll, grants, budget, invoice, fees, collections, deposits,
+sponsorships. Text roles: service, policy, document.
 Amounts are exact decimal strings (major units) or integer minor units selected per file. Dates are
 YYYY-MM-DD; opening balances are dated at the start of the period before activity. Header mapping is
 explicit; canonical optional columns are recognized by name. Stable source IDs are required for CSV
@@ -209,8 +238,9 @@ performed by importing. Evidence attachment records a scoped resumption event fo
 
 ## Honesty rules we hold ourselves to
 
-All institutions and transactions in the sandbox are fictional. The MIT tab shows MIT's **published** audit
-reports only, read-only, with page citations; we do not have MIT's ledger and make no claims beyond what those
+All institutions and transactions in the sandbox are fictional. The MIT public-report view is not one of the
+three current screens; the fixture behind it (`contracts/fixtures/mit.json`) carries MIT's **published** audit
+reports only, read-only, with page citations. We do not have MIT's ledger and make no claims beyond what those
 reports state. Measured numbers come from the evaluator, never from a slide.
 
 ## Team
