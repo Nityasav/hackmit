@@ -13,6 +13,19 @@ def checks(records, config):
     result = []
 
     def add(key, title, role, status, explanation, rows=(), amount=None, action="Review the original support with the finance team."):
+        """Record one finding.
+
+        `key` becomes the finding id, and a reviewer attaches follow-up to it by
+        (finding_id, snapshot_id). So an id must name WHAT the finding is, never
+        which rows are currently in it: derive it from the grouping key, or use a
+        fixed id and let evidence carry membership. An id that moves when a group
+        gains a row orphans the reviewer's note, re-presents the finding as new,
+        and is invisible to the changes diff, which keys on id alone.
+
+        If one ever has to move anyway, do it while no workspace exists — the
+        migration is free at zero rows and costs reviewer history at any other
+        time.
+        """
         evidence = sorted({(r["source_id"], r["locator"]) for r in rows})
         result.append(dict(id=key, title=title, role=role, status=status, explanation=explanation,
                            amount_cents=amount, action=action, origin="deterministic", review="Rules-based check; not an Auditor verdict",
@@ -29,12 +42,9 @@ def checks(records, config):
             groups[(p["vendor_id"].strip().casefold(), p["invoice_number"].strip().casefold(), p["amount_cents"], p["currency"])].append(row)
         duplicates = [(gkey, rows) for gkey, rows in groups.items() if len(rows) > 1]
         for gkey, rows in duplicates:
-            # Hash the duplicate's identity, not which rows happen to be in the
-            # group. Hashing membership meant a third invoice joining an existing
-            # pair retired ap-duplicate-<old> and created ap-duplicate-<new>: the
-            # reviewer's saved follow-up is scoped by (finding_id, snapshot_id) so
-            # it orphaned, the unresolved duplicate came back as brand new, and the
-            # changes diff keys on id alone so it reported nothing at all.
+            # Hash the duplicate's identity, not its current members. This
+            # previously hashed the group's record_keys, so a third matching
+            # invoice retired one id and minted another. See add() above.
             vendor, invoice_number, amount_cents, currency = gkey
             key = sha256(f"{vendor}|{invoice_number}|{amount_cents}|{currency}".encode()).hexdigest()[:12]
             add("ap-duplicate-" + key, "Possible duplicate invoice", "ap", "attention",
