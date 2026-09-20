@@ -27,6 +27,10 @@ const ROLES: Record<string, string> = {
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
+//: Where in this panel an action was taken, so its outcome can be reported
+//: beside the control instead of at the top of a long screen.
+type Scope = "top" | "import";
+
 const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
@@ -53,6 +57,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
   const [history, setHistory] = useState<{ id: string; status: string; created_at: string }[]>([]);
   const [files, setFiles] = useState<{ file: File; options: SourceOptions }[]>([]);
   const [batch, setBatch] = useState<ImportBatch | null>(null);
+  const [scope, setScope] = useState<Scope>("top");
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
   const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
@@ -107,10 +112,23 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     });
   }, [batch?.counts.issues, batch?.status, coverage, files.length, onProgressChange, snapshot]);
 
-  async function act(fn: () => Promise<void>) {
-    setBusy(true); setError(""); setMessage("");
+  /**
+   * Run one action and remember where it was taken.
+   *
+   * Committing an import is done at the bottom of a long panel while its
+   * confirmation rendered at the top, so the most consequential action on this
+   * screen appeared to do nothing. `where` puts the outcome beside the button.
+   */
+  async function act(fn: () => Promise<void>, where: Scope = "top") {
+    setBusy(true); setError(""); setMessage(""); setScope(where);
     try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
     finally { setBusy(false); }
+  }
+  function Outcome({ at }: { at: Scope }) {
+    if (scope !== at) return null;
+    if (error) return <p role="alert" className="mt-3 w-full border border-red-300 bg-red-50 p-3 text-[13px] text-red-800">{error}</p>;
+    if (message) return <p role="status" className="mt-3 w-full border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900"><b>Done.</b> {message}</p>;
+    return null;
   }
   function showBatch(b: ImportBatch) { setBatch(b); setDraft(Object.fromEntries(b.files.map((f) => [f.id, f.options]))); }
   function edit(id: string, updates: Partial<SourceOptions>) {
@@ -139,7 +157,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {text}{unreachable ? ` Check that the API is running on ${API_URL}.` : ""}
       </p>;
     })()}
-    {message && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
+    {message && scope === "top" && <p role="status" className="mt-3 bg-surface-2 p-3 text-ink">{message}</p>}
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
@@ -250,19 +268,20 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         {batch.status !== "committed" ? <div className="mt-3 flex flex-wrap gap-2">
           <button disabled={busy} className={button} onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/mapping", {
             method: "PATCH", body: { expected_version: batch.version, files: draft },
-          }))) }>Save mappings & revalidate</button>
+          })), "import") }>Save mappings & revalidate</button>
           <button disabled={busy || batch.status !== "ready_to_commit" || Boolean(draftChanged)} className={primary} onClick={() => act(async () => {
             showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/commit", {
               method: "POST", body: { expected_version: batch.version, idempotency_key: batch.id + ":" + batch.version },
             }));
             setFiles([]); if (fileInput.current) fileInput.current.value = "";
             await Promise.all([refresh(), refreshBundle()]);
-            setMessage("Records committed. Originals and the snapshot are saved locally. No financial correction or agent investigation was performed.");
-          })}>Confirm & commit records</button>
+            setMessage("Records committed. The originals and this snapshot are saved locally, and the agents can now read these records. No accounting correction was made and no investigation was run.");
+          }, "import")}>Confirm & commit records</button>
           <span className="self-center text-[11px] text-ink-dim">Local reviewer · commits validated records, not accounting adjustments</span>
           {/* A commit button that greys out and says nothing is the commonest
               way a working feature reads as a broken one. Both conditions that
               hold it closed are ordinary and recoverable, so both say so. */}
+          <Outcome at="import" />
           {(batch.status !== "ready_to_commit" || draftChanged) &&
             <p className="w-full text-[12.5px] text-amber-800">
               {draftChanged

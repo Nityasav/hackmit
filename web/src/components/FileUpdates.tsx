@@ -99,7 +99,7 @@ export function FileUpdates({ ws, revision }: { ws: string; revision?: string | 
         {busy ? "Starting…" : live ? "Scan and investigate" : "Run record checks"}
       </button>
       {error && <p role="alert" className="mt-2 text-[13px] text-accent-bad">{error}</p>}
-      {message && <p role="status" className="mt-2 text-[13px]">{message}</p>}
+      {message && <p role="status" className="mt-2 border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900"><b>Done.</b> {message}</p>}
     </section>
   );
 }
