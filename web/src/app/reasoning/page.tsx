@@ -44,22 +44,22 @@ function Reasoning() {
         subtitle="Every decision every agent made, and why. Click one to expand it."
       />
 
-      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-slate-50 px-2.5 py-1.5 focus-within:border-teal-400">
-        <span className="text-teal-700">✦</span>
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-2.5 focus-within:border-ink">
+        <span className="text-ink">✦</span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Ask why… searches actions, reasons, tools, evidence IDs"
-          className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-slate-400"
+          className="w-full bg-transparent text-[14px] outline-none placeholder:text-ink-faint"
         />
         {q && (
-          <button type="button" onClick={() => setQ("")} className="cursor-pointer text-slate-400">
+          <button type="button" onClick={() => setQ("")} className="cursor-pointer text-ink-faint">
             ✕
           </button>
         )}
       </div>
 
-      <div className="mb-2.5 flex flex-wrap gap-1.5">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Chip active={agent === "all"} onClick={() => setAgent("all")}>
           All agents
         </Chip>
@@ -83,12 +83,12 @@ function Reasoning() {
       </div>
 
       {grouped.length === 0 && (
-        <div className="py-10 text-center text-slate-500">No decisions match that filter.</div>
+        <div className="py-10 text-center text-ink-dim">No decisions match that filter.</div>
       )}
 
       {grouped.map((g) => (
         <div key={g.run}>
-          <div className="mb-1.5 mt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{g.run}</div>
+          <div className="mb-1.5 mt-4 text-[12.5px] font-semibold uppercase tracking-wider text-ink-dim">{g.run}</div>
           {g.items.map((d) => (
             <DecisionCard key={d.id} decision={d} defaultOpen={filtered.length === 1} />
           ))}
@@ -121,8 +121,8 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] ${
-        active ? "border-slate-900 bg-slate-900 text-white" : "border-line bg-white text-slate-600 hover:border-teal-300"
+      className={`cursor-pointer rounded-none border px-2.5 py-1 text-[13px] ${
+        active ? "border-surface-3 bg-surface-2 text-white" : "border-line bg-surface text-ink-dim hover:border-ink"
       }`}
     >
       {children}

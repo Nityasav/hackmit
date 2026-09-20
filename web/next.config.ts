@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname, ".."),
   },
+  // The dev badge sits bottom-left, on top of the sidebar rail.
+  devIndicators: false,
 };
 
 export default nextConfig;

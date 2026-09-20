@@ -1,4 +1,4 @@
-// Mirror of contracts/README.md. api/app/models.py mirrors the same shapes.
+// Mirror of the bundle contract in /README.md. api/app/models.py mirrors the same shapes.
 // Change all three together.
 
 export type AgentId = "cfo" | "ap" | "py" | "gr" | "au";
@@ -174,7 +174,7 @@ export interface Playbook {
 }
 
 export interface Ablation {
-  /** true until the numbers come from the real evaluator (DATA_AND_EVALUATION.md). */
+  /** true until the numbers come from the real evaluator. */
   example: boolean;
   rows: { metric: string; without: number; with: number }[];
   note: string;

@@ -65,7 +65,7 @@ audit conclusion. PDF extraction/OCR, Excel files and live financial connectors 
 git clone https://github.com/Nityasav/hackmit.git
 cd hackmit
 
-# UI (works offline against contracts/fixtures)
+# UI (works offline against the bundled fixtures)
 cd web && bun install && bun dev          # http://localhost:3000
 
 # API (required for document intake; optional only for fixed demo views)
@@ -123,11 +123,52 @@ fine-tuned document extractor. See `PROJECT_TRACKER.md` for verified scope and t
 | Path | What's in it |
 | --- | --- |
 | `web/` | The dashboard: 8 tabs plus an MIT / Sandbox workspace switcher |
-| `api/` | Accounting engine, agents, workflows, HTTP API |
-| `contracts/` | The shared data contract and fixtures |
-| `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo script |
+| `api/` | Accounting engine, document intake, the agents, HTTP API |
+| `contracts/` | The shared bundle contract and the fixtures both sides read |
+| `schooltrace/` | The spec: product, accounting rules, agent prompts, evaluation, demo |
 | `docs/design/prototype.html` | Clickable design prototype (open it in a browser) |
-| `WORKPLAN.md` | Who builds what, in what order, for the 16 hours left |
+| `PROJECT_TRACKER.md` | Verified scope and the next integration task |
+
+### `api/` layout
+
+| Path | What goes here |
+| --- | --- |
+| `app/main.py` | HTTP endpoints |
+| `app/models.py` | Pydantic mirror of the bundle contract |
+| `app/store.py` | Fixed demo bundles; intake workspaces use the SQLite bundle builder |
+| `app/db.py` | SQLite schema, transactions, original bytes and local events |
+| `app/ingestion.py` | CSV/text parsing, mappings, validation, immutable commits, coverage |
+| `app/accounting/` | Exact integer-cent math and ledger invariants L01–L13 |
+
+### Intake notes
+
+Intake writes require `X-SchoolTrace-Reviewer: local-reviewer`, which the UI supplies. This distinguishes
+an intentional local reviewer operation; it is not authentication. Keep the server on loopback and use
+synthetic/public records. Unknown workspaces and cross-workspace source IDs return 404.
+
+Original uploads are immutable SQLite BLOBs, so a failed transaction cannot leave a DB/file-storage
+mismatch. Parsing is synchronous and bounded for the small local demo. Staging, validation and commit
+are atomic, persisted operations; a crash rolls back the active operation and previously saved previews
+can be resumed. There is no extra worker service or queue yet.
+
+CSV roles: chart, opening, ledger, payroll, grants, budget, invoice. Text roles: service, policy, document.
+Amounts are exact decimal strings (major units) or integer minor units selected per file. Dates are
+YYYY-MM-DD; opening balances are dated at the start of the period before activity. Header mapping is
+explicit; canonical optional columns are recognized by name. Stable source IDs are required for CSV
+records. Unsupported or malformed inputs never become accepted financial records.
+
+No corrections, full report recomputation, live agent execution or automatic evidence verification are
+performed by importing. Evidence attachment records a scoped resumption event for the future runtime.
+
+## Rules we build to
+
+1. **Money is integer cents.** Never float. `api/app/accounting/money.py` owns parsing and allocation
+   helpers; ingestion sums integer values to validate controls. The UI is the only place that formats.
+2. **Only a human decides an approval.** Agents propose; `POST /api/approvals/{id}/decision` is the one
+   path that applies a change.
+3. **Every agent action emits a `Decision`** (see `api/app/models.py`) so it appears in the Reasoning log.
+4. **The answer key stays out of reach.** Evaluator truth files live outside anything the tool gateway
+   can read.
 
 ## Honesty rules we hold ourselves to
 

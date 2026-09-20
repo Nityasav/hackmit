@@ -1,4 +1,4 @@
-"""Pydantic mirror of contracts/README.md and web/src/lib/types.ts.
+"""Pydantic mirror of the bundle contract in /README.md and web/src/lib/types.ts.
 
 Change all three together. Money is always integer cents.
 """
@@ -194,7 +194,7 @@ class Tag(BaseModel):
 class Decision(BaseModel):
     """One structured decision record per agent action. Feeds the Reasoning log.
 
-    Concise rationale only, never raw chain-of-thought (spec.md §8).
+    Concise rationale only, never raw chain-of-thought.
     """
 
     id: str

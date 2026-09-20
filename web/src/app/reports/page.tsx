@@ -4,6 +4,7 @@ import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
 import type { Bundle } from "@/lib/types";
 import { AgentAvatar, AiTag, Button, Card, CardTitle, FindingStatusPill, PageHeader, Pill } from "@/components/ui";
+import AdvancedStats from "@/components/ui/advanced-stats";
 
 export default function ReportsPage() {
   const { bundle } = useData();
@@ -18,7 +19,12 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader title="Reports" subtitle="Written by the CFO Agent from verified findings only" />
-      <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr]">
+
+      <div className="mb-4">
+        <AdvancedStats />
+      </div>
+
+      <div className="grid gap-4 min-[900px]:grid-cols-2 [&>*]:min-w-0">
         <Card>
           <CardTitle>
             <AgentAvatar id="cfo" size="sm" />
@@ -27,12 +33,12 @@ export default function ReportsPage() {
               <AiTag>AI-written</AiTag>
             </span>
           </CardTitle>
-          <ol className="mb-2 list-inside list-decimal text-[12.5px] text-slate-600">
+          <ol className="mb-2 list-inside list-decimal text-[14px] text-ink-dim">
             {report.sections.map((s) => (
               <li key={s}>{s}</li>
             ))}
           </ol>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             <Button primary onClick={() => download(`${workspace.id}-report.md`, toMarkdown(bundle))}>
               Export Markdown
             </Button>
@@ -40,7 +46,7 @@ export default function ReportsPage() {
               Export JSON
             </Button>
           </div>
-          <div className="mt-2 text-[11px] text-slate-500">
+          <div className="mt-2 text-[13px] text-ink-dim">
             Every claim in the export carries its finding ID, evidence and status. Unresolved items stay in their own
             section instead of being dropped.
           </div>
@@ -52,7 +58,7 @@ export default function ReportsPage() {
           </CardTitle>
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[10px] text-slate-500">
+              <tr className="text-[12px] text-ink-dim">
                 <th className="border-b border-line p-1.5 text-left font-semibold">Measure</th>
                 <th className="border-b border-line p-1.5 text-right font-semibold">{beforeLabel}</th>
                 <th className="border-b border-line p-1.5 text-right font-semibold">{afterLabel}</th>
@@ -61,9 +67,9 @@ export default function ReportsPage() {
             <tbody>
               {report.comparisons.map((c) => (
                 <tr key={c.label}>
-                  <td className="border-b border-slate-100 p-1.5">{c.label}</td>
-                  <td className="border-b border-slate-100 p-1.5 text-right font-mono">{c.before}</td>
-                  <td className={`border-b border-slate-100 p-1.5 text-right font-mono ${applied ? "" : "text-slate-400"}`}>
+                  <td className="border-b border-line p-1.5">{c.label}</td>
+                  <td className="border-b border-line p-1.5 text-right font-mono">{c.before}</td>
+                  <td className={`border-b border-line p-1.5 text-right font-mono ${applied ? "" : "text-ink-faint"}`}>
                     {c.after}
                   </td>
                 </tr>
@@ -79,14 +85,14 @@ export default function ReportsPage() {
           )}
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="min-[900px]:col-span-2">
           <CardTitle>Findings in this pack</CardTitle>
           {findings.map((f) => (
-            <div key={f.id} className="flex items-center gap-2 border-t border-slate-100 py-1.5 first:border-t-0">
-              <span className="font-mono text-[10.5px] text-slate-400">{f.id}</span>
+            <div key={f.id} className="flex items-center gap-2 border-t border-line py-2.5 first:border-t-0">
+              <span className="font-mono text-[12.5px] text-ink-faint">{f.id}</span>
               <b>{f.title}</b>
-              <span className="truncate text-slate-500">{f.summary}</span>
-              <span className="ml-auto flex flex-none items-center gap-1.5">
+              <span className="truncate text-ink-dim">{f.summary}</span>
+              <span className="ml-auto flex flex-none items-center gap-2">
                 {f.amount_cents != null && <span className="font-mono">{money(f.amount_cents)}</span>}
                 <FindingStatusPill status={f.status} />
               </span>
