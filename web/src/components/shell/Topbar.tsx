@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useData } from "@/lib/data";
+import { HelpGuide } from "@/components/HelpGuide";
 
 export function Topbar() {
   const router = useRouter();
@@ -27,14 +28,16 @@ export function Topbar() {
           router.push(`/reasoning?q=${encodeURIComponent(q)}`);
         }}
       >
-        <span className="text-ink">✦</span>
+        <span className="text-ink" aria-hidden="true">⌕</span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Ask your finance team why… e.g. “why was INV-2291 cleared?”"
+          aria-label="Search the reasoning and audit trail"
+          placeholder="Search reasoning and audit trail by ID or keyword"
           className="w-full bg-transparent text-[14px] outline-none placeholder:text-ink-faint"
         />
       </form>
+      <HelpGuide />
       </div>
     </header>
   );
