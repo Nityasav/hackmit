@@ -17,6 +17,20 @@ from tests.test_ingestion import client, commit, create, upload  # noqa: F401  (
 RECOVERABLE = ["chart", "opening", "ledger", "vendors", "vendor_invoices"]
 
 
+def test_auto_detection_updates_requirements_only_after_commit(client):
+    ws = create(client)
+    files = [{**sample(role), "role": "document", "options": {"auto_detect": True}} for role in RECOVERABLE]
+    batch = upload(client, ws, files)
+    assert [f["options"]["role"] for f in batch["files"]] == RECOVERABLE
+    base = f"/api/workspaces/{ws}/coverage"
+    before = client.get(base).json()
+    assert before["counts"]["vendors"] == 0
+    commit(client, ws, batch)
+    after = client.get(base).json()
+    assert after["counts"]["vendors"] > 0
+    assert next(r for r in after["requirements"] if r["role"] == "vendors")["satisfied"]
+
+
 def _as_documents(roles: list[str]) -> list[dict]:
     return [{**sample(role), "role": "document"} for role in roles]
 

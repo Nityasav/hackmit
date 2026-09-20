@@ -25,44 +25,51 @@ export function DataRequirements({
   coverage: Coverage;
   onSaved: () => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
+
+  // A running API can predate a frontend update. Missing requirements are not
+  // an empty checklist: do not crash or falsely claim everything is supplied.
+  if (!Array.isArray(coverage.requirements)) {
+    return <section className="mt-4 border border-line p-3" aria-label="What the agents need">
+      <p role="alert" className="text-sm">Requirements are unavailable. The records service needs to be updated or restarted to match this app.</p>
+      <button type="button" onClick={onSaved} className="mt-2 border border-line px-3 py-2 text-xs">Retry requirements</button>
+    </section>;
+  }
 
   const outstanding = coverage.requirements.filter((r) => !r.satisfied);
   const missingRequired = outstanding.filter((r) => !r.optional);
-  const shown = showAll ? coverage.requirements : missingRequired;
+  const groups = [
+    { label: "Required records and settings", items: missingRequired },
+    { label: "Optional records and settings", items: outstanding.filter(r => r.optional) },
+    { label: "Already supplied", items: coverage.requirements.filter(r => r.satisfied) },
+  ];
 
   return (
     <section className="mt-4" aria-label="What the agents need">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="text-sm font-semibold">What the agents need</h3>
-        <span className="font-num text-xs tabular-nums text-ink-dim">
-          {coverage.satisfied_count}/{coverage.required_count} supplied
-        </span>
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="ml-auto text-xs underline"
-        >
-          {showAll ? "Show what is missing" : "Show everything"}
-        </button>
-      </div>
+      <details className="border border-line p-3">
+        <summary className="cursor-pointer text-sm font-semibold">What the agents need
+          <span className="ml-3 text-xs font-normal text-ink-dim">{coverage.satisfied_count}/{coverage.required_count} required items supplied · {missingRequired.length} remaining</span>
+        </summary>
 
-      {missingRequired.length === 0 && !showAll && (
+      {missingRequired.length === 0 && (
         <p className="mt-2 max-w-prose text-xs text-ink-dim">
           Everything required has been supplied. That means the agents can read these records —
           not that the books are complete.
         </p>
       )}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {shown.map((requirement) =>
+      {groups.map(group => <details key={group.label} className="mt-3 border-t border-line pt-3">
+        <summary className="cursor-pointer text-xs font-semibold">{group.label} ({group.items.length})</summary>
+        <div className="mt-3 grid items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {group.items.map((requirement) =>
           requirement.kind === "setting" ? (
             <SettingAsk key={requirement.id} ws={ws} requirement={requirement} onSaved={onSaved} />
           ) : (
             <FileAsk key={requirement.id} requirement={requirement} />
           ),
         )}
-      </div>
+        </div>
+      </details>)}
+      </details>
     </section>
   );
 }

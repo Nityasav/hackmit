@@ -6,8 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { IntakeUiProgress } from "@/lib/workflow";
 import { DataRequirements } from "@/components/DataRequirements";
-import { FileUpdates } from "@/components/FileUpdates";
-import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 
@@ -27,6 +25,8 @@ const ROLES: Record<string, string> = {
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
+const fieldLayout: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const fieldControl: React.CSSProperties = { boxSizing: "border-box", width: "100%", minWidth: 0, height: 34, padding: "6px 10px", border: "1px solid #d4d4d8", background: "white", lineHeight: "20px", outlineOffset: -2 };
 //: Where in this panel an action was taken, so its outcome can be reported
 //: beside the control instead of at the top of a long screen.
 type Scope = "top" | "import";
@@ -127,7 +127,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
     finally { setBusy(false); }
   }
-  function Outcome({ at }: { at: Scope }) {
+  function renderOutcome(at: Scope) {
     if (scope !== at) return null;
     if (error) return <p role="alert" className="mt-3 w-full border border-red-300 bg-red-50 p-3 text-[13px] text-red-800">{error}</p>;
     if (message) return <p role="status" className="mt-3 w-full border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900"><b>Done.</b> {message}</p>;
@@ -165,34 +165,41 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
         <span>{coverage?.workspace.scope || (ws ? "Loading scope…" : "No company yet — create one to add records.")}</span>
-        <span>· {coverage?.workspace.currency}</span><span>· {coverage?.workspace.profile}</span>
-        <button disabled={busy} className={button} onClick={() => act(refresh)}>Refresh sources</button>
+        <span>· {coverage?.workspace.currency}</span>
+        <button disabled={busy} className={button} onClick={() => act(async () => {
+          await refresh();
+          if (batch && batch.status !== "committed") {
+            setMessage("Sources refreshed. Finish the current import before detecting saved files."); return;
+          }
+          const result = await intakeApi<{batch: ImportBatch | null; detected: number}>(base + "/sources/detect", {method: "POST"});
+          if (result.batch) {
+            showBatch(result.batch);
+            setMessage(`Detected ${result.detected} saved files. Review and commit the import to update requirements.`);
+          } else setMessage("Sources refreshed. Requirements reflect committed records; unmatched or older formats need review.");
+        })}>Refresh sources</button>
       </div>
       {coverage && <DataRequirements ws={ws} coverage={coverage} onSaved={refresh} />}
       <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
 
-      <div className="mt-5 border border-line bg-surface-2 p-4">
-        <h3 className="font-semibold">Running the agents</h3>
-        <p className="mt-1 max-w-prose text-xs text-ink-dim">
-          Books is where the records go in. The agents are started from Investigation, so
-          there is one place a paid run can begin rather than two.
-        </p>
-        <Link href="/investigation" className="mt-3 inline-block text-sm font-semibold text-ink underline">
-          Open the investigation &rarr;
-        </Link>
-      </div>
-
-      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
-
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
         <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
-        <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv" disabled={busy}
-          onChange={(e) => setFiles(Array.from(e.target.files || []).map((file) => ({ file, options: defaults() })))} />
+        <div className="my-3 flex flex-wrap items-center gap-3">
+          <button type="button" className={primary} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose files</button>
+          <span className="text-xs text-ink-dim" aria-live="polite">{files.length ? `${files.length} files selected` : "No files selected"}</span>
+        </div>
+        <input style={{ display: "none" }} ref={fileInput} aria-label="Choose source files" type="file" multiple disabled={busy}
+          onChange={(e) => {
+            const selected = Array.from(e.target.files || []);
+            if (selected.some(file => !/\.csv$/i.test(file.name))) {
+              setError("Choose CSV files here. Use Documents for PDFs."); e.target.value = ""; return;
+            }
+            setError(""); setFiles(selected.map(file => ({ file, options: defaults() })));
+          }} />
         {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
           <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
           <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
-            {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}
+            {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{r === "document" ? "Detect from CSV columns" : label}</option>)}
           </select>
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
@@ -200,7 +207,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
           const form = new FormData();
           files.forEach((f) => form.append("files", f.file));
-          form.append("metadata", JSON.stringify(files.map((f) => f.options)));
+          form.append("metadata", JSON.stringify(files.map((f) => ({ ...f.options, auto_detect: f.options.role === "document" }))));
           showBatch(await intakeApi<ImportBatch>(base + "/imports", { method: "POST", body: form }));
           await refresh();
         })}>{busy ? "Working…" : "Preview import"}</button>
@@ -312,7 +319,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           {/* A commit button that greys out and says nothing is the commonest
               way a working feature reads as a broken one. Both conditions that
               hold it closed are ordinary and recoverable, so both say so. */}
-          <Outcome at="import" />
+          {renderOutcome("import")}
           {(batch.status !== "ready_to_commit" || draftChanged) &&
             <p className="w-full text-[12.5px] text-amber-800">
               {draftChanged
@@ -324,14 +331,14 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         </div> : <p className="mt-3 font-mono text-xs text-ink">Saved snapshot: {batch.snapshot_id}</p>}
       </div>}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div><h3 className="font-semibold">Committed sources</h3>
+      <div className="mt-5 space-y-3">
+        <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Committed sources ({coverage?.sources.length || 0})</summary>
           {!coverage?.sources.length && <p className="mt-2 text-xs text-ink-dim">No committed sources yet.</p>}
           {coverage?.sources.map((s) => <button key={s.id} className="mt-2 flex w-full justify-between gap-2 border border-line p-2 text-left text-xs hover:bg-surface-2" onClick={() => act(() => viewSource(s.id))}>
             <span>{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
           </button>)}
-        </div>
-        <div><h3 className="font-semibold">Missing evidence requests</h3>
+        </details>
+        <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Evidence requests ({coverage?.requests.length || 0})</summary>
           <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
             act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
@@ -351,7 +358,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
             </select>
             {r.source_id && <button className="mt-1 text-xs text-ink underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
           </div>)}
-        </div>
+        </details>
       </div>
     </>}
 
@@ -359,14 +366,14 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
-        <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
-        <label className="text-xs">Entity type<select name="entity_type" className={input}>{["company", "subsidiary", "group"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label className="text-xs">Data origin<select name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
-        <label className="text-xs">Currency<select name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label className="text-xs">Period start<input type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
-        <label className="text-xs">Period end<input type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
-        <label className="text-xs">Jurisdiction<input name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
-        <label className="text-xs">Scope<input name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Institution name<input style={fieldControl} name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Entity type<select style={fieldControl} name="entity_type" className={input}>{["company", "subsidiary", "group"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label style={fieldLayout} className="text-xs">Data origin<select style={fieldControl} name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
+        <label style={fieldLayout} className="text-xs">Currency<select style={fieldControl} name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        <label style={fieldLayout} className="text-xs">Period start<input style={fieldControl} type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Period end<input style={fieldControl} type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Jurisdiction<input style={fieldControl} name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>
+        <label style={fieldLayout} className="text-xs">Scope<input style={fieldControl} name="scope" required placeholder="e.g. September payroll and grant allocation" className={input} /></label>
         <p className="text-xs text-ink-dim sm:col-span-2">The current accounting checks use the USD management profile. Other currencies are available for public-document exploration.</p>
         {error && <p role="alert" className="text-red-700 sm:col-span-2">{error}</p>}
         <button disabled={busy} className={primary}>{busy ? "Creating…" : "Create workspace"}</button>
