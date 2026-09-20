@@ -204,19 +204,20 @@ class Toolbox:
                         confidence: int | None, evidence: list[dict], model: str,
                         cost_cents: int, event_id: str | None = None,
                         reviewer: str | None = None, verdict: str | None = None,
-                        escalated: bool = False) -> str:
+                        escalated: bool = False,
+                        memory_checks: list[dict] | None = None) -> str:
         """Write one row of the defensible trail. The only record of what happened."""
         decision_id = db.uid("decision")
         with db.connect() as connection:
             connection.execute(
                 "INSERT INTO agent_decisions (id, ws, event_id, thread_id, run_id, agent,"
                 " parent_agent, action, summary, why, confidence, evidence, reviewer,"
-                " review_verdict, escalated, model, cost_cents, created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " review_verdict, escalated, model, cost_cents, memory_checks, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (decision_id, self.ws, event_id, self.thread_id, self.thread_id, agent,
                  self.spec.parent, action, summary, why, confidence,
                  db.encode(evidence), reviewer, verdict, int(escalated), model, cost_cents,
-                 db.now()))
+                 db.encode(memory_checks or []), db.now()))
         return decision_id
 
     def record_link(self, *, from_type: str, from_id: str, to_type: str, to_id: str,

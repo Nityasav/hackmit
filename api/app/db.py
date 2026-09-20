@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS agent_decisions (
     confidence INTEGER, evidence TEXT NOT NULL DEFAULT '[]',
     reviewer TEXT, review_verdict TEXT, escalated INTEGER NOT NULL DEFAULT 0,
     model TEXT NOT NULL DEFAULT '', cost_cents INTEGER NOT NULL DEFAULT 0,
+    memory_checks TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS workspace_events ON economic_events(ws, period);
@@ -174,6 +175,10 @@ CREATE INDEX IF NOT EXISTS thread_decisions ON agent_decisions(ws, thread_id);
 ADDED_COLUMNS = (
     ("records", "event_id", "TEXT"),
     ("sources", "event_hint", "TEXT"),
+    # What a run did with the precedent it was offered. Stored on the decision
+    # rather than in a side table: it is part of the reasoning that produced
+    # that decision, and a reviewer reading the row should see it there.
+    ("agent_decisions", "memory_checks", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

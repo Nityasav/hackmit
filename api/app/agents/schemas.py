@@ -53,6 +53,19 @@ class Exception_(Contract):
     detail: str = Field(min_length=1, max_length=600)
 
 
+class MemoryCheck(Contract):
+    """What this run did with one precedent it was offered.
+
+    `applied=False` with a reason is the point of the mechanism, not a failure:
+    it is the evidence that a past human decision was re-checked against this
+    run's evidence rather than replayed because a name matched.
+    """
+
+    precedent_id: str
+    applied: bool
+    reason: str = Field(min_length=1, max_length=400)
+
+
 class AgentResult(Contract):
     """The shape every agent returns."""
 
@@ -64,6 +77,13 @@ class AgentResult(Contract):
     proposed_action: str = Field(default="No action proposed.", max_length=600)
     #: What the agent could not settle, and would need to.
     open_questions: list[str] = Field(default_factory=list, max_length=8)
+    #: One entry per precedent offered, applied or not. Required rather than
+    #: defaulted: strict structured output rejects a schema whose properties
+    #: contain a key missing from `required`, so a default here would make
+    #: every live call fail while fake-response tests kept passing. It is also
+    #: the better contract — an empty list must be an explicit "I was offered
+    #: none", never an omission that reads as a completed check.
+    memory_checks: list[MemoryCheck] = Field(max_length=20)
 
     @field_validator("rationale", "proposed_action")
     @classmethod

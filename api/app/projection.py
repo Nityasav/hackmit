@@ -150,7 +150,14 @@ def _reasoning(decisions: list[dict]) -> list[dict]:
             "how": [],
             "why": decision["why"] or "No rationale was recorded for this decision.",
             "alternatives": [],
-            "memory_checks": [],
+            # Real checks from the run, not a placeholder. A declined precedent
+            # shows as prominently as an applied one: "ok: false" with a reason
+            # is the evidence that memory was re-checked rather than replayed.
+            "memory_checks": [
+                {"text": f"{check['precedent_id']}: {check['reason']}",
+                 "ok": bool(check.get("applied"))}
+                for check in json.loads(decision["memory_checks"] or "[]")
+            ],
             "outcome": ("Escalated to a person. Nothing was approved, posted or paid."
                         if decision["escalated"] else
                         "Recorded. Reviewer acceptance is not human approval."),

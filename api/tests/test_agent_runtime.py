@@ -88,6 +88,9 @@ def ap_result(**overrides) -> schemas.APResult:
                   "approval is recorded against it.",
         citations=[schemas.Citation(role="vendor_invoices", record_key="VI-1")],
         proposed_action="Release for payment in the next run.",
+        # Required, not defaulted: an agent offered no precedent still has to
+        # say so explicitly, so silence never reads as a completed check.
+        memory_checks=[],
         may_pay=True)
     return schemas.APResult(**{**base, **overrides})
 
