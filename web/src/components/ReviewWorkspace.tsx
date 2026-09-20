@@ -24,6 +24,7 @@ type View = { workspace: { name: string; start: string; end: string }; snapshot_
   // used to show an event kind and a timestamp, which says that something
   // happened without saying what.
   history: { id: string; created_at: string; actor: string; kind: string; summary?: string;
+    agent?: string | null;
     payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
 const roles: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", rc: "Revenue & Collections" };
@@ -42,6 +43,9 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
   const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState("attention");
   const [selected, setSelected] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [byAgent, setByAgent] = useState("");
   const [source, setSource] = useState<SourceDetail | null>(null);
   const [sourceRef, setSourceRef] = useState<{ id: string; start: number } | null>(null);
   const uploaded = ws.startsWith("ws-");
@@ -78,6 +82,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     .sort((a, b) => Number(a.role === "rc") - Number(b.role === "rc"));
   const current = filtered.find(f => f.id === selected) || filtered[0];
   const stale = !!view?.scan && view.scan.snapshot_id !== view.snapshot_id;
+  // Dates are ISO, so a prefix comparison is the whole filter. `to` includes
+  // the chosen day rather than cutting it off at midnight.
+  const shownHistory = (view?.history || []).filter(e => {
+    const day = e.created_at.slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    if (byAgent === "__none") return !e.agent;
+    if (byAgent && e.agent !== byAgent) return false;
+    return true;
+  });
+  const historyAgents = [...new Set((view?.history || []).map(e => e.agent).filter(Boolean))] as string[];
   return <div className="mx-auto max-w-6xl space-y-5">
     <div><p className="text-xs uppercase tracking-widest text-ink-dim">Financial review</p>
       <h1 className="mt-2 text-3xl font-semibold">{section === "reports" ? "Director briefing" : section === "actions" ? "Follow-up" : section === "findings" ? "Findings" : "Period review"}</h1>
@@ -123,10 +138,25 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
             <FollowUpForm key={`${current.id}-${current.snapshot_id}-${current.follow_up?.version || 0}`} ws={ws} finding={current} saved={refresh} />
           </article>}</div>
       </>}
-      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up & scan history ({view.history.length})</summary>{!view.history.length && <p className="mt-3 text-sm text-ink-dim">Nothing yet. Approving or rejecting an agent&rsquo;s conclusion, recording a follow-up on a finding, and running the record checks all appear here.</p>}
-        {view.history.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
+      <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</summary>
+        <div className="mt-3 flex flex-wrap items-end gap-3 text-xs">
+          <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
+          <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
+          <label>Raised by
+            <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
+              <option value="">Any agent</option>
+              {historyAgents.map(a => <option key={a} value={a}>{roles[a] || a}</option>)}
+              {/* A record check is arithmetic over rows, not an agent's conclusion. */}
+              <option value="__none">Record checks (no agent)</option>
+            </select>
+          </label>
+          {(fromDate || toDate || byAgent) &&
+            <button className={control} onClick={() => { setFromDate(""); setToDate(""); setByAgent(""); }}>Clear</button>}
+        </div>{!view.history.length && <p className="mt-3 text-sm text-ink-dim">Nothing yet. Approving or rejecting an agent&rsquo;s conclusion, recording a follow-up on a finding, and running the record checks all appear here.</p>}
+        {!!view.history.length && !shownHistory.length && <p className="mt-3 text-sm text-ink-dim">Nothing in this range. The history holds the most recent hundred entries, so something older may exist and not be shown.</p>}
+        {shownHistory.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
           <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
-          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind}</p>
+          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${roles[e.agent] || e.agent}` : "record check, no agent"}</p>
         </div>)}</details>
       <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
     </>}

@@ -60,6 +60,23 @@ def describe_event(entry: dict) -> str:
     return f"{actor} · {kind}"
 
 
+def event_agent(entry: dict, raisers: dict[str, str]) -> str | None:
+    """Which agent raised what a person acted on, or None for a scan.
+
+    A record check is nobody's conclusion — it is arithmetic over the rows —
+    so it has no agent, and saying so is more useful than attributing it to
+    one.
+    """
+    payload = entry.get("payload") or {}
+    if payload.get("agent"):
+        return payload["agent"]
+    for key in ("approval_id", "finding_id", "task_id"):
+        found = raisers.get(payload.get(key) or "")
+        if found:
+            return found
+    return None
+
+
 def current_snapshot(c, ws):
     ingestion.workspace(c, ws)
     row = c.execute("SELECT id FROM snapshots WHERE ws=? ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
@@ -104,7 +121,16 @@ def review(ws: str, request: Request):
         history = [dict(r) | {"payload": json.loads(r["payload"])} for r in c.execute(
             "SELECT * FROM events WHERE ws=? AND (kind LIKE 'review.%' OR kind='approval_decided')"
             " ORDER BY rowid DESC LIMIT 100", (ws,))]
-        history = [entry | {"summary": describe_event(entry)} for entry in history]
+        # Which agent raised the thing a person acted on. Newer approval events
+        # carry it; older ones and follow-ups are resolved from the proposal or
+        # the decision trail, so the whole history can be filtered by agent and
+        # not just the part recorded since.
+        raisers = {row["id"]: row["agent"] for row in c.execute(
+            "SELECT id, agent FROM approvals WHERE ws=?", (ws,))}
+        raisers |= {row["id"]: row["agent"] for row in c.execute(
+            "SELECT id, agent FROM agent_decisions WHERE ws=?", (ws,))}
+        history = [entry | {"summary": describe_event(entry),
+                            "agent": event_agent(entry, raisers)} for entry in history]
         # Agent conclusions now live in `agent_decisions`, written by the graph.
         decisions = [dict(row) for row in c.execute(
             "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT 50", (ws,))]
