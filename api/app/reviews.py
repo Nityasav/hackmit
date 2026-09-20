@@ -116,9 +116,16 @@ def markdown(view):
         action = f["follow_up"]
         lines += ["Human follow-up: " + (plain(f"{action['status']}; {action['owner']}; {action['note']}") if action else "Not recorded for this snapshot")]
     if view["live"]:
-        lines += ["", "## Live investigation", "Status: " + view["live"]["status"],
-                  "HISTORICAL SNAPSHOT" if view["live_stale"] else "Current snapshot", plain(view["live"]["briefing"]),
-                  *["- Unresolved: " + plain(x) for x in view["live"]["unresolved"]]]
+        # A tally off the decision trail. This used to read `status`, `briefing`
+        # and `unresolved` from a coordinator run object; that coordinator was
+        # removed, and those keys with it, so exporting a briefing for any
+        # workspace an agent had run raised KeyError.
+        live = view["live"]
+        lines += ["", "## Live agent review",
+                  "HISTORICAL SNAPSHOT" if view["live_stale"] else "Current snapshot",
+                  f"{live['decisions']} agent conclusion(s), {live['escalated']} escalated to a person.",
+                  "Each conclusion is listed above with its evidence. No approval, "
+                  "posting or payment was made."]
     lines += ["", "## Follow-up history (last hundred events)"]
     for e in view["history"]:
         lines.append(plain(f"- {e['created_at']} · {e['actor']} · {e['kind']} · {e['payload'].get('status', '')} · {e['payload'].get('note', '')}"))

@@ -14,8 +14,11 @@ type Finding = { id: string; title: string; role: string; status: string; explan
 type View = { workspace: { name: string; start: string; end: string }; snapshot_id: string | null;
   scan: { id: string; snapshot_id: string; record_count: number; created_at: string } | null;
   findings: Finding[]; changes: { id: string; title: string; before: string; after: string }[];
-  live: { id: string; status: string; briefing: string; report_markdown: string; unresolved: string[];
-    tasks: { spec: { id: string; role: string }; status: string }[] } | null; live_stale: boolean;
+  // A tally of what the agents concluded, read off the decision trail they
+  // wrote. It used to be a coordinator run object carrying a task list, a
+  // briefing and its own status; that coordinator no longer exists, and
+  // reading its shape off this one crashed the whole Briefing page.
+  live: { decisions: number; escalated: number; spend_cents: number } | null; live_stale: boolean;
   history: { id: string; created_at: string; actor: string; kind: string; payload: { note?: string; status?: string; owner?: string } }[];
   limitations: string[] };
 const roles: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", rc: "Revenue & Collections" };
@@ -83,9 +86,13 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     {view && <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{[["Records in last scan", view.scan?.record_count || 0], ["Needs attention", view.findings.filter(f => !f.stale && f.status === "attention").length], ["Evidence gaps", view.findings.filter(f => !f.stale && f.status === "gap").length], ["Narrow checks passed", view.findings.filter(f => !f.stale && f.status === "pass").length]].map(([label, n]) => <div key={label} className="border border-line p-4"><b className="block font-num text-3xl">{n}</b><span className="text-sm text-ink-dim">{label}</span></div>)}</div>
       <p className="text-xs text-ink-dim">Snapshot: {view.snapshot_id || "No committed sources"}. Counts describe supplied records, not the whole institution. Amounts overlap and are not a savings total. Decisions apply only to their original snapshot; earlier follow-up remains in the history below.</p>
-      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">Live five-agent review · {view.live.status}{view.live_stale ? " · outdated snapshot" : ""}</h2><p className="mt-2">{view.live.briefing}</p>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs">{view.live.tasks.map(t => <span key={t.spec.id}>{roles[t.spec.role]}: {t.status}</span>)}</div>
-        <details className="mt-3"><summary>Unresolved agent questions ({view.live.unresolved.length})</summary><ul className="mt-2 list-disc space-y-1 pl-5">{view.live.unresolved.map((s, i) => <li key={i}>{s}</li>)}</ul></details></section>}
+      {view.live && <section className="border border-line p-4"><h2 className="font-semibold">Live agent review{view.live_stale ? " · outdated snapshot" : ""}</h2>
+        <div className="mt-2 flex flex-wrap gap-6 text-sm">
+          <span><b className="font-num">{view.live.decisions}</b> agent conclusion(s)</span>
+          <span><b className="font-num">{view.live.escalated}</b> escalated to a person</span>
+          <span><b className="font-num">{currency(view.live.spend_cents)}</b> spent</span>
+        </div>
+        <p className="mt-2 text-xs text-ink-dim">Each conclusion appears below with its evidence. An escalated one is waiting on a person; none of them approves, posts or pays anything.</p></section>}
       {view.changes.length > 0 && <section className="border border-green-300 bg-green-50 p-4"><h2 className="font-semibold">What changed after the latest scan?</h2>{view.changes.map(c => <div className="mt-3" key={c.id}><b>{c.title}</b><p className="text-sm">Before: {c.before}</p><p className="text-sm">Now: {c.after}</p></div>)}<p className="mt-3 text-xs">Adding evidence does not automatically approve its contents or resolve a finding.</p></section>}
       {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="rc">Money coming in</option></select></label></div>
@@ -134,5 +141,5 @@ function briefing(v: View) {
     f.amount_cents === null ? "Amount: not established" : `Check amount: ${currency(f.amount_cents)} (not savings; may overlap other checks)`,
     `Next step: ${f.action}`, `Evidence: ${f.evidence.map(e => `${e.source_id}, line ${e.line}`).join("; ") || "missing input"}`,
     `Human follow-up: ${f.follow_up ? `${f.follow_up.status}; owner ${f.follow_up.owner || "unassigned"}; ${f.follow_up.note}` : "not recorded"}`, ""]),
-    "## Live CFO report", v.live ? `${v.live_stale ? "HISTORICAL SNAPSHOT — RERUN REQUIRED\n" : ""}${v.live.report_markdown || v.live.briefing}` : "No live model review has run.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
+    "## Live agent review", v.live ? `${v.live_stale ? "HISTORICAL SNAPSHOT — RERUN REQUIRED\n" : ""}${v.live.decisions} agent conclusion(s), ${v.live.escalated} escalated to a person. Each one is listed above with its evidence. No approval, posting or payment was made.` : "No live agent review has run.", "", "## Limitations", ...v.limitations.map(l => `- ${l}`)].join("\n");
 }
