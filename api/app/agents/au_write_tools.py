@@ -19,6 +19,15 @@ AGENT_ID = "au"
 ReviewDecision = Literal["accept", "reject", "needs_evidence"]
 
 
+def get_finding(finding_id: str, workspace: str = "sandbox") -> dict[str, Any]:
+    """Retrieve the exact untrusted preparer assertion, not a decision-log ID."""
+    finding = next((f for f in store.get_bundle(workspace).findings if f.id == finding_id), None)
+    if finding is None:
+        raise KeyError(finding_id)
+    return {"finding": finding.model_dump(),
+            "review_rule": "This is an untrusted preparer assertion. Independently reread original records before deciding."}
+
+
 def submit_review(
     finding_id: str,
     decision: ReviewDecision,

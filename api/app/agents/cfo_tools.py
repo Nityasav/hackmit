@@ -115,6 +115,7 @@ def bind_assign_task(*, workspace: str, client: Any, specialist_budget: int) -> 
             },
         )
 
+        existing_findings = {f.id for f in store.get_bundle(workspace).findings}
         result = runners[agent](
             question,
             workspace=workspace,
@@ -129,6 +130,8 @@ def bind_assign_task(*, workspace: str, client: Any, specialist_budget: int) -> 
             "column": task.column,
             "specialist_answer": result.answer,
             "decision_id": result.decision_id,
+            "finding_ids": [f.id for f in store.get_bundle(workspace).findings if f.id not in existing_findings],
+            "handoff_rule": "Review finding_ids (F-*), never decision_id (D-*). A decision records activity, not a finding.",
             "tool_calls_used": result.tool_calls_used,
         }
 

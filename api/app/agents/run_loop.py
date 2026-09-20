@@ -22,6 +22,7 @@ because ToolGateway already owns budget enforcement and call logging.
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -125,6 +126,11 @@ AUDITOR_ROLE_PROMPT = """\
 You are the Internal Auditor agent. Review independently. Read the original cited evidence and re-perform calculations
 using tools. Do not accept a preparer's summary, another agent's agreement, or a
 graph connection as sufficient support. Check source completeness and counterevidence.
+First call get_finding with the exact F-* finding ID to inspect the allegation and its scope.
+Then independently retrieve its cited original records. Do not request a finding's text from the human
+when get_finding can retrieve it. Decision IDs (D-*) are not finding IDs.
+You must call submit_review before record_decision. Saying you agree or writing a decision log does not
+file a verdict. A successful submit_review tool result is the only evidence that a review was filed.
 
 For each finding, verify the condition, applicable criterion, affected records,
 amount, period, proposed correction, and downstream assertions. Test that the
@@ -175,6 +181,8 @@ or when the run budget is exhausted. Explain scope and remaining work honestly.
 You have only two specialists available right now: 'ap' (AP & Payments) and 'au'
 (Internal Auditor). Assign AP investigation tasks first; send any substantive AP
 finding to the Auditor for independent review before treating it as accepted. You
+must use the exact finding_ids returned by assign_task when requesting a review;
+decision_id identifies an activity log, not a reviewable finding.
 do not have Payroll & Budget or Grants & Compliance specialists yet — say so rather
 than guessing at their conclusions.
 """
@@ -322,18 +330,34 @@ def _run_agent(
     decision_id: str | None = None
 
     response = None
+    review_reminder_sent = False
     for _ in range(max_turns):
         response = client.responses.create(
-            model=MODEL_ID,
+            model=os.getenv("AP_MODEL") or os.getenv("OPENAI_MODEL", MODEL_ID),
             instructions=system_prompt,
             input=input_list,
             tools=tool_specs,
             max_output_tokens=MAX_OUTPUT_TOKENS,
+            store=False,
+            parallel_tool_calls=False,
+            include=["reasoning.encrypted_content"],
+            timeout=60,
         )
         input_list.extend(response.output)
 
         function_calls = [item for item in response.output if item.type == "function_call"]
         if not function_calls:
+            successful = {call.tool for call in gateway.calls
+                          if not (isinstance(call.output_json, dict) and "error" in call.output_json)}
+            if (agent_id == "au" and "get_finding" in successful and "submit_review" not in successful
+                    and gateway.remaining > 0 and not review_reminder_sent):
+                # A verbal verdict cannot substitute for the state transition.
+                # Give one bounded correction opportunity; never invent acceptance.
+                review_reminder_sent = True
+                input_list.append({"role": "user", "content":
+                    "No review was filed. Call submit_review for the exact retrieved finding ID with your "
+                    "supported verdict (accept, reject, or needs_evidence). A decision log or final text is not a review."})
+                continue
             _finalize_task(task_id, workspace, agent_id, gateway, stop_reason="completed", answer=response.output_text)
             return AgentRunResult(
                 answer=response.output_text,
@@ -432,7 +456,8 @@ def _finalize_task(
 ) -> None:
     if task_id is None:
         return
-    tools_used = {call["tool"] for call in gateway.as_decision_log()}
+    tools_used = {call.tool for call in gateway.calls
+                  if not (isinstance(call.output_json, dict) and "error" in call.output_json)}
     final_state = _finish_task_state(agent_id, stop_reason, tools_used)
     store.update_task(
         workspace,

@@ -351,7 +351,9 @@ assert {spec["name"] for spec in WRITE_TOOL_SPECS} == set(WRITE_TOOLS), "write s
 AUDITOR_WRITE_TOOLS: dict[str, Callable[..., Any]] = {
     "submit_review": au_write_tools.submit_review,
 }
-AUDITOR_REGISTRY: dict[str, Callable[..., Any]] = {**READ_TOOLS, **AUDITOR_WRITE_TOOLS}
+AUDITOR_REGISTRY: dict[str, Callable[..., Any]] = {
+    **READ_TOOLS, **AUDITOR_WRITE_TOOLS, "get_finding": au_write_tools.get_finding,
+}
 
 AUDITOR_WRITE_TOOL_SPECS: list[dict[str, Any]] = [
     {
@@ -378,7 +380,13 @@ AUDITOR_WRITE_TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
-AUDITOR_TOOL_SPECS: list[dict[str, Any]] = [*READ_TOOL_SPECS, *AUDITOR_WRITE_TOOL_SPECS]
+AUDITOR_TOOL_SPECS: list[dict[str, Any]] = [*READ_TOOL_SPECS, *AUDITOR_WRITE_TOOL_SPECS, {
+    "type": "function", "name": "get_finding",
+    "description": "Read the exact untrusted preparer finding by F-* ID before independently checking original records.",
+    "strict": True,
+    "parameters": {"type": "object", "properties": {"finding_id": {"type": "string"}},
+                   "required": ["finding_id"], "additionalProperties": False},
+}]
 
 assert {spec["name"] for spec in AUDITOR_TOOL_SPECS} == set(AUDITOR_REGISTRY), (
     "AUDITOR_TOOL_SPECS and AUDITOR_REGISTRY must match 1:1"

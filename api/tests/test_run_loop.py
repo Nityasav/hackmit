@@ -149,6 +149,22 @@ def test_immediate_final_answer_with_no_tool_calls():
     assert result.tool_calls_used == 0
 
 
+def test_auditor_gets_one_bounded_reminder_to_file_its_verdict():
+    from app.agents import ap_write_tools
+    finding = ap_write_tools.submit_finding("INV-2302", "Held for evidence", "needs_evidence",
+        [{"label": "INV-2302", "kind": "record", "tone": "neutral"}])
+    fake = FakeClient([
+        FakeResponse([_function_call("get_finding", {"finding_id": finding["finding_id"]}, "get")]),
+        FakeResponse([], "Agreed, but not filed"),
+        FakeResponse([_function_call("submit_review", {"finding_id": finding["finding_id"], "decision": "needs_evidence", "evidence_note": "Need originals"}, "review")]),
+        FakeResponse([], "Filed unresolved review"),
+    ])
+    result = run_auditor_agent("Review", client=fake)
+    assert result.stop_reason == "completed"
+    assert [t["tool"] for t in result.tool_calls] == ["get_finding", "submit_review"]
+    assert "No review was filed" in fake.responses.calls[2]["input"][-1]["content"]
+
+
 def test_record_decision_files_a_real_decision_and_is_captured_on_the_result():
     fake = FakeClient(
         [

@@ -103,7 +103,7 @@ def prepare_payment_batch(
     held: dict[str, str] = {}
     total_cents = 0
 
-    for invoice_id in invoice_ids:
+    for invoice_id in dict.fromkeys(invoice_ids):
         reasons = _hold_reasons(invoice_id, workspace)
         if reasons:
             held[invoice_id] = "; ".join(reasons)
@@ -147,13 +147,22 @@ def _hold_reasons(invoice_id: str, workspace: str) -> list[str]:
     vendor = ap_tools.get_vendor(invoice.vendor_id, workspace)
     if vendor is None:
         reasons.append(f"vendor {invoice.vendor_id} not found")
-    elif vendor.bank_changed_at:
-        reasons.append(
-            f"vendor {vendor.id} changed bank details on {vendor.bank_changed_at} - verify out of band before paying"
-        )
+    else:
+        if vendor.status == "hold":
+            reasons.append(f"vendor {vendor.id} is on hold")
+        if vendor.bank_changed_at:
+            reasons.append(
+                f"vendor {vendor.id} changed bank details on {vendor.bank_changed_at} - verify out of band before paying"
+            )
 
-    if not ap_tools.get_approvals_for_record(invoice_id, workspace):
+    approvals = [a for a in ap_tools.get_approvals_for_record(invoice_id, workspace)
+                 if a.record_type == "invoice" and a.record_id == invoice_id]
+    if not any(a.action == "approved" for a in approvals):
         reasons.append("no invoice approval on record")
+    if any(a.action == "rejected" for a in approvals):
+        # There is no revocation/supersession contract yet. Do not guess which
+        # conflicting approval wins; a human must resolve the rejection.
+        reasons.append("invoice approval includes a rejection; reconcile before paying")
 
     if invoice.status != "matched":
         reasons.append(f"invoice status is '{invoice.status}', not matched")
@@ -166,4 +175,5 @@ def _hold_reasons(invoice_id: str, workspace: str) -> list[str]:
 
 
 def _money(cents: int) -> str:
-    return f"${cents / 100:,.2f}"
+    major, minor = divmod(abs(cents), 100)
+    return f"{'-' if cents < 0 else ''}${major:,}.{minor:02}"
