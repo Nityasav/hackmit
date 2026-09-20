@@ -107,6 +107,68 @@ Billable and opt-in; the detectors themselves are unit-tested in the default sui
 are a floor, not a ranking: these are the publicly previewed rows of a 537-question
 benchmark and the ones most likely to sit in a model's training data.
 
+## Rubric benchmark over our own fixtures
+
+`tests/test_rubric_benchmark.py` is the other half. The abstention benchmark asks whether
+the agent stays quiet about what it cannot know; this one asks whether it produces the
+answer when the answer is in the workspace. Rows live in `tests/data/rubric/` in the column
+layout of vals-ai/finance_agent_benchmark — Question, Answer, Question Type, Expert time
+(mins), Rubric — so a rubric written here and one written there are graded by the same code.
+`money_in.json` seeds five rows whose reference answers restate the engine-verified table in
+`tests/data/money_in/README.md`.
+
+Operators are the upstream `correctness` and `contradiction` plus a local `prohibition`: a
+finding is something a person acts on, so the dangerous failures here are assertions that
+should never have been made — calling a reconciling difference stolen money, summing four
+amounts that measure different things. A research benchmark has no need for that operator.
+
+Scoring keeps **blocked** apart from **unmet**. `eval_support.reachable_amounts` computes,
+as an upper bound, every amount the agent could get past `validate_result` by reading every
+source and paging every record role its tool schema exposes. A criterion naming an amount
+outside that set cannot be satisfied at any level of competence, and counting it as an
+ordinary miss would blame the model for a gap in the tools. Two of this pack's four planted
+amounts were exactly that case until `compute_money_in_checks` landed; all four are
+reachable now, and the distinction stays because the next pack will find the next gap.
+
+Only the objective checks gate: a contradiction, a prohibition breach, or a citation that
+does not quote the uploaded bytes. The correctness percentage is reported rather than
+asserted unless `SCHOOLTRACE_RUBRIC_FLOOR` is set, because a judge's reading of
+natural-language criteria drifts between model versions and a suite that fails on that drift
+is one people learn to ignore. The judge must be a different model from the one under test;
+`SCHOOLTRACE_ALLOW_SELF_JUDGE=1` is required to override that.
+
+```powershell
+$env:SCHOOLTRACE_RUBRIC_EVAL = '1'
+$env:SCHOOLTRACE_EVAL_OUTPUT = '<absolute output dir>'
+$env:SCHOOLTRACE_JUDGE_MODEL = '<a model that is not OPENAI_MODEL>'
+uv run pytest -s tests/test_rubric_benchmark.py
+```
+
+### Money-in calculations (`compute_money_in_checks`)
+
+`list_records`' role enum used to be the slice `roles[1:8]` — chart through invoice — and
+`compute_ledger_totals` covers the ledger alone, so none of the four money-in roles was
+reachable by any calculation. Reading the CSVs put each record's own amount into
+`allowed_amounts`, so the agent could cite COL-008's 1,500.00 and COL-009's 900.00, but
+their 2,400.00 total and the 150.00 DEP-REF-0004 shortfall are derived figures that no
+single record carries. `validate_result` rejected them, and the failure was not a bad
+answer but a dead run: the agent spent 10 of its 12 tool calls on rejected submissions and
+ended 502 with no analysis.
+
+`compute_money_in_checks` closes it by calling `accounting.collections.collection_checks` —
+the same code behind the director review, not a second implementation that could drift —
+and putting every amount it returns into `allowed_amounts`. It reads through `_records`,
+pinned to the run's snapshot manifest, rather than `ingestion.active_records`, so a commit
+landing mid-run cannot change what the run computed. The enums now name the money-in roles
+explicitly instead of slicing the list, which is what made the omission easy to miss.
+
+The tool returns money-in checks only, each with its derived amount in cents and the exact
+source lines behind it, and carries the engine's own caveat: these amounts measure different
+things, none establishes theft or loss, and they must never be summed. `tests/test_money_in_tool.py`
+holds the before-and-after as a parametrized pair — the same claim submits at 201 with the
+calculation and still fails closed at 502 without it — and ties the output to the review scan
+so the two readers of one engine cannot diverge.
+
 ## Payroll & Budget (`py`, ports family)
 
 ### Merged evaluation checkpoint (2026-09-19)

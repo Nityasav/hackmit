@@ -9,6 +9,7 @@ from __future__ import annotations
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 import json
+from collections import defaultdict
 import os
 import re
 from decimal import Decimal, localcontext
@@ -21,6 +22,7 @@ from jsonschema import validate as validate_json, ValidationError as SchemaError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .. import approvals, db
+from ..accounting.collections import collection_checks
 
 
 MAX_TOOL_CALLS = 12
@@ -30,6 +32,13 @@ MAX_RUN_SECONDS = 240
 MAX_OUTPUT_TOKENS = 2500
 MAX_TOTAL_TOKENS = 100_000
 MAX_CONTEXT_BYTES = 60_000
+
+# Roles carrying normalized records. `list_records` pages exactly these, so a role
+# absent here is one the agent can read as raw source text but never as records,
+# and whose amounts therefore never reach `allowed_amounts`.
+RECORD_ROLES = ["chart", "opening", "ledger", "payroll", "grants", "budget", "invoice",
+                "fees", "collections", "deposits", "sponsorships"]
+MONEY_IN_ROLES = ["fees", "collections", "deposits", "sponsorships"]
 
 
 class StrictModel(BaseModel):
@@ -192,6 +201,8 @@ class SnapshotTools:
             return self.list_records(args["role"], args["limit"], args["offset"])
         if name == "compute_ledger_totals":
             return self.compute_ledger_totals()
+        if name == "compute_money_in_checks":
+            return self.compute_money_in_checks()
         raise ValueError(f"Unknown tool {name}")
 
     def list_sources(self, role: str):
@@ -282,6 +293,49 @@ class SnapshotTools:
                 "debit_cents": debit, "credit_cents": credit, "balanced": debit == credit if records else None,
                 "note": "Import control only; not a financial statement or audit conclusion."}
 
+    def compute_money_in_checks(self):
+        """Run the deterministic money-in checks over the pinned snapshot.
+
+        The amounts come from `accounting.collections`, the same code the director
+        review runs, so the agent never computes one itself. Every amount the checks
+        return is added to `allowed_amounts`: these are derived figures — the gross
+        total of receipts under one reference, a deposit shortfall — that no single
+        record carries, and without this the agent could cite the parts and never
+        state the total.
+
+        Records come from `_records`, which is pinned to this snapshot's manifest,
+        not from `ingestion.active_records`, which would answer from whatever is
+        currently active and could return amounts the pinned snapshot never held.
+        """
+        if self.workspace.get("kind") != "synthetic" or self.workspace.get("currency") != "USD":
+            raise ValueError("Money-in checks require the USD management accounting profile.")
+        by_role, records = defaultdict(list), []
+        for role in MONEY_IN_ROLES:
+            by_role[role] = self._records(role)
+            records.extend(by_role[role])
+        found = []
+
+        def add(key, title, role, status, explanation, rows=(), amount=None,
+                action="Review the original support with the finance team."):
+            found.append({"id": key, "title": title, "status": status, "explanation": explanation,
+                          "amount_cents": amount, "action": action,
+                          "amount_display": None if amount is None else f"{amount // 100:,}.{amount % 100:02}",
+                          "evidence": [{"source_id": source, "line": line} for source, line in
+                                       sorted({(r["source_id"], r["locator"]) for r in rows})]})
+
+        collection_checks(by_role, self.workspace, add)
+        self.allowed_amounts.update(f["amount_cents"] for f in found if isinstance(f["amount_cents"], int))
+        return {"calculation": "money_in_collection_checks_v1", "checks": found,
+                "record_count": len(records), "currency": self.workspace["currency"],
+                "record_counts": {role: len(rows) for role, rows in by_role.items()},
+                "snapshot_id": self.snapshot_id,
+                "input_record_ids_hash": sha256(db.encode([r["id"] for r in records]).encode()).hexdigest(),
+                "amount_units": "Integer fields ending in _cents are minor units. Use amount_display for money in prose.",
+                "note": "Supplied records only. An amount here is a difference between two supplied "
+                        "populations or the gross total of one; none of them establishes theft, loss or "
+                        "misappropriation, and they measure different things and must never be added "
+                        "together or described as recovered money. Refunds and reversals are not modelled."}
+
     def validate_result(self, result: CfoResult) -> list[str]:
         errors = []
         if not self.context_seen:
@@ -321,7 +375,7 @@ def _tool(name: str, description: str, properties: dict, required: list[str]):
 
 
 def _tools():
-    roles = ["all", "chart", "opening", "ledger", "payroll", "grants", "budget", "invoice", "policy", "service", "document"]
+    roles = ["all", *RECORD_ROLES, "policy", "service", "document"]
     return [
         _tool("get_workspace_context", "Read the institution scope and pinned snapshot metadata.", {}, []),
         _tool("list_sources", "List authorized committed sources in the pinned snapshot.",
@@ -333,10 +387,15 @@ def _tools():
               {"source_id": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1},
                "end_line": {"type": "integer", "minimum": 1}}, ["source_id", "start_line", "end_line"]),
         _tool("list_records", "Read a page of normalized records pinned to this snapshot; follow next_offset for more.",
-              {"role": {"type": "string", "enum": roles[1:8]},
+              {"role": {"type": "string", "enum": RECORD_ROLES},
                "limit": {"type": "integer", "minimum": 1, "maximum": RECORD_PAGE_SIZE},
                "offset": {"type": "integer", "minimum": 0}}, ["role", "limit", "offset"]),
         _tool("compute_ledger_totals", "Run the deterministic ledger import-control total.", {}, []),
+        _tool("compute_money_in_checks",
+              "Run the deterministic money-in checks over fees, collections, deposits and sponsorships. "
+              "Returns each check with its derived amount in cents and the exact source lines behind it. "
+              "Use this for any money-in total or difference; do not add record amounts together yourself.",
+              {}, []),
         {"type": "function", "name": "submit_cfo_analysis",
          "description": "Submit the bounded CFO triage. Findings are candidates, never audit conclusions or approved adjustments.",
          "strict": True, "parameters": CfoResult.model_json_schema()},
