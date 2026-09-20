@@ -2,6 +2,7 @@
 from collections import defaultdict
 from hashlib import sha256
 
+from .collections import collection_checks
 from .payroll import calculations as payroll_calculations
 
 
@@ -26,9 +27,16 @@ def checks(records, config):
             p = row["payload"]
             # Preserve punctuation: aggressive normalization can conflate distinct invoices.
             groups[(p["vendor_id"].strip().casefold(), p["invoice_number"].strip().casefold(), p["amount_cents"], p["currency"])].append(row)
-        duplicates = [rows for rows in groups.values() if len(rows) > 1]
-        for rows in duplicates:
-            key = sha256("|".join(sorted(r["record_key"] for r in rows)).encode()).hexdigest()[:12]
+        duplicates = [(gkey, rows) for gkey, rows in groups.items() if len(rows) > 1]
+        for gkey, rows in duplicates:
+            # Hash the duplicate's identity, not which rows happen to be in the
+            # group. Hashing membership meant a third invoice joining an existing
+            # pair retired ap-duplicate-<old> and created ap-duplicate-<new>: the
+            # reviewer's saved follow-up is scoped by (finding_id, snapshot_id) so
+            # it orphaned, the unresolved duplicate came back as brand new, and the
+            # changes diff keys on id alone so it reported nothing at all.
+            vendor, invoice_number, amount_cents, currency = gkey
+            key = sha256(f"{vendor}|{invoice_number}|{amount_cents}|{currency}".encode()).hexdigest()[:12]
             add("ap-duplicate-" + key, "Possible duplicate invoice", "ap", "attention",
                 "Same vendor, invoice number, currency and amount appear on multiple source records. This does not establish duplicate payment.",
                 rows, (len(rows) - 1) * rows[0]["payload"]["amount_cents"], "Compare originals, payment status and legitimate split/reversal explanations before proposing a correction.")
@@ -91,4 +99,5 @@ def checks(records, config):
         add("grant-inputs", "Grant register missing", "gr", "gap", "Award eligibility and ceilings cannot be confirmed without award definitions.")
     add("grant-eligibility", "Purpose and service eligibility", "gr", "gap",
         "Period and ceiling checks cover supplied payroll allocations only. Award purpose, invoice-funded charges, service allocation, amendments and full-population completeness require independent review.", by_role["policy"])
+    collection_checks(by_role, config, add)
     return result

@@ -328,3 +328,44 @@ def test_live_director_demo_end_to_end(client, monkeypatch):
     assert len([f for f in unified["findings"] if f["origin"] == "live_agent"]) == len(run["accepted"])
     assert client.get(f"/api/workspaces/{ws}/review/report").status_code == 200
     print(f"DIRECTOR LIVE: status={run['status']} accepted={len(run['accepted'])} tasks={len(run['tasks'])} evidence_calls={run['tool_calls']} CFO_calls={run['model_calls']}")
+
+
+def _invoice(record_key, source_id, line, number="INV-2291", amount=120000):
+    """One invoice row in the shape review.checks() consumes."""
+    return {
+        "role": "invoice", "record_key": record_key, "source_id": source_id, "locator": line,
+        "payload": {"vendor_id": "VEND-1", "invoice_number": number,
+                    "amount_cents": amount, "currency": "USD",
+                    "po_id": "PO-1", "receipt_id": "RC-1"},
+    }
+
+
+def _ap_duplicate_ids(records):
+    from app.accounting.review import checks
+    return [c["id"] for c in checks(records, {}) if c["id"].startswith("ap-duplicate-")]
+
+
+def test_ap_duplicate_id_survives_a_third_invoice_joining_the_group():
+    """The id must name the duplicate, not who is currently in it.
+
+    It used to hash the group's record_keys, so a third matching invoice
+    retired the old id and minted a new one. A reviewer's follow-up is scoped
+    by (finding_id, snapshot_id), so the note orphaned and the unresolved
+    duplicate came back looking brand new — and the changes diff keys on id
+    alone, so it reported nothing had changed.
+    """
+    pair = [_invoice("R1", "S1", 2), _invoice("R2", "S1", 3)]
+    trio = pair + [_invoice("R3", "S2", 9)]
+
+    before, after = _ap_duplicate_ids(pair), _ap_duplicate_ids(trio)
+    assert len(before) == len(after) == 1
+    assert before == after, "a third invoice joining the group must not move the finding id"
+
+
+def test_ap_duplicate_ids_still_separate_distinct_duplicates():
+    """Stability must not collapse two different duplicates onto one id."""
+    records = [
+        _invoice("R1", "S1", 2, number="INV-1"), _invoice("R2", "S1", 3, number="INV-1"),
+        _invoice("R3", "S1", 4, number="INV-2"), _invoice("R4", "S1", 5, number="INV-2"),
+    ]
+    assert len(set(_ap_duplicate_ids(records))) == 2
