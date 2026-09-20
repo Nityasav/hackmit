@@ -321,6 +321,56 @@ Default run limits: five agents, two concurrent specialist calls, 12 tool calls 
 
 Only the authenticated human review service can approve an adjustment, release a (simulated) payment batch, or activate a playbook or procedural memory. Runtime agents cannot access evaluator labels, unrestricted filesystem paths, arbitrary SQL, a shell, or payment tools.
 
+### 8.2 Grants & Compliance direct-run specialist
+
+`api/app/agents/grants.py` implements the second live role using the same bounded, read-only snapshot
+runtime as CFO triage. Select it in Command center; API requests use `agent: "grants_compliance"`.
+It reviews uploaded award terms and supporting evidence, with no web research or inferred legal rules.
+The local document extraction model is still a separate future component.
+
+The additional `check_grant(award_id)` tool computes exact supplied-payroll allocation totals across
+all pinned records and compares service periods inclusively with a uniquely identified award window.
+It reports ceiling comparison, per-record source locators, input hash, result truncation and scope limits.
+Missing/ambiguous award definitions produce unknown checks. Payroll and ledger totals are not combined.
+These totals are not lifetime grant expenditure, remaining funds, allowable cost or a proposed adjustment.
+Original terms, extensions and service evidence still require interpretation and independent review.
+
+The agent must inspect source context and run a deterministic grant check when normalized award/payroll
+records exist. It returns cited hypotheses, evidence requests and proposed follow-ups; raw proposed
+clearances stay unreviewed in the UI. Citation validation does not establish semantic correctness.
+In synthetic workspaces it assesses consistency within the fictional scenario rather than treating the
+synthetic label itself as a financial exception. `GRANTS_MODEL` may override the shared `OPENAI_MODEL`.
+
+The current-snapshot results for both CFO and Grants coexist in Findings and Reasoning log. Role-specific
+history survives reruns; new snapshots visibly stale prior runs. One snapshot-agent run at a time is
+allowed per workspace, and idempotency includes the selected role. Coordinator automatic dispatch,
+and complete grant expenditure schedules remain future integrations. Direct Auditor review is now implemented in §8.3.
+
+### 8.3 Internal Auditor direct-run review
+
+`api/app/agents/auditor.py` implements an independent reviewer context, selected as `internal_auditor`
+in the same endpoint and Command center. At least one current-snapshot CFO/Grants finding is required.
+It pins exact preparer run/finding IDs at startup, treats their text as untrusted claims, and returns
+up to four explicit accept/reject/needs_evidence verdicts. Remaining candidate IDs/counts are recorded.
+
+Acceptance/rejection requires explicit fresh `read_source_span` calls for the claim's cited lines;
+preparer quotations and automatic context previews do not satisfy that gate. Acceptance additionally
+requires reperformance of supporting calculations, including checks inferred from cited financial
+record types if the preparer omitted a calculation. The Auditor reparses original immutable CSV bytes
+with the shared exact parser, reconciles them to pinned normalized records, and recomputes results.
+Integrity mismatches block acceptance. Shared parser/math bugs remain a limitation: this is a separate
+execution and review context, not an independently implemented accounting engine or guaranteed semantic truth.
+
+Each verdict includes original citations, rationale and required action for rejected/unresolved claims.
+Accepted evidence-gap observations do not clear the underlying transaction. Findings retain candidate
+status; no accounting approvals, compliance certifications or audit opinions are issued. UI annotations
+match exact target IDs, so even a same-snapshot preparer rerun cannot inherit an old verdict. Historical
+reviews remain available with stale-target warnings. `AUDITOR_MODEL` can select a different API model;
+successive runs prioritize previously unreviewed targets. Latest per-finding verdicts from the last
+20 completed audits remain attached to matching current findings, even when a later audit reviews a different subset.
+model diversity alone is not independence. Automatic coordinator dispatch/review remains a future adapter
+integration, and no local model training is included.
+
 ## 9. Deterministic accounting and outputs
 
 The accounting engine imports existing entries and computes opening balance + period activity = closing balance. It checks journal balance, statement mapping, subledger control totals, and source coverage before agents interpret results.

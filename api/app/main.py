@@ -203,6 +203,6 @@ def agent_runs(ws: str):
 
 
 @app.post("/api/workspaces/{ws}/agent-runs", status_code=201)
-async def run_cfo_agent(ws: str, body: cfo.RunRequest):
-    """Run the bounded CFO triage agent against the current immutable snapshot."""
+async def run_snapshot_agent(ws: str, body: cfo.RunRequest):
+    """Run an allowlisted read-only agent against the current immutable snapshot."""
     return await run_in_threadpool(cfo.run, ws, body)

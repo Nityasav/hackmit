@@ -72,6 +72,7 @@ class CfoResult(StrictModel):
 
 
 class RunRequest(StrictModel):
+    agent: Literal["cfo", "grants_compliance", "internal_auditor"] = "cfo"
     focus: str = Field(default="Perform an initial risk triage of the committed snapshot.", min_length=1, max_length=500)
     snapshot_id: str = Field(min_length=1, max_length=100)
     request_id: str = Field(min_length=1, max_length=100)
@@ -101,6 +102,20 @@ def _source_lines(row) -> list[str]:
 
 
 class SnapshotTools:
+    agent = "cfo"
+    label = "CFO Agent"
+    submission_tool = "submit_cfo_analysis"
+    result_schema = CfoResult
+
+    def result_metadata(self, result):
+        return {}
+
+    def tool_definitions(self):
+        return _tools()
+
+    def instructions(self):
+        return INSTRUCTIONS
+
     def __init__(self, ws: str):
         self.ws = ws
         with db.connect() as connection:
@@ -131,8 +146,8 @@ class SnapshotTools:
                 "amount_units": "Normalized *_cents values are cents (100 cents = 1 dollar). Raw file units are listed per source."}
 
     def dispatch(self, name: str, args: dict):
-        definition = next((tool for tool in _tools() if tool["name"] == name), None)
-        if definition is None or name == "submit_cfo_analysis":
+        definition = next((tool for tool in self.tool_definitions() if tool["name"] == name), None)
+        if definition is None or name == self.submission_tool:
             raise ValueError("Unknown read tool")
         validate_json(args, definition["parameters"])
         if name == "get_workspace_context":
@@ -162,6 +177,7 @@ class SnapshotTools:
             if role != "all" and options["role"] != role:
                 continue
             result.append({"source_id": row["id"], "name": row["name"], "role": options["role"],
+                           "applies_to": options.get("applies_to", ""),
                            "amount_unit": options["amount_unit"],
                            "sha256": row["sha256"], "line_count": len(_source_lines(row))})
         return result
@@ -321,18 +337,19 @@ def _call_model(toolbox: SnapshotTools, focus: str, model: str, client=None, che
         "Begin by inspecting workspace context and relevant sources. Submit a bounded initial triage."
     )}]
     logs, usage = [], {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    definitions, instructions = toolbox.tool_definitions(), toolbox.instructions()
     try:
         while len(logs) < MAX_TOOL_CALLS:
             # UTF-8 bytes conservatively bound text tokens; include schema/instruction overhead.
             encoded = json.dumps(conversation, default=lambda item: item.model_dump() if hasattr(item, "model_dump") else vars(item))
-            reserved = len((encoded + INSTRUCTIONS + json.dumps(_tools())).encode()) + MAX_OUTPUT_TOKENS + 2048
+            reserved = len((encoded + instructions + json.dumps(definitions)).encode()) + MAX_OUTPUT_TOKENS + 2048
             if len(encoded.encode()) > MAX_CONTEXT_BYTES or usage["total_tokens"] + reserved > MAX_TOTAL_TOKENS:
                 raise RuntimeError("context_budget")
             remaining = deadline - monotonic()
             if remaining <= 0:
                 raise RuntimeError("time_budget")
             response = client.responses.create(
-                model=model, instructions=INSTRUCTIONS, input=conversation, tools=_tools(),
+                model=model, instructions=instructions, input=conversation, tools=definitions,
                 parallel_tool_calls=False, store=False, tool_choice="required",
                 include=["reasoning.encrypted_content"], max_output_tokens=MAX_OUTPUT_TOKENS,
                 timeout=min(60, remaining),
@@ -358,8 +375,8 @@ def _call_model(toolbox: SnapshotTools, focus: str, model: str, client=None, che
                 started, result = monotonic(), None
                 try:
                     args = json.loads(raw_args)
-                    if name == "submit_cfo_analysis":
-                        result = CfoResult.model_validate(args)
+                    if name == toolbox.submission_tool:
+                        result = toolbox.result_schema.model_validate(args)
                         errors = toolbox.validate_result(result)
                         tool_output = {"ok": not errors, "errors": errors}
                         if not logs:
@@ -374,7 +391,7 @@ def _call_model(toolbox: SnapshotTools, focus: str, model: str, client=None, che
                 logs.append({"tool": name, "input_hash": sha256(raw_args.encode()).hexdigest(),
                              "arguments": args, "output": tool_output,
                              "output_ref": sha256(db.encode(tool_output).encode()).hexdigest(),
-                             "snapshot_id": toolbox.snapshot_id, "agent": "cfo",
+                             "snapshot_id": toolbox.snapshot_id, "agent": toolbox.agent,
                              "latency_ms": round((monotonic() - started) * 1000),
                              "status": "ok" if tool_output["ok"] else "error"})
                 if checkpoint:
@@ -389,12 +406,15 @@ def _call_model(toolbox: SnapshotTools, focus: str, model: str, client=None, che
             client.close()
 
 
-def _run_view(row, current_snapshot: str | None):
+def _run_view(row, current_snapshot: str | None, current_preparer_ids=None):
+    output = json.loads(row["output"])
+    target_ids = {r["finding_id"].rsplit("-finding-", 1)[0] for r in output.get("analysis", {}).get("reviews", [])}
     return {"id": row["id"], "workspace_id": row["ws"], "agent": row["agent"],
             "snapshot_id": row["snapshot_id"], "status": row["status"], "model": row["model"],
             "focus": row["focus"], "created_at": row["created_at"], "completed_at": row["completed_at"],
             "current_snapshot": row["snapshot_id"] == current_snapshot,
-            "result": json.loads(row["output"]), "error": row["error"]}
+            "review_targets_current": target_ids.issubset(current_preparer_ids) if target_ids and current_preparer_ids is not None else None,
+            "result": output, "error": row["error"]}
 
 
 def list_runs(ws: str):
@@ -404,8 +424,13 @@ def list_runs(ws: str):
         _expire_runs(connection, ws)
         latest = connection.execute("SELECT id FROM snapshots WHERE ws=? AND stale=0 ORDER BY revision DESC LIMIT 1", (ws,)).fetchone()
         current_snapshot = latest["id"] if latest else None
-        return [_run_view(row, current_snapshot) for row in connection.execute(
-            "SELECT * FROM agent_runs WHERE ws=? ORDER BY created_at DESC LIMIT 20", (ws,)
+        preparers = {row["id"] for agent in ("cfo", "grants_compliance") if (row := connection.execute(
+            "SELECT id FROM agent_runs WHERE ws=? AND snapshot_id=? AND agent=? AND status='completed' ORDER BY created_at DESC LIMIT 1",
+            (ws, current_snapshot, agent),
+        ).fetchone())}
+        return [_run_view(row, current_snapshot, preparers) for row in connection.execute(
+            "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY agent ORDER BY created_at DESC) AS rank "
+            "FROM agent_runs WHERE ws=?) WHERE rank<=20 ORDER BY created_at DESC", (ws,)
         )]
 
 
@@ -435,10 +460,20 @@ def _safe_error(exc):
 def run(ws: str, body: RunRequest, client=None):
     if client is None and not os.environ.get("OPENAI_API_KEY"):
         _fail("api_key_missing", "Set OPENAI_API_KEY in the API server environment", 503)
-    toolbox = SnapshotTools(ws)
+    if body.agent == "internal_auditor":
+        from .auditor import AuditorTools
+        toolbox = AuditorTools(ws)
+        if not toolbox.candidates:
+            _fail("review_candidates_required", "Run CFO or Grants & Compliance on this snapshot before starting the Auditor", 409)
+    elif body.agent == "grants_compliance":
+        from .grants import GrantsTools
+        toolbox = GrantsTools(ws)
+    else:
+        toolbox = SnapshotTools(ws)
     if not body.focus.strip():
         _fail("invalid_focus", "Provide a non-blank investigation focus")
-    model = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
+    override = {"grants_compliance": "GRANTS_MODEL", "internal_auditor": "AUDITOR_MODEL"}.get(body.agent)
+    model = (os.environ.get(override) if override else None) or os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
     run_id, created = db.uid("run"), db.now()
     with db.connect() as connection:
         _expire_runs(connection, ws)
@@ -447,7 +482,7 @@ def run(ws: str, body: RunRequest, client=None):
             (ws, body.request_id),
         ).fetchone()
         if previous:
-            if previous["snapshot_id"] != body.snapshot_id or previous["focus"] != body.focus:
+            if previous["snapshot_id"] != body.snapshot_id or previous["focus"] != body.focus or previous["agent"] != body.agent:
                 _fail("request_conflict", "This request ID was already used with different inputs", 409)
             return _run_view(previous, toolbox.snapshot_id)
         _, latest, _ = _snapshot(connection, ws)
@@ -455,13 +490,13 @@ def run(ws: str, body: RunRequest, client=None):
             _fail("stale_snapshot", "The snapshot changed. Refresh before starting an agent run.", 409)
         running = connection.execute("SELECT 1 FROM agent_runs WHERE ws=? AND status='running'", (ws,)).fetchone()
         if running:
-            _fail("agent_already_running", "A CFO agent run is already active", 409)
+            _fail("agent_already_running", "A snapshot agent run is already active in this workspace", 409)
         connection.execute(
             "INSERT INTO agent_runs(id,ws,agent,snapshot_id,status,model,focus,created_at) VALUES(?,?,?,?,?,?,?,?)",
-            (run_id, ws, "cfo", toolbox.snapshot_id, "running", model, body.focus, created),
+            (run_id, ws, body.agent, toolbox.snapshot_id, "running", model, body.focus, created),
         )
         connection.execute("INSERT INTO agent_requests VALUES(?,?,?)", (ws, body.request_id, run_id))
-        db.event(connection, ws, "agent_run_started", {"run_id": run_id, "agent": "cfo", "snapshot_id": toolbox.snapshot_id, "model": model})
+        db.event(connection, ws, "agent_run_started", {"run_id": run_id, "agent": body.agent, "snapshot_id": toolbox.snapshot_id, "model": model})
     try:
         def checkpoint(logs, usage):
             with db.connect() as connection:
@@ -470,20 +505,22 @@ def run(ws: str, body: RunRequest, client=None):
         result, tool_logs, usage = _call_model(toolbox, body.focus, model, client, checkpoint)
         finished = db.now()
         output = {"analysis": result.model_dump(), "tool_calls": tool_logs, "usage": usage,
-                  "decision": {"action": "Initial snapshot triage", "summary": result.executive_briefing,
+                  **toolbox.result_metadata(result),
+                  "decision": {"action": f"{toolbox.label} snapshot review", "summary": result.executive_briefing,
                                "why": "Identify bounded follow-up work from the committed evidence.",
-                               "outcome": f"{len(result.findings)} candidate findings; {len(result.next_tasks)} next tasks.",
+                               "outcome": (f"{len(result.reviews)} independent review verdicts; no financial approval." if hasattr(result, "reviews")
+                                           else f"{len(result.findings)} candidate findings; {len(result.next_tasks)} next tasks."),
                                "raw_chain_of_thought_stored": False}}
         with db.connect() as connection:
             connection.execute("UPDATE agent_runs SET status='completed',completed_at=?,output=? WHERE id=? AND status='running'",
                                (finished, db.encode(output), run_id))
             db.event(connection, ws, "agent_run_completed", {"run_id": run_id, "snapshot_id": toolbox.snapshot_id,
-                                                             "tool_calls": len(tool_logs), "usage": usage}, actor="cfo")
+                                                             "tool_calls": len(tool_logs), "usage": usage}, actor=body.agent)
     except Exception as exc:
         message = _safe_error(exc)
         with db.connect() as connection:
             connection.execute("UPDATE agent_runs SET status='failed',completed_at=?,error=? WHERE id=?",
                                (db.now(), message, run_id))
-            db.event(connection, ws, "agent_run_failed", {"run_id": run_id, "error": message}, actor="cfo")
+            db.event(connection, ws, "agent_run_failed", {"run_id": run_id, "error": message}, actor=body.agent)
         _fail("agent_run_failed", message, 502)
     return next(saved for saved in list_runs(ws) if saved["id"] == run_id)

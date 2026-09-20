@@ -100,13 +100,15 @@ Bundle
 | `POST /api/approvals/{id}/decision` | `{workspace, decision}` → updated bundle |
 | `POST /api/demo/{action}` | `reset`, `inject_issue`, `add_evidence`, `next_month` |
 
-## CFO agent run contract
+## Snapshot agent run contract
 
 `POST /api/workspaces/{ws}/agent-runs` requires the local reviewer header and JSON
-`{snapshot_id, request_id, focus?}`. The snapshot must be the latest committed snapshot. A request ID
+`{snapshot_id, request_id, focus?, agent?}`. `agent` is `cfo` (default), `grants_compliance` or `internal_auditor`.
+The snapshot must be the latest committed snapshot. A request ID
 is unique within its workspace; replaying identical inputs returns the saved run, while changing its
 inputs returns 409. The endpoint waits for the bounded run; polling `GET` on the same path lists the
-latest 20 persisted runs, including running/failed runs and partial tool history.
+latest 20 persisted runs per agent, including running/failed runs and partial tool history.
+An idempotency key cannot be reused for another agent. One snapshot-agent run is active per workspace.
 
 Each run contains `id`, `workspace_id`, `agent`, `snapshot_id`, `current_snapshot`, `status`, `model`,
 `focus`, timestamps, `error`, and `result`. `result.analysis` is present only on completed runs and has
@@ -114,8 +116,16 @@ Each run contains `id`, `workspace_id`, `agent`, `snapshot_id`, `current_snapsho
 Findings carry source ID, line and exact quotation. Tool history and cumulative token usage are saved
 without raw model reasoning. Error messages omit provider response bodies and credentials.
 
-The bundle projects only completed CFO output for the current snapshot into briefing, candidate
-findings, queued specialist proposals and the reasoning log. `Finding.status` additionally supports
+The bundle projects the latest completed output per agent for the current snapshot into candidate
+findings, queued follow-up proposals and the reasoning log (`cfo` and `gr` dashboard IDs). The CFO briefing
+is retained when present; otherwise the Grants briefing is shown. `Finding.status` additionally supports
 `hypothesized`. Proposed clearances remain unreviewed hypotheses in that projection. No proposed task
 is automatically executed and no accounting correction is applied. Live provenance describes a real
 provider run, not an independently verified audit result.
+
+Auditor results add `analysis.reviews` (up to four): exact `finding_id`, `verdict` (`accept`, `reject`,
+`needs_evidence`), `rationale`, `citations` and `required_action`. `findings`/`next_tasks` are empty for
+the reviewer. `result.review_scope` contains candidate/reviewed counts and unreviewed finding IDs.
+`review_targets_current` is false if targets were superseded; null means not applicable/unknown.
+Auditor dashboard ID is `au`. Exact-match verdicts annotate preparer findings without changing their
+status, setting a blanket verified flag, approving changes, or carrying over to a new preparer run.

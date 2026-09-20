@@ -1,6 +1,6 @@
 # SchoolTrace — project map, implementation tracker and handoff
 
-Status: INTAKE + FIRST OPENAI CFO TRIAGE IMPLEMENTED — multi-agent review and local-model training remain future work.
+Status: INTAKE + OPENAI CFO, GRANTS AND INTERNAL AUDITOR IMPLEMENTED — automatic orchestration and local-model training remain future work.
 Updated: 2026-09-19.
 Canonical location: `PROJECT_TRACKER.md` at repository root.
 Repository: `/Users/max/Desktop/Projects/hackmit`.
@@ -96,6 +96,8 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 | `api/app/accounting/` | Helpers exist; expand | Ledger, schedules, exact calculations, lineage, invariants |
 | `api/app/context/` | PROPOSED | Versioned nodes/edges, temporal retrieval and dependency invalidation |
 | `api/app/agents/cfo.py` | Implemented | First OpenAI role, pinned evidence tools, schema validation, run limits and telemetry |
+| `api/app/agents/grants.py` | Implemented | Grants & Compliance prompt and deterministic supplied-payroll award checks using shared runtime |
+| `api/app/agents/auditor.py` | Implemented | Pinned preparer findings, fresh-source review, original CSV reperformance and exact-target verdicts |
 | `api/app/cfo/`, `api/app/integrations/` | Merged from main | Separate coordinator/harness and intake bridge; live specialist/auditor adapters remain pending |
 | `api/app/workflows/` | Placeholder | Close/payroll/AP/grants/audit-prep stages, evidence resumption and scenarios |
 | `api/app/review/` | PROPOSED | Versioned human decisions, idempotent adjustment application |
@@ -290,3 +292,50 @@ After a meaningful slice or before a context handoff:
   changed-file lint and `uv lock --check` passed. Live provider and original-citation browser checks passed.
 - Next integration task: implement real specialists and auditor behind coordinator ports, then explicitly unify
   triage/task dispatch and run history. Do not describe scripted coordinator results as live independent review.
+
+### Grants & Compliance implementation checkpoint — 2026-09-19
+
+- User requested the next live agent; implemented locally on `max`, after the prior CFO merge `d1d0f18`.
+- New module: `api/app/agents/grants.py`. Reuses the existing bounded OpenAI loop, snapshot tools,
+  citation validator and run persistence; no new service, dependencies or directory hierarchy.
+- Added allowlisted request agent (`cfo` default / `grants_compliance`); role-aware idempotency,
+  one active snapshot agent per workspace, history capped per role, and optional `GRANTS_MODEL`.
+- `check_grant` computes full pinned payroll-subset totals, inclusive service windows and ceiling
+  comparisons; missing/ambiguous awards stay unknown. Ledger/payroll are never added together.
+- UI: existing SourcesPanel selector, exact role names, separate results, source-citation modal and
+  evidence requests. Findings/Reasoning preserve both roles; CFO briefing is not overwritten by Grants.
+- Verified: 105 backend tests, production build/TypeScript, changed-file lint, whitespace checks.
+- Real synthetic-data OpenAI run: 7 tool calls / 35,509 tokens; caught full-cost grant charging versus
+  60/40 service evidence, requested allocation terms, and did not invent an adjustment. Validation
+  rejected two intermediate submissions before accepting corrected output. Citation opens original;
+  switching roles retains CFO's earlier result. No private institutional records used.
+- Known limits: supplied payroll only, not lifetime grant spend or legal eligibility certification;
+  citations verify text/location, not inference. Independent Auditor and automatic coordinator dispatch
+  remain pending; neither local extraction nor training was added.
+- Updated spec §8.2, API/shared contracts and READMEs. This new Grants work is uncommitted/unpushed.
+  Pre-existing prototype HTML and Bun lockfile edits remain unchanged; the API key is still ignored.
+
+### Internal Auditor implementation checkpoint — 2026-09-19
+
+- User authorized building the Internal Auditor and pushing to main; includes the pending Grants slice.
+- Added `agents/auditor.py`, sharing the bounded API loop but with its own prompt, schema and tool state.
+- Pins current-snapshot preparer run/finding IDs; no self-review, foreign targets or uncited acceptance.
+- Accept/reject requires explicit fresh reads of all target citations. Accept also requires supporting
+  calculations inferred from cited financial record roles and preparer tool history. Original CSV bytes
+  are reparsed and reconciled with pinned records before arithmetic; mismatches block acceptance.
+- Four verdicts per run; unreviewed IDs/counts are explicit. Further runs prioritize unreviewed targets.
+  Latest per-finding verdicts from the last 20 completed audits are preserved. Preparer reruns never
+  inherit old verdicts; same-snapshot target staleness is exposed in the UI.
+- UI selector, exact-target verdict cards/citations, dashboard annotations and optional AUDITOR_MODEL.
+  Candidate statuses and human approval stay separate; no blanket verified flag or financial mutation.
+- Live synthetic test: first attempt correctly refused un-retrieved citations then hit its budget.
+  Improved exact missing-line feedback and removed preview text from Auditor context. Corrected run
+  completed 9 tool calls / 36,369 tokens, reviewed 4 of 6 findings: two bounded acceptances and two
+  needs-evidence verdicts, with fresh reads and independent grant/ledger reperformance.
+- Verification: 114 backend tests, production build/TypeScript, changed-file lint, whitespace checks,
+  real provider run and browser source-citation check passed. Ready to push combined Grants/Auditor
+  changes from `max` to `main`; no upstream divergence at the final fetch. No private institutional
+  records used; local API key remains ignored and pre-existing prototype/Bun edits remain untouched.
+- Limitations: shared parsing/math implementation is not algorithmic independence; semantic model
+  mistakes remain possible. No audit opinion, compliance certification, automatic coordinator adapter
+  or local-model training. AP and Payroll specialists remain unimplemented.
