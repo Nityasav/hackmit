@@ -89,8 +89,9 @@ def append_finding(ws: WorkspaceId, finding: dict) -> Finding:
 
 
 def append_approval(ws: WorkspaceId, approval: dict) -> Approval:
-    """Append an item to the human approval queue. Agents propose here; only
-    decide_approval (the human path) may ever move it off `pending`."""
+    """Append an item to the approval queue. Agents propose here; only
+    decide_approval may ever move it off `pending`, and no HTTP route reaches
+    that function today."""
     record = Approval.model_validate(approval)
     if record.status != "pending":
         raise ValueError("an agent may only append a pending approval (spec.md §8)")
@@ -102,8 +103,8 @@ def append_approval(ws: WorkspaceId, approval: dict) -> Approval:
 
 def apply_review(ws: WorkspaceId, finding_id: str, decision: str) -> Finding:
     """Internal Auditor review verdict on a finding. Still not human approval
-    (spec.md §8) — only decide_approval, triggered by a human, moves an
-    Approval off pending. `accept` sets verified_by; anything else clears it
+    (spec.md §8) — only decide_approval moves an Approval off pending, and it
+    has no HTTP route today. `accept` sets verified_by; anything else clears it
     and sends the finding back to needs_evidence rather than repeating the
     preparer's assertion (spec.md: "A reviewer rejection should trigger a
     specific missing-evidence search... not a repeated assertion")."""

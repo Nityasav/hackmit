@@ -7,8 +7,9 @@ function signature is a control:
   * An agent can never mark its own work verified. `verified_by` on a finding
     and `verified` on an approval are forced off — only the Internal Auditor
     sets those (spec.md §8: specialists cannot approve their own proposals).
-  * An approval is always created `pending`. Only the human path
-    (`POST /api/approvals/{id}/decision` -> store.decide_approval) moves it.
+  * An approval is always created `pending`. Only store.decide_approval moves
+    it, and no HTTP route reaches that function today, so nothing outside this
+    process can move an approval at all.
   * A finding must carry evidence. No bare numbers, no unsupported accusations
     (contracts/README.md rule 3).
   * prepare_payment_batch applies its hold rules itself rather than trusting
