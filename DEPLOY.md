@@ -66,8 +66,10 @@ volume and its own half of your data.
 3. **Settings → Networking → Generate Domain.** Copy the hostname it gives you, e.g.
    `sherlock-api-production.up.railway.app`. You need it before the first successful boot, because
    the API refuses any hostname not in `SCHOOLTRACE_PUBLIC_HOSTS`.
-4. **Settings → Volumes → New Volume**, mount path `/data`. Skip this and every upload disappears
-   on the next deploy or restart.
+4. **Add the volume from the command palette, not from Settings.** There is no Volumes section in
+   the service settings. Press `⌘K`, or right-click the project canvas, and create a volume; pick
+   this service when it asks, then set its **mount path to `/data`** in the service panel. Skip
+   this and every upload disappears on the next deploy or restart.
 5. **Variables** — add the table above, with `SCHOOLTRACE_PUBLIC_HOSTS` set to the hostname from
    step 3 and no `https://` prefix. `PORT` is injected by Railway; do not set it.
 6. Redeploy. `curl https://<your-domain>/api/health` → `{"status":"ok"}`.
@@ -84,7 +86,13 @@ railway variables --set SCHOOLTRACE_PUBLIC_HOSTS=<your-domain> \
                   --set 'SCHOOLTRACE_ALLOWED_ORIGIN_REGEX=https://schooltrace-.*\.vercel\.app'
 ```
 
-Add the volume in the dashboard afterwards; the CLI does not create one.
+Add the volume from the dashboard afterwards — the CLI browses and transfers files
+(`railway volume browse /`, `railway volume files list /`) but does not create or attach one.
+
+Two constraints worth knowing before you scale anything: a service can hold **only one volume**, and
+**replicas cannot be used with volumes at all** — which is the same single-writer limit SQLite
+already imposes, so `numReplicas: 1` in `railway.json` is not a preference. Volumes also mount at
+container start, not during the build, so nothing written into `/data` at build time survives.
 
 **What the image does on Railway, verified locally**
 
