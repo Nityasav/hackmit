@@ -235,6 +235,12 @@ Five roles, shown in the UI as an Office of the CFO:
 
 ### 8.1 First live slice: CFO snapshot triage
 
+Integration status: `app/agents/cfo.py` powers live snapshot triage in Command center. The separately
+merged `app/cfo/` coordinator exposes `/api/cfo/runs` and a `/cfo` harness, with scripted specialists
+and independent-review gates. Its intake bridge exists, but live specialist/auditor adapters remain
+unregistered. The two execution paths are not yet unified; suggested triage tasks are not auto-dispatched.
+The coordinator's optional local CFO adapter is experimental and is not the planned local document extractor.
+
 The first implemented live role is a bounded CFO triage agent. It runs synchronously for the local hackathon build against exactly one current immutable snapshot. The API key exists only in the FastAPI process environment and is never returned to or entered in the browser. The request uses provider storage disabled where supported.
 
 The CFO receives no database connection, arbitrary file path, shell, web search or mutation tool. Its initial tool allowlist is: read workspace/snapshot context, list sources, literal-search source lines, read a bounded source span, list paginated normalized records by role and run deterministic ledger import-control totals across the entire pinned ledger. Cross-workspace IDs and sources outside the pinned snapshot are rejected. The limits are 12 actual tool calls, one active CFO run per workspace, four minutes per run, 60 seconds per provider request, 2,500 output tokens per response, 60,000 conversation bytes and a conservative 100,000 cumulative token ceiling. The model is configurable. Request IDs prevent duplicate runs; expected snapshot IDs reject stale starts. Completed steps survive failures, and abandoned runs expire after the deadline plus 30 seconds.

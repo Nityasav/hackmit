@@ -17,6 +17,8 @@ uv run pytest                                       # accounting invariants
 | `app/ingestion.py` | Functionality | CSV/text parsing, mappings, validation, immutable commits, coverage and evidence requests |
 | `app/accounting/` | Functionality | Exact integer-cent math and ledger invariants L01–L13 |
 | `app/agents/cfo.py` | Agent design | First live CFO agent, scoped snapshot tools, OpenAI adapter and run persistence |
+| `app/cfo/` | CFO coordination | Separate bounded coordinator, scripted harness, persisted runs and specialist/reviewer ports |
+| `app/integrations/` | Integration | Read-only intake bridge and adapter factory; live specialist and auditor registration pending |
 | `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
 
 ## Rules
@@ -47,6 +49,12 @@ No corrections, full report recomputation or automatic evidence verification are
 Evidence attachment records a scoped resumption event for the future multi-agent runtime.
 
 ## CFO triage agent
+
+This is the live Command center path. The separately merged `/api/cfo/runs` coordinator and `/cfo`
+page are documented in `app/cfo/README.md`; live orchestration still requires specialist/auditor adapters.
+Both route families coexist. The coordinator's optional local provider is an experimental CFO adapter,
+not the planned fine-tuned document extraction component. `OPENAI_MODEL` selects triage, while `CFO_MODEL`
+selects the coordinator preview model. The two run stores and execution loops are not yet unified.
 
 Set `OPENAI_API_KEY` in ignored `api/.env`, which loads automatically without overriding existing
 environment variables. `OPENAI_MODEL` defaults to `gpt-5.4-mini`. Never place the key in `web/.env.local`

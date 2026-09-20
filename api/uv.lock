@@ -675,6 +675,11 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+cfo = [
+    { name = "openai" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
@@ -686,11 +691,13 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "openai", specifier = ">=2.0" },
+    { name = "openai", marker = "extra == 'cfo'" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
+provides-extras = ["cfo"]
 
 [package.metadata.requires-dev]
 dev = [

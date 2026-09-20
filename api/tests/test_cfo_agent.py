@@ -99,6 +99,21 @@ def test_agent_requires_committed_snapshot_and_server_key(client, monkeypatch):
     assert response.json()["detail"]["code"] == "api_key_missing"
 
 
+def test_merged_app_keeps_coordinator_and_snapshot_triage_routes(client, tmp_path, monkeypatch):
+    from app.cfo.api import CFORuntime
+    from app.cfo.repository import RunRepository
+
+    runtime = CFORuntime(RunRepository(tmp_path / "coordinator.sqlite3"))
+    monkeypatch.setattr(app.state, "cfo_runtime", runtime, raising=False)
+    ws, _ = committed_workspace(client)
+    response = client.post("/api/cfo/runs", json={"workspace": "sandbox", "mode": "scripted"})
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    assert client.get(f"/api/cfo/runs/{run_id}").status_code == 200
+    assert client.get(f"/api/workspaces/{ws}/agent-runs").json() == []
+    assert client.get(f"/api/workspaces/{ws}/bundle").status_code == 200
+
+
 def test_cfo_agent_uses_scoped_tools_verifies_citation_and_persists(client, monkeypatch):
     ws, snapshot_id = committed_workspace(client)
     fake = SimpleNamespace(responses=FakeResponses(), close=lambda: None)

@@ -51,7 +51,7 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 | API | Health, bundle, approval-state mutation, reset; other demo actions 501 | `api/app/main.py` |
 | Store | Legacy demos stay in memory; intake has SQLite originals, records, snapshots and events | `api/app/store.py`, `api/app/db.py` |
 | Accounting | Allocation split, journal checks, reclassification and cash delta helpers | `api/app/accounting/money.py` |
-| Tests | 49 backend checks including intake API, revision, atomicity, scope and original accounting tests | `api/tests/` |
+| Tests | Intake, CFO triage, coordinator, review gates and accounting tests; current counts in latest checkpoint | `api/tests/` |
 | Documents/import | Dynamic workspaces, CSV/text intake, mappings, validation, original evidence, coverage and evidence requests implemented | `api/app/ingestion.py`, `web/src/components/SourcesPanel.tsx` |
 | Agents | Bounded OpenAI CFO triage with scoped tools, source citations, run persistence and dashboard projection | `api/app/agents/cfo.py` |
 | Workflows | README and package marker only; real scenario workflows unimplemented | `api/app/workflows/` |
@@ -96,6 +96,7 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 | `api/app/accounting/` | Helpers exist; expand | Ledger, schedules, exact calculations, lineage, invariants |
 | `api/app/context/` | PROPOSED | Versioned nodes/edges, temporal retrieval and dependency invalidation |
 | `api/app/agents/cfo.py` | Implemented | First OpenAI role, pinned evidence tools, schema validation, run limits and telemetry |
+| `api/app/cfo/`, `api/app/integrations/` | Merged from main | Separate coordinator/harness and intake bridge; live specialist/auditor adapters remain pending |
 | `api/app/workflows/` | Placeholder | Close/payroll/AP/grants/audit-prep stages, evidence resumption and scenarios |
 | `api/app/review/` | PROPOSED | Versioned human decisions, idempotent adjustment application |
 | `api/app/memory/` | PROPOSED | Playbook proposals, applicability, replay-gate results, activation/retirement |
@@ -283,3 +284,9 @@ After a meaningful slice or before a context handoff:
 - Deferred: independent auditor, specialist execution, durable LangGraph scheduling/resumption, automatic evidence continuation,
   full financial reports, local extraction model, training, playbooks and measured learning.
 - Keep pre-existing prototype HTML and Bun lockfile edits untouched. User authorized pushing `max` and merging into `main`.
+- Main integration: incorporated `f3d8314`, preserving the separately merged coordinator/harness. Resolved `main.py`
+  by keeping both routers, dotenv loading and coordinator shutdown; regenerated the merged uv lock.
+- Combined tree: 92 backend tests (including cross-route coexistence), production build/TypeScript,
+  changed-file lint and `uv lock --check` passed. Live provider and original-citation browser checks passed.
+- Next integration task: implement real specialists and auditor behind coordinator ports, then explicitly unify
+  triage/task dispatch and run history. Do not describe scripted coordinator results as live independent review.

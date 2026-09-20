@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 from dotenv import load_dotenv
 
@@ -21,10 +22,20 @@ from starlette.concurrency import run_in_threadpool
 from . import store, ingestion
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
+from .cfo.api import router as cfo_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    if hasattr(app.state, "cfo_runtime"):
+        await app.state.cfo_runtime.close()
+
+
+app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app.include_router(cfo_router)
 
 app.add_middleware(
     CORSMiddleware,
