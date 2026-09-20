@@ -35,16 +35,6 @@ export default function BooksPage() {
         </p>
       </header>
 
-      {/* This page is long, and the instructions that send someone between its
-          parts said things like "scroll up to the import", which is not a
-          place. These are. */}
-      <nav aria-label="Sections of this page" className="flex flex-wrap gap-4 border-y border-line py-3 text-[13px]">
-        <a className="underline" href="#source-records">Add records</a>
-        <a className="underline" href="#source-import">Review &amp; commit an import</a>
-        <a className="underline" href="#source-documents">Documents</a>
-        <a className="underline" href="#source-registers">Search the records</a>
-      </nav>
-
       <GuidedWorkflow bundle={bundle} intake={intake} />
 
       {/* Keyed so switching workspaces resets the upload draft rather than carrying
@@ -54,8 +44,7 @@ export default function BooksPage() {
       <section id="source-documents" className="scroll-mt-4">
         <h2 className="text-base font-semibold">Documents</h2>
         <p className="mb-3 mt-1 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-          Upload a PDF and check every extracted value against the page it came from before it
-          is imported.
+          Upload a PDF, review its extracted values, then import.
         </p>
         <DocumentIntake key={ws} />
       </section>
@@ -63,7 +52,7 @@ export default function BooksPage() {
       <section id="source-registers-section" className="scroll-mt-4">
         <h2 className="text-base font-semibold">Search the records</h2>
         <p className="mb-3 mt-1 max-w-prose text-[13px] leading-relaxed text-ink-dim">
-          Find transactions by date, and take a period away as a spreadsheet.
+          Filter transactions by date and export a spreadsheet.
         </p>
         <RecordsBrowser key={ws} />
       </section>

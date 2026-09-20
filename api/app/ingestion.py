@@ -71,6 +71,7 @@ class WorkspaceCreate(BaseModel):
 
 
 class FileOptions(BaseModel):
+    auto_detect: bool = False
     role: Role = "document"
     source_system: str = Field(default="manual", min_length=1, max_length=100)
     source_version: int = Field(default=1, ge=1, le=1_000_000)
@@ -396,6 +397,22 @@ def stage(ws, uploads: list[tuple[str, bytes, FileOptions]]):
         return stage_in_transaction(connection, ws, uploads)
 
 
+def detected_csv_options(name, content, options):
+    if PurePath(name).suffix.lower() != ".csv":
+        return options
+    try:
+        columns = next(csv.reader(io.StringIO(content.decode("utf-8-sig")), strict=True))
+    except (UnicodeError, csv.Error, StopIteration):
+        return options
+    normalized = [re.sub(r"[ -]+", "_", c.strip().lower()) for c in columns]
+    matches = [role for role, fields in FIELDS.items() if set(fields) <= set(normalized)]
+    if len(set(normalized)) != len(columns) or len(matches) != 1:
+        return options
+    role = matches[0]
+    allowed = set(FIELDS[role]) | set(OPTIONAL_FIELDS)
+    return options.model_copy(update={"role": role, "mapping": {k: v for k, v in zip(normalized, columns) if k in allowed}})
+
+
 def stage_in_transaction(connection, ws, uploads):
     if not 1 <= len(uploads) <= MAX_FILES or sum(len(b) for _, b, _ in uploads) > MAX_BATCH:
         fail("batch_limit", f"Upload 1–{MAX_FILES} files with a combined size of at most 50 MB", 413)
@@ -410,6 +427,8 @@ def stage_in_transaction(connection, ws, uploads):
             fail("unsupported_format", "This intake accepts CSV/TXT/Markdown. Use the Document lab for PDF/image extraction.", 415)
         if not content or len(content) > MAX_FILE:
             fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
+        if options.auto_detect and options.role == "document" and config["kind"] != "public":
+            options = detected_csv_options(name, content, options)
         connection.execute(
             "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
             (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),
