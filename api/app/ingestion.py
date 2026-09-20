@@ -595,7 +595,11 @@ def coverage(ws):
                 note = "Receipts and deposits are supplied records, not a verified complete set. A difference between them is unreconciled, not evidence of loss."
             if config["kind"] == "public" and key != "document_explanation":
                 status, note = "unsupported", "Public-document workspace; no transaction accounting."
-            capabilities.append({"id": key, "label": label, "status": status, "missing": missing, "note": note})
+            # `requires` is the same set the status is computed from. It is published
+            # so a client can draw what a check depends on without re-declaring the
+            # requirements and drifting from them.
+            capabilities.append({"id": key, "label": label, "status": status, "missing": missing,
+                                 "note": note, "requires": sorted(required)})
         sources = []
         active_ids = {r["source_id"] for r in records}
         for f in connection.execute("SELECT id,name,sha256,options,committed FROM sources WHERE ws=? AND committed=1 ORDER BY rowid DESC", (ws,)):
