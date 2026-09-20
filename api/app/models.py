@@ -116,6 +116,10 @@ class EvidenceNode(BaseModel):
     kind: Literal["record", "award", "doc", "calc", "page"]
     tone: Literal["neutral", "bad", "good"]
     edge: str | None = None
+    #: file + row, or document + page
+    locator: str | None = None
+    #: short excerpt shown when the node is opened in the UI
+    source_preview: str | None = None
 
 
 class Finding(BaseModel):
