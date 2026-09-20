@@ -79,6 +79,10 @@ volume and its own half of your data.
    the service settings. Press `⌘K`, or right-click the project canvas, and create a volume; pick
    this service when it asks, then set its **mount path to `/data`** in the service panel. Skip
    this and every upload disappears on the next deploy or restart.
+
+   The Dockerfile deliberately carries no `VOLUME` instruction. Railway rejects a Dockerfile that
+   declares one — `dockerfile invalid: docker VOLUME at Line 31 is not supported, use Railway
+   Volumes` — because it mounts its own volume at the path you configure here.
 5. **Variables** — add the table above, with `SCHOOLTRACE_PUBLIC_HOSTS` set to the hostname from
    step 3 and no `https://` prefix. `PORT` is injected by Railway; do not set it.
 6. Redeploy. `curl https://<your-domain>/api/health` → `{"status":"ok"}`.

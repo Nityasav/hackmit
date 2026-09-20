@@ -25,10 +25,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     SCHOOLTRACE_DATA_DIR=/data
 
-# Mount a volume here to keep uploads across restarts. Without one the directory still works;
-# everything uploaded is lost on redeploy, which is survivable for a demo but must be said out loud.
+# Attach the host's volume at /data to keep uploads across restarts. Without one the directory
+# still works and everything uploaded is lost on redeploy — survivable for a demo, but say it out
+# loud. No VOLUME instruction here: Railway rejects a Dockerfile that declares one, because it
+# mounts its own volume at the path you configure.
 RUN mkdir -p /data
-VOLUME ["/data"]
 
 EXPOSE 8000
 
