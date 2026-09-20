@@ -1,5 +1,46 @@
 # Agents
 
+## Implementation note — a sixth Revenue & Collections (`rc`) specialist (2026-09-20)
+
+Not implemented, deliberately. The specialist class itself is nearly free: `SnapshotSpecialist`
+builds any non-`py` role through the generic `EvidenceSpecialist`, so `rc` needs only a focus line
+and a prompt. Switching it on is the part that is not local, and a partial switch-on does not
+degrade — it takes the working five down with it.
+
+**Declaring the role and registering the adapter must land in the same commit.**
+
+- `app/cfo/schemas.py` — the `Role` and `Source.domain` literals. `Plan` is handed to the live
+  planner as a JSON-schema enum, so widening `Role` is by itself enough for the model to emit
+  `role="rc"` unprompted, with no prompt change anywhere.
+- `app/integrations/cfo_factory.py` — the `("ap", "py", "gr")` tuple. `CFOEngine._validate_plan`
+  raises `BoundaryError` for a role with no registered adapter, and it runs inside `execute`'s
+  outer `try`, so a single `rc` task in the plan fails the **whole run** — AP, Payroll and Grants
+  results included. Widening the literal without registering the adapter is therefore strictly
+  worse than doing neither. `app/cfo/api.py`'s live gate is an `issubset` check and needs no edit.
+
+**It also has nothing of its own to read until the money-in records exist.**
+
+- `app/ingestion.py` — `FIELDS` for `fees`, `collections`, `deposits`, `sponsorships`.
+- `app/integrations/cfo_intake.py` — `DOMAINS`, which maps an intake role onto a specialist domain.
+  Until it does, those sources arrive tagged `shared`: `rc` cannot be scoped to its own evidence,
+  and a coverage task would hand it every other domain's sources as well.
+- Amounts stay unavailable longer than evidence does. `calculate` fails closed for a domain with no
+  published engine, so `rc` could cite a fees or deposits source and describe an unreconciled
+  difference, but could not state its size until `app/accounting/` publishes a receipts-to-deposits
+  calculation. Until then the adapter drops any claim marked `substantiated`, which is the correct
+  outcome and not something to work around.
+
+**Do not add `rc` to `engine.py`'s `five_agent` coverage loop.**
+`tests/test_five_agent_workflow.py` registers three specialists and asserts exactly three task roles
+and six model instances; a fourth coverage task fails those runs outright. The loop only fills in
+roles a planner omitted, so a live planner can still assign `rc` without it.
+
+What remains genuinely unwritten is the brief, not the wiring: trace fees charged → receipts
+collected → bank deposits → sponsor pledges, cite the record on both sides of every link, and where
+one side is absent ask for the slip. An undeposited receipt is an unreconciled difference and never
+a theft; each finding states what it does not establish; amounts from separate checks are never
+summed or described as recovered.
+
 Three implementations currently live here, built independently on separate branches and merged
 without being unified yet. All three reached working agent behaviour at roughly the same time from
 different directions. Consolidate before the next milestone — see PROJECT_TRACKER.md.

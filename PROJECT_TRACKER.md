@@ -47,7 +47,7 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 
 | Area | Observed state | Evidence |
 | --- | --- | --- |
-| Dashboard | Eight tabs, two fixed workspaces, fixture-backed display and interactions | `web/src/app/`, `web/src/lib/data.tsx` |
+| Dashboard | Three destinations — `/` (Books), `/investigation`, `/briefing` — plus `/access` and `/login`; uploaded workspaces only, no fixed demo workspaces and no fixture-backed views | `web/src/app/`, `web/src/lib/tabs.ts`, `web/src/lib/data.tsx` |
 | API | Health, bundle, approval-state mutation, reset; other demo actions 501 | `api/app/main.py` |
 | Store | Legacy demos stay in memory; intake has SQLite originals, records, snapshots and events | `api/app/store.py`, `api/app/db.py` |
 | Accounting | Allocation split, journal checks, reclassification and cash delta helpers; deterministic payroll tie-out and fund-allocation calculations | `api/app/accounting/money.py`, `api/app/accounting/payroll.py` |
@@ -56,7 +56,7 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 | Agents | Three families not yet consolidated: direct-run CFO/Grants/Auditor, the orchestrated AP dispatch loop, and the ports-based Payroll & Budget specialist | `api/app/agents/` |
 | Workflows | README and package marker only; real scenario workflows unimplemented | `api/app/workflows/` |
 | Shared data | TypeScript/Pydantic mirrors and two demo JSON bundles | `contracts/`, `api/app/models.py`, `web/src/lib/types.ts` |
-| Reports/learning | Fixture presentation, not real recomputation or measured learning | Dashboard data path and fixture contract |
+| Reports/learning | `/briefing` renders the report section of the review feed and links the server-built Markdown briefing; no measured learning and no learning screen | `web/src/components/ReviewWorkspace.tsx` |
 
 Existing UI labels such as “Recorded run” are not proof of a saved real model run. Verify a replay manifest before claiming recorded agent performance. Current arithmetic helper tests do not establish all L01–L13 invariants or production readiness.
 
@@ -82,7 +82,7 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 
 | Path | State | Responsibility |
 | --- | --- | --- |
-| `web/src/app/` | Existing | Eight product tabs |
+| `web/src/app/` | Existing | Three product destinations (Books `/`, `/investigation`, `/briefing`) plus `/access` and `/login` |
 | `web/src/lib/data.tsx` | Existing; extend | API state, workspace selection, polling, explicit fixture mode |
 | `web/src/components/SourcesPanel.tsx` | Implemented | Upload, mapping preview, coverage, validation issues, evidence viewer |
 | `web/src/lib/data.tsx` | Extended | Shared typed API helper; no extra source-client module |
@@ -171,7 +171,7 @@ Source schema and endpoint contracts affect all four tracks. Record contract cha
 | D-03 | Planning review completed; intake code and push authorized | Subsequent explicit user instruction |
 | D-04 | CSV and TXT/Markdown first; PDF extraction later | Approved and implemented |
 | D-05 | SQLite includes original bytes as BLOBs; atomic synchronous import | Implemented to keep folders/services small |
-| D-06 | Sources & coverage inside existing navigation | Implemented; eight tabs retained |
+| D-06 | Sources & coverage inside existing navigation | Implemented; eight tabs retained then, navigation has since collapsed to three destinations |
 | D-07 | Synthetic transaction demo, public sources separate | Existing spec boundary; real private data deferred |
 | D-08 | Readiness per capability, not “all files uploaded = clean audit” | Proposed operationalization of spec completeness |
 | D-09 | Model/provider ID verified when adapter is implemented | Existing named model is a spec target, not evidence of integration/availability |
@@ -255,7 +255,7 @@ After a meaningful slice or before a context handoff:
 - Authorization: Max approved intake implementation and push to current branch; requested few folders.
 - Branch: `max`; unrelated prototype and Bun lockfile edits are excluded from staging.
 - Added backend modules: `api/app/db.py`, `api/app/ingestion.py`; no extra module directories.
-- UI: `SourcesPanel.tsx` within Command center, dynamic sidebar workspaces, safe empty API state.
+- UI: `SourcesPanel.tsx` within Command center (that route is gone; the panel is now the Books page at `/`), dynamic sidebar workspaces, safe empty API state.
 - Persistent data: gitignored SQLite stores immutable originals, staged previews, record versions, snapshots, evidence requests and local events.
 - Supported files: CSV / UTF-8 TXT / Markdown. Templates are in `contracts/fixtures/intake.json`.
 - Verified: upload, mapping, exclusion, exact amounts, journal/opening validation, identity conflicts, reimports, versioned commit, rollback, scoped citations/downloads and evidence attachment.
@@ -372,7 +372,8 @@ After a meaningful slice or before a context handoff:
   write tools are exposed. Each investigation/review owns and closes its client, preventing shared
   budgets across concurrent tasks/workspaces. Truncated originals cannot be accepted.
 - `/cfo` now defaults to the five-agent option, linked from Command center and the intake workflow
-  gate. Workspace switches reset displayed runs; saved runs cannot be shown under another workspace.
+  gate (both routes have since been removed; the client lives in `web/src/components/investigation/`).
+  Workspace switches reset displayed runs; saved runs cannot be shown under another workspace.
 - Verification: 282 offline tests passed, 9 opt-in/artifact tests skipped. New tests cover connected
   roles, default API factory on committed intake, independent reads/reperformance, rejected claims,
   task budgets, truncated sources and provider-failure cleanup. Full frontend lint/build passed.
@@ -385,7 +386,7 @@ After a meaningful slice or before a context handoff:
 
 ### Director workflow / laptop judge demo — 2026-09-19 (`max`)
 
-- Home is now plain-language onboarding; previous dashboard moved to `/command`.
+- Home is now plain-language onboarding; previous dashboard moved to `/command` (since removed).
   One-click fictional scan imports real records and runs deterministic checks (no
   model call disguised as AI). Always-visible navigation and workspace selector.
 - Unified `/api/workspaces/{ws}/review` powers uploaded-workspace Scan, Findings,
@@ -410,3 +411,142 @@ After a meaningful slice or before a context handoff:
   `DEMO_IMPLEMENTATION.md`. Full PO/receipt matching, statutory statements, Ontario
   profile validation, enterprise identity/encryption/retention compliance and held-out
   model evaluation are incomplete. Changes remain on `max`; no new main merge.
+
+### School money-in: fees, collections, deposits, sponsorships — 2026-09-20 (`db/full-schema`)
+
+- Gap this closes: every record role the product accepted until now described money going **out**
+  (invoices, payroll, grant charges, budgets). Those roles exist at any business. Fees families owe,
+  cash collected at events, the bank deposit that should follow and sponsor pledges are school-specific
+  and are commonly kept outside the finance system — a collection log, a sign-up sheet, a deposit book —
+  so a receipt written there has nothing to be reconciled against. The product accepted no inbound role
+  at all before this. That is a structural gap in coverage; it is not a claim that money is being lost.
+- Four inbound roles added to `FIELDS` in `api/app/ingestion.py`, with required CSV columns:
+  `fees` (record_id, student_ref, fee_type, charge_date, amount); `collections` (record_id, collected_by,
+  collection_date, method, amount); `deposits` (record_id, deposit_date, bank_reference, amount);
+  `sponsorships` (record_id, sponsor_id, program, pledge_date, due_date, amount). Amounts run through the
+  existing `MONEY_FIELDS` path as integer cents and must be positive; `charge_date`, `collection_date`,
+  `deposit_date`, `pledge_date` and `due_date` join `DATE_FIELDS` and are parsed as ISO dates, but only
+  cash movement is bounded by the workspace period: `collection_date` must fall inside it, `deposit_date`
+  inside it or within the 7-day banking window `DEPOSIT_GRACE_DAYS` allows after its end, and
+  `charge_date`, `pledge_date` and `due_date` are not period-bounded at all (a charge may predate the
+  window and a pledge may fall due after it; intake only requires `pledge_date` not to follow `due_date`).
+  `record_key` falls through to `payload["record_id"]`, so no new key derivation was added.
+- Optional columns carry the links: `fee_record_id`, `deposit_reference`, `collection_reference`,
+  `student_ref`, `program`, `waiver_reference`, `due_date`.
+- Linking rule — money is traced by reference, never by matching amounts: a collection names the fee
+  charge it settles (`collections.fee_record_id` → `fees.record_id`), the pledge it settles
+  (`collections.collection_reference` → `sponsorships.record_id`) and the deposit it was banked under
+  (`collections.deposit_reference` → a deposit's own `deposit_reference` where it carries one, its
+  `bank_reference` otherwise, so one deposit answers for exactly one reference and cannot close two
+  groups). A collection likewise answers exactly one obligation — the fee charge where it names one, the
+  pledge otherwise — so a receipt carrying both references is never counted against both. Deposit
+  references are compared with repeated spacing collapsed, NFKC applied and case lowered; `casefold()` was
+  replaced in the third review round because it folds ß to ss and merged two references staff had written
+  differently. A charge or pledge is identified by its exact `record_id` first, falling back to that
+  normalised comparison only where exactly one supplied obligation answers to the spelling.
+- New `api/app/accounting/collections.py`, called from `accounting/review.py` next to the existing checks
+  and emitting the same deterministic finding shape under role `rc`. Check ids, as they stand at the end of
+  the third review round: `rc-collections-inventory`, `rc-deposits-inventory`, `rc-fees-inventory`,
+  `rc-sponsorships-inventory` (gap when a population is absent); `rc-undeposited-<digest of the reference>`
+  (no supplied deposit resolves to the reference at all); `rc-deposit-shortfall-<digest>` (deposits
+  resolving to it total less than the collections citing it); `rc-deposit-surplus-<digest>` (they total
+  more — a gap, for the same reason a deposit under an unknown reference is one);
+  `rc-deposit-timing-<digest>` (per receipt, against the earliest deposit under its reference dated on or
+  after it); `rc-deposit-unmatched-<digest>` (deposits resolving to a reference no receipt carries);
+  `rc-deposit-unreferenced`; `rc-undeposited-unreferenced`; `rc-deposit-reconciliation` (the narrow pass,
+  emitted only where every group matches its supplied deposits exactly); `rc-fees-outstanding` (uncollected
+  remainder, positive remainders only); `rc-collection-without-charge`; `rc-pledge-overdue` (unreceived
+  remainder); `rc-pledge-ageing-not-run` (pledges supplied with no period end, so the ageing check says it
+  did not run rather than staying silent). Each `<digest>` is the `sha256` of the normalised reference,
+  truncated to 12 hex characters, so an id tracks its reference rather than the rows under it.
+- Headline check is `rc-undeposited-*`: receipted with no matching deposit, the wording the finding itself
+  uses — "never deposited" would state an outcome the check cannot establish. Its explanation states that
+  the amount is the total recorded as received under a reference that nothing shown reaching the bank
+  answers, and that it does not establish theft, loss or misappropriation. Where a reference does match
+  supplied deposits, any difference either way is reported instead under its own id — `rc-deposit-shortfall-*`
+  for less banked than collected, `rc-deposit-surplus-*` for more — so the two kinds of amount stay apart
+  and are never added.
+  The five-day banking window behind `rc-deposit-timing-*` is a supplied demo
+  convention and says so in the finding. Amounts from different money-in checks are never summed and are
+  never called recovery or savings.
+- UI: findings reach the existing review feed. `ReviewWorkspace` labels role `rc` "Revenue & Collections",
+  groups it under "Money coming in · fees, collections, deposits, pledges" and adds a filter for it;
+  `SourcesPanel` offers the four upload roles.
+- Not implemented: no payment processor, bank feed or point-of-collection connector — every record is an
+  uploaded CSV. No refunds, reversals or cancelled obligations: intake refuses a non-positive amount, so a
+  refund has no record to arrive on, and a charge settled and later refunded still reads as settled. The
+  remainder checks say so in their own explanations rather than leaving it to this file. No payment plans,
+  family statements or receipt issuance. `waiver_reference` is carried as an optional column but no check
+  reads it, so a waived fee still reports as outstanding. No ageing buckets: nothing is bucketed 30/60/90
+  days and no balance is aged from a charge date; pledge ageing is a single comparison of the due date
+  against the period end. No per-student ledger and no cash-handling control rating. Money-in is not posted to the general ledger
+  and its totals are not tied to it. No agent specialist owns these checks: they are deterministic rules,
+  explicitly not an Auditor verdict, and nothing here is a payment, an email or a posting. Pledge ageing
+  needs the workspace period end; without one it does not run and says so as `rc-pledge-ageing-not-run`,
+  rather than returning the silence of a check that never ran.
+- Docs updated: `README.md` "What it does" and the intake CSV role list, `schooltrace/spec.md` §3.2 and §6,
+  and `schooltrace/DATA_AND_EVALUATION.md` (§2 runtime files and the §4 issue catalog). That evaluation
+  document had been deleted in `ef7afff` and is restored here from `ef7afff^` unchanged apart from the
+  money-in additions; the tracker's reading map above already pointed at it.
+- Honesty pass, 2026-09-20: the money-in docs were stripped of claims the code does not support. "Receipted
+  but never deposited" is now "receipted with no matching deposit" everywhere; the unsourced claim that
+  inbound money is where school money goes missing is replaced by the structural gap; the evaluation
+  catalog no longer promises fee ageing and marks the waiver lookalike unsupported; and the money-in
+  fixture README no longer claims a verified API upload. Round three went further on that last point: the
+  README's table is now re-derived by driving the real intake and scan endpoints in process, and it says
+  that this is a scripted run of the endpoints a person uses rather than a record of a human upload.
+- Verified on 2026-09-20 in this tree, after the third review round: `uv run pytest` collects and passes —
+  363 passed, 10 skipped. `api/tests/test_collections.py` covers the money-in rules on inline fixtures
+  (45 of those tests). Separately, uploading `api/tests/data/money_in/*.csv` through the intake endpoints
+  into a temporary data directory and scanning the committed snapshot returns exactly the four `rc`
+  findings, ids and amounts documented in that pack's README: `rc-undeposited-2b95aeb57ec7` (240000),
+  `rc-deposit-shortfall-d432ab8cb466` (15000), `rc-fees-outstanding` (17000) and `rc-pledge-overdue`
+  (175000), over 29 parsed records. That is engine reproduction, not accuracy, precision/recall or a
+  benchmark, and the check ids move when the reference normalisation or a check's own prefix does — both
+  moved this round.
+
+### Money-in engine: three adversarial review rounds — 2026-09-20 (`db/full-schema`)
+
+- Three review rounds ran over `api/app/accounting/collections.py`, each reading the code the previous round
+  left behind. Round one built the checks. Round two reproduced and fixed seven defects. Round three read
+  round two's fixes and found seven more that those fixes had introduced. Every defect was reproduced by
+  running the code before it was changed, and every fix carries a test in `api/tests/test_collections.py`
+  that fails without it.
+- Three classes of defect came out of the rounds:
+  - **False clean reconciliations** — the module reporting that receipts tie to deposits where the supplied
+    records do not show that. Round two: one deposit indexed under both its deposit reference and its bank
+    reference closed two collection groups at once; two spellings of one reference differing only in case or
+    spacing split a group and hid the deposit behind it; a deposit resolving to a reference no receipt
+    carried was dropped entirely. Round three: money deposited in excess of the receipts under a *matched*
+    reference was reported nowhere, so whether the same excess surfaced at all turned on which reference
+    string the slip happened to carry.
+  - **Netting across obligations** — one obligation's surplus quietly covering another's shortfall. Round
+    two: a one-cent receipt closed a charge or a pledge outright, and a charge collected in excess offset a
+    charge that was not collected. Round three: a receipt naming both a fee charge and a pledge was counted
+    against both, so one payment settled two obligations; normalising an obligation's identity merged
+    `FEE-1` with `fee-1`; and a negative receipt amount reported more owed than had ever been charged.
+  - **Order-dependent amounts** — an amount, wording or id that moved with the order records arrived in or
+    with the size of a group. Round two: deposit timing measured as the group's latest deposit less its
+    earliest receipt, and ids hashed over group membership, so a follow-up saved by a human was orphaned
+    when a row joined. Round three: the late-receipt tally keyed on `record_key`, which is unique only
+    within a source system, so two tills filing the same receipt number dropped one of the two.
+- Not everything fell in those three classes. Round two also fixed a period boundary — a pledge due on the
+  closing day of the period escaped the ageing check — and added `rc-pledge-ageing-not-run` so a check that
+  cannot run says so instead of returning silence.
+- Round three closed a path hole outside the engine: `api/app/integrations/cfo_intake.py` called
+  `checks(records, {})` with no period although the workspace record was already in hand, so pledge ageing
+  did not run on the CFO path, and the gap disclosing that was dropped by the caller's own filter before it
+  could reach anyone. That caller now passes the workspace record through; `api/tests/test_cfo_intake.py`
+  asserts the period arrives and that no "did not run" gap is raised on that path.
+- Two ids moved in round three, and a follow-up saved against the old one refers to nothing: the shortfall
+  case left `rc-undeposited-<digest>` for its own `rc-deposit-shortfall-<digest>`, and
+  `rc-deposit-surplus-<digest>` is new.
+- Still not implemented after all three rounds: refunds, reversals and cancelled obligations are not
+  modelled at all — intake refuses a non-positive amount, so a refund has no record to arrive on, and a
+  charge settled and later refunded still reads as settled; `waiver_reference` is accepted and stored by
+  intake and read by no check, so a waived fee still reports as outstanding; and there are no ageing buckets
+  — nothing is bucketed 30/60/90 days, no balance is aged from a charge date, and pledge ageing is a single
+  comparison of a due date against the period end.
+- What these rounds are not: adversarial code review against supplied records is not an accuracy
+  measurement. No precision, recall or false-positive rate is claimed for the money-in checks, and a round
+  that finds less than the one before it is not evidence that the next one finds nothing.

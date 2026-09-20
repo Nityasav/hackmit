@@ -47,6 +47,7 @@ The basis distinction matters: US governmental fund reporting and government-wid
 | School budgets | Department/program budget versus actual, encumbrance overlay | Budget construction and multi-year planning |
 | Payroll and benefits | Gross-to-net tie-out, employer benefits, cost allocation, substitute variance | Actuarial pension/OPEB valuation, collective agreement interpretation |
 | Funding and revenue | Grant awards, reimbursement receivables, cash receipts | Tuition revenue, donation conditions, endowments |
+| School money-in | Fee charges, event collections, bank deposits and sponsor pledges; receipt-to-deposit tracing by reference, deposits no supplied receipt accounts for, uncollected fee remainders and unreceived pledge remainders | Payment-processor and point-of-collection feeds, family statements, refunds, waiver policy and receipt issuance |
 | Enrollment | Aggregate counts and staffing-cost variance explanation | Formula-driven revenue scenarios using verified local funding rules |
 | Purchasing and payments | Three-way match, duplicate candidates, AP aging, approval exceptions | Live ERP integration and payment execution |
 | Facilities | One maintenance/prepaid or capital-classification investigation | Construction-in-progress, retainage, bond compliance |
@@ -106,7 +107,7 @@ CSV + text PDFs + synthetic emails/contracts
 
 Recommended implementation shape: TypeScript web UI, Python API and worker, PostgreSQL, SQL graph tables, local file storage, and one provider-neutral model adapter. A dedicated graph database is optional; typed edges, temporal filtering, traversals, and provenance are required regardless of storage. Confirm supported library versions during implementation rather than relying on unverified SDK names in a challenge brief.
 
-Hackathon build (justified equivalent): `web/` uses Next.js 16 App Router, TypeScript, Tailwind v4, and bun. `api/` uses FastAPI (Python, uv) with `app/accounting`, `app/agents`, and `app/workflows`. The hackathon uses SQLite instead of PostgreSQL for zero-setup local runs; the schema stays portable to Postgres. `contracts/` holds the shared JSON bundle schema and fixtures.
+Hackathon build (justified equivalent): `web/` uses Next.js 16 App Router, TypeScript, Tailwind v4, and bun. `api/` uses FastAPI (Python, uv) with `app/ingestion.py` (record intake), `app/accounting` (exact-cents checks), `app/agents` and `app/cfo` (the agent runtime), and `app/reviews.py` (snapshot review and human follow-up). There is no `app/workflows` module; the workflow stages described elsewhere in this document are design, not code. The hackathon uses SQLite instead of PostgreSQL for zero-setup local runs; the schema stays portable to Postgres. `contracts/` holds the shared fixtures.
 
 The model layer is provider-neutral at its boundary and deliberately hybrid. The first live adapter uses the OpenAI Responses API with a server-side `OPENAI_API_KEY`; `OPENAI_MODEL` selects the model without changing agent contracts. Strong hosted models perform planning, investigation and independent challenge. A future fine-tuned local extraction model performs private document perception: schema-guided extraction of requirements, dates, entities, relations and exact source spans. The local model is not permitted to calculate financial results, approve changes or convert an extraction into an audit conclusion. A clearly labeled replay adapter remains available for deterministic demos and evaluation.
 
@@ -129,6 +130,10 @@ All monetary records carry `institution_id`, `currency`, `period_id`, `source_id
 | JournalEntry | entry ID, accounting date, status, originating system ID, reversal link, scenario ID |
 | JournalLine | entry ID, debit, credit, account, school, department, program, management fund, award, counterparty |
 | Invoice / InvoiceLine | vendor, invoice number, dates, amount, PO line, receipt line, service period, credits |
+| FeeCharge | student reference, fee type, charge date, amount, optional waiver reference (stored; no check reads it yet, so a waived charge still reports as uncollected) |
+| CashCollection | collector, collection date, method, amount, optional fee charge reference, optional pledge reference, optional deposit reference |
+| BankDeposit | deposit date, bank reference, amount, optional deposit reference |
+| SponsorPledge | sponsor, program, pledge date, due date, amount |
 | Payment / PaymentApplication | bank item, payment amount, invoice/receivable allocation, residual amount |
 | PurchaseOrder / Receipt | ordered, received, invoiced quantities and values; approval references |
 | PayrollLine | employee ID, pay period, service period, gross pay, deductions, employer costs, allocation |
@@ -139,6 +144,8 @@ All monetary records carry `institution_id`, `currency`, `period_id`, `source_id
 | AdjustmentProposal | balanced lines, justification, affected records, author, reviewer, version, approval |
 | ReviewDecision | reviewer identity, decision, reason, source references, timestamp, supersession link |
 | ReportSnapshot | scenario, source/ledger/graph versions, covered period, stale status, claim references |
+
+Inbound school money is traced by reference, not by amount matching. A collection names the fee charge or the sponsor pledge it settles and the deposit reference it was banked under; a deposit answers for exactly one reference — its own deposit reference where the slip carries one, its bank reference otherwise — so no deposit can close two groups and report the same money as banked twice. References are compared with case and repeated spacing ignored, because staff write them by hand. A charge or a pledge is measured by its remainder, charged or pledged less collected, and only a positive remainder is reported, so an over-collection never nets off something else. An unmatched reference is an unreconciled difference to investigate, never a conclusion about the person who held the cash; a deposit no supplied receipt claims is reported on the deposit side and is not evidence of unrecorded revenue. Fee charges, collections, deposits and sponsor pledges are separate populations: a total from one is never added to a total from another.
 
 Enforce idempotency on `(institution, source_system, source_record_id, source_version)`. A changed import version creates a superseding record with a reviewable diff; it does not silently overwrite facts. Preserve raw source values alongside normalized values.
 
@@ -225,7 +232,11 @@ Workers write using optimistic version checks. The graph projection carries the 
 
 ### Connected five-agent implementation checkpoint (2026-09-19)
 
-The `max` branch exposes a **Five-agent workflow · uploaded records** option on
+Route names in this dated checkpoint are the ones that existed on 2026-09-19. The app's routes have since
+collapsed to `/` (Books), `/investigation` and `/briefing`, plus `/access` and `/login`; the pages named
+below no longer exist and the one-click fictional scan has been removed.
+
+The `max` branch exposed a **Five-agent workflow · uploaded records** option on
 `/cfo`, linked from the Command center. A committed immutable intake snapshot flows
 through CFO planning → AP & Payments, Payroll & Budget, Grants & Compliance →
 independent Internal Auditor review → CFO report. All three specialist domains are
@@ -240,8 +251,8 @@ publishes exact-key invoice duplicate candidate amounts and expense budget varia
 through the deterministic evidence gateway. These are bounded checks, not complete
 AP/payment or grant eligibility assurance.
 
-The new home page offers a one-click fictional scan. `/scan`, Findings, Follow-up,
-Reports and the uploaded-workspace overview share a snapshot-aware review feed:
+That home page offered a one-click fictional scan. `/scan`, Findings, Follow-up,
+Reports and the uploaded-workspace overview shared a snapshot-aware review feed:
 rules checks, latest standalone candidates and final Auditor-accepted central claims
 are labelled separately. A human may assign an owner, request evidence and decide
 a proposed correction; version checks and history preserve the distinction between
@@ -267,9 +278,10 @@ Five roles, shown in the UI as an Office of the CFO:
 
 ### 8.1 First live slice: CFO snapshot triage
 
-Integration status: `app/agents/cfo.py` powers live snapshot triage in Command center. The separately
-merged `app/cfo/` coordinator exposes `/api/cfo/runs` and a `/cfo` harness, with scripted specialists
-and independent-review gates. Its intake bridge exists, but live specialist/auditor adapters remain
+Integration status: `app/agents/cfo.py` powers live snapshot triage from the records panel on `/` (Books).
+The separately merged `app/cfo/` coordinator exposes `/api/cfo/runs`, with scripted specialists
+and independent-review gates; its `/cfo` page has been removed, and the client calling those endpoints
+(`web/src/components/investigation/`) is not yet composed into `/investigation`. Its intake bridge exists, but live specialist/auditor adapters remain
 unregistered. The two execution paths are not yet unified; suggested triage tasks are not auto-dispatched.
 The coordinator's optional local CFO adapter is experimental and is not the planned local document extractor.
 
@@ -356,7 +368,7 @@ Only the authenticated human review service can approve an adjustment, release a
 ### 8.2 Grants & Compliance direct-run specialist
 
 `api/app/agents/grants.py` implements the second live role using the same bounded, read-only snapshot
-runtime as CFO triage. Select it in Command center; API requests use `agent: "grants_compliance"`.
+runtime as CFO triage. Select it in the records panel on `/` (Books); API requests use `agent: "grants_compliance"`.
 It reviews uploaded award terms and supporting evidence, with no web research or inferred legal rules.
 The local document extraction model is still a separate future component.
 
@@ -373,7 +385,7 @@ clearances stay unreviewed in the UI. Citation validation does not establish sem
 In synthetic workspaces it assesses consistency within the fictional scenario rather than treating the
 synthetic label itself as a financial exception. `GRANTS_MODEL` may override the shared `OPENAI_MODEL`.
 
-The current-snapshot results for both CFO and Grants coexist in Findings and Reasoning log. Role-specific
+The current-snapshot results for both CFO and Grants coexist in the review feed on `/investigation`. Role-specific
 history survives reruns; new snapshots visibly stale prior runs. One snapshot-agent run at a time is
 allowed per workspace, and idempotency includes the selected role. Coordinator automatic dispatch,
 and complete grant expenditure schedules remain future integrations. Direct Auditor review is now implemented in §8.3.
@@ -381,7 +393,7 @@ and complete grant expenditure schedules remain future integrations. Direct Audi
 ### 8.3 Internal Auditor direct-run review
 
 `api/app/agents/auditor.py` implements an independent reviewer context, selected as `internal_auditor`
-in the same endpoint and Command center. At least one current-snapshot CFO/Grants finding is required.
+in the same endpoint and the same records panel. At least one current-snapshot CFO/Grants finding is required.
 It pins exact preparer run/finding IDs at startup, treats their text as untrusted claims, and returns
 up to four explicit accept/reject/needs_evidence verdicts. Remaining candidate IDs/counts are recorded.
 
@@ -442,7 +454,14 @@ Visual style: clean fintech. White surfaces, Inter, a teal `#0F766E` accent, rou
 
 **Workspace switcher** (top of the sidebar): `MIT FY2025 · Public` (read-only public-report explorer) ⇄ `Sandbox University · Synthetic`. Persistent badges show `Public report` / `Synthetic scenario` and `Live run` / `Recorded run` / `Scripted preview`.
 
-**8 tabs in 3 groups:**
+**Shipped navigation (2026-09-20):** the app serves three destinations — `/` (Books, where records go in),
+`/investigation` and `/briefing` — plus `/access` and `/login`. The workspace switcher lists uploaded
+schools only; the fixed MIT and Sandbox workspaces are not currently reachable. The eight-tab layout below
+is the original design, not the routes the app serves: `/command`, `/board`, `/workflows`, `/findings`,
+`/approvals`, `/reports`, `/reasoning` and `/learning` do not exist. Where the design is still wanted, it
+has to fit inside the three destinations.
+
+**8 tabs in 3 groups (original design):**
 
 | Group | Tab | Contents |
 | --- | --- | --- |

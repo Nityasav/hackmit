@@ -14,6 +14,7 @@ from app.agents.team import SnapshotSpecialist, SnapshotAuditor
 from app.cfo.api import CFORuntime
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import RunRequest
+from app.integrations import cfo_intake
 from app.integrations.cfo_factory import create_adapters
 from app.integrations.cfo_intake import IntakeDataSource
 from app.main import app
@@ -162,6 +163,38 @@ def test_workspace_without_a_committed_snapshot_is_refused(client):
         asyncio.run(IntakeDataSource().snapshot(ws))
     with pytest.raises(ValueError, match="unavailable|Unknown"):
         asyncio.run(IntakeDataSource().snapshot("ws-nonexistent"))
+
+
+def test_date_bounded_checks_run_against_the_workspace_period_on_the_cfo_path(client, monkeypatch):
+    """Regression: the bridge called checks(records, {}).
+
+    With no period, pledge ageing stands itself down and says so; this caller keeps
+    only amount-bearing AP and budget items, so that gap was dropped and the check
+    silently did not run for anyone on this path.
+    """
+    ws = commit_pack(client)
+    pledges = ("record_id,sponsor_id,program,pledge_date,due_date,amount\n"
+               "SPO-1,SPON-1,Robotics,2026-09-01,2026-09-10,2500.00\n")
+    batch = client.post(f"/api/workspaces/{ws}/imports",
+                        files=[("files", ("sponsorships.csv", pledges.encode(), "text/csv"))],
+                        data={"metadata": json.dumps([{"role": "sponsorships"}])}).json()
+    saved = client.post(f"/api/workspaces/{ws}/imports/{batch['id']}/commit",
+                        json={"expected_version": batch["version"], "idempotency_key": batch["id"]})
+    assert saved.status_code == 200, saved.text
+    seen = {}
+    engine = cfo_intake.checks
+
+    def spy(records, config):
+        found = engine(records, config)
+        seen.update(config=config, found=found)
+        return found
+
+    monkeypatch.setattr(cfo_intake, "checks", spy)
+    asyncio.run(IntakeDataSource().snapshot(ws))
+    assert seen["config"].get("start") == "2026-09-01" and seen["config"].get("end") == "2026-09-30"
+    assert not [f for f in seen["found"] if "not-run" in f["id"]]
+    # The pledge fell due inside the period and no receipt references it, so ageing ran.
+    assert [f for f in seen["found"] if f["role"] == "rc" and "2026-09-30" in f["explanation"]]
 
 
 def unconfigure_specialist_model(monkeypatch):

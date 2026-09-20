@@ -1,0 +1,9 @@
+record_id,student_ref,fee_type,charge_date,amount
+FEE-001,STU-001,athletics,2026-09-02,125.00
+FEE-002,STU-002,field trip,2026-09-02,45.00
+FEE-003,STU-003,activity,2026-09-03,60.00
+FEE-004,STU-004,athletics,2026-09-03,125.00
+FEE-005,STU-005,field trip,2026-09-04,45.00
+FEE-006,STU-006,activity,2026-09-04,60.00
+FEE-007,STU-007,athletics,2026-09-08,125.00
+FEE-008,STU-008,field trip,2026-09-09,45.00
