@@ -36,8 +36,8 @@ def test_opening_a_v2_database_upgrades_it_without_losing_rows(tmp_path, monkeyp
         tables = {r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
     assert row["revision"] == 4, "an existing workspace row must survive the upgrade"
-    assert version == 3
-    assert {"cfo_runs", "agent_runs", "records", "snapshots"} <= tables
+    assert version == db.SCHEMA_VERSION
+    assert {"cfo_runs", "approvals", "agent_runs", "records", "snapshots"} <= tables
 
 
 def test_a_newer_database_is_refused_rather_than_downgraded(tmp_path, monkeypatch):

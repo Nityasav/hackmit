@@ -39,7 +39,8 @@ def _claim(claim_id="ap-1", disposition="substantiated", evidence=("s1",), calcu
 
 def _run(workspace, snapshot_id, *, accepted=(), tasks=(), status="completed", sources=("s1",)):
     run = Run(id="CFO-test-" + snapshot_id[:6], request=RunRequest(workspace=workspace, mode="live"),
-              status=status, briefing="Coordinator briefing.", model_label="test-model")
+              status=status, briefing="Coordinator briefing.", model_label="test-model",
+              report_markdown="# CFO review\n\nPublished by the run.\n")
     run.scope = Scope(workspace=workspace, snapshot_id=snapshot_id, institution="Fictional school",
                       period="2026-09-01 to 2026-09-30", accounting_profile="DEMO",
                       sources=[Source(id=s, title=f"{s}.csv", locator=f"{s}.csv lines 1-9", domain="ap")
@@ -257,8 +258,9 @@ def test_the_report_is_the_runs_own_published_document(client):
     assert report["markdown"] == run.report_markdown
     assert report["title"] == "CFO review — Fictional school"
     assert report["sections"] == ["Reviewed conclusions (1)", "Unresolved matters (1)", "Limitations"]
-    # Before/after needs an approval to recompute against, which does not exist yet.
-    assert report["comparisons"] == []
+    # A substantiated claim with no calculation becomes a decision to record, and a
+    # pending decision is exactly what gives the report an "after" to show.
+    assert [row["label"] for row in report["comparisons"]] == ["Decisions outstanding", "Cash"]
 
 
 def test_a_workspace_with_no_run_reports_nothing(client):

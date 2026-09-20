@@ -135,13 +135,15 @@ export type ApprovalStatus = "pending" | "approved" | "rejected";
 export interface Approval {
   id: string;
   agent: AgentId;
-  kind: "journal" | "payment" | "playbook" | "evidence";
+  kind: "journal" | "payment" | "playbook" | "evidence" | "decision";
   title: string;
   summary: string;
   verified: boolean;
   status: ApprovalStatus;
   journal?: JournalLine[];
   effects?: { label: string; value: string; tone?: "good" | "neutral" }[];
+  /** The finding this proposal would resolve, when it came from one. */
+  finding_id?: string | null;
 }
 
 export interface Decision {

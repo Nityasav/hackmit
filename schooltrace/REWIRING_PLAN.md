@@ -207,7 +207,36 @@ can be traced to a query.
 
 ---
 
-## Phase 4 — Approvals end to end
+## Phase 4 — Approvals end to end — **DONE (with one limit stated)**
+
+Landed as `api/app/approvals.py` plus an `approvals` table (schema 3 → 4, and `db.SCHEMA_VERSION` is
+now a single constant so the migration test stops needing an edit per bump).
+
+**The limit worth knowing.** Step 2 asked for a journal from any claim whose `proposed_action`
+implies a ledger change. A `proposed_action` is model-authored prose, and prose is not a journal, so
+nothing is derived from it. A journal is built only from a deterministic calculation whose category
+is `reclassification`, **and only when the committed records name both funds.** The sample pack
+names an award but no destination fund, so on that data the correct output is not a journal — it is
+a request for the structured allocation record that `accounting/payroll.py` says is required.
+Inventing a destination fund is precisely what the fixture's `ADJ-12` did, and what the accounting
+module's own docstring forbids. The journal path is built, balance-checked and tested; it produces
+a journal the moment records carry funds.
+
+Departures from the plan, all forced by something real:
+
+- **A fifth approval kind, `decision`.** A substantiated claim with no calculation is neither a
+  journal nor an evidence request, and labelling it `evidence` made the UI button read "Mark
+  provided" for a proposal that asks for nothing.
+- **`Approval.finding_id` added to the contract**, so an approval links to the finding it resolves
+  and the before/after can tell which exposure a decision clears.
+- **`disabled_tabs` is now derived**, not a constant: a public-documents workspace holds no
+  transactions, so Approvals stays off there. An existing ingestion test caught this.
+- **The reviewer guard was extended to `/api/approvals`**, which became a write path into intake
+  data the moment decisions stopped being demo-only.
+
+Deferred: repointing Stack C's `ap_write_tools` at the new table. Those tools are unreachable over
+HTTP and their tests pin `store.py` behaviour; Phase 9 decides that stack's fate.
+
 
 The pitch is "agents propose, humans decide." Today nothing proposes and deciding does nothing.
 

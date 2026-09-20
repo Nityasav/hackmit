@@ -152,13 +152,15 @@ class Effect(BaseModel):
 class Approval(BaseModel):
     id: str
     agent: AgentId
-    kind: Literal["journal", "payment", "playbook", "evidence"]
+    kind: Literal["journal", "payment", "playbook", "evidence", "decision"]
     title: str
     summary: str
     verified: bool
     status: ApprovalStatus
     journal: list[JournalLine] | None = None
     effects: list[Effect] | None = None
+    #: The finding this proposal would resolve, when it came from one.
+    finding_id: str | None = None
 
 
 class DecisionWhen(BaseModel):

@@ -21,8 +21,8 @@ import json
 
 from fastapi import HTTPException
 
-from . import db, store
-from .ingestion import coverage, source_view
+from . import approvals as approvals_module, db, store
+from .ingestion import coverage, financial_records, source_view
 from .models import Bundle
 
 AGENTS = {
@@ -309,7 +309,7 @@ def _kpis(cov, findings, triage, coordinator):
     return kpis
 
 
-def _report(cov, findings, coordinator):
+def _report(cov, findings, coordinator, comparisons, gate):
     """The run's own published report, not a second rendering of it.
 
     `app/cfo/reporting.py` already composes this from accepted claims, with the
@@ -319,6 +319,9 @@ def _report(cov, findings, coordinator):
     published = next((run for run in coordinator if run["report_markdown"]), None)
     if not published:
         return {"title": "No investigation report yet", "sections": [], "comparisons": [], "markdown": None}
+
+    labels = {"before_label": "As reported", "after_label": "After approved decisions",
+              "applies_approval": gate} if comparisons else {}
 
     scope = published.get("scope") or {}
     reviewed = len(published["accepted"])
@@ -330,10 +333,24 @@ def _report(cov, findings, coordinator):
             f"Unresolved matters ({unresolved})",
             "Limitations",
         ],
-        # Before/after needs an approval to recompute against, which Phase 4 adds.
-        "comparisons": [],
+        # An "after" exists only because a decision exists.
+        "comparisons": comparisons,
         "markdown": published["report_markdown"],
+        **labels,
     }
+
+
+def _disabled_tabs(workspace):
+    """Which tabs this workspace has no business showing.
+
+    Workflows is derived in a later phase and Learning belongs to another
+    workstream. Approvals depends on the workspace: a public-documents workspace
+    holds published reports and no transactions, so there is nothing to decide.
+    """
+    disabled = ["workflows", "learning"]
+    if workspace["kind"] == "public":
+        disabled.insert(1, "approvals")
+    return disabled
 
 
 def _load_runs(connection, ws, snapshot_id):
@@ -408,6 +425,20 @@ def _derived(ws):
                                   "Human approval remains separate. ") + finding["summary"].replace(
                 "candidate · independent review pending.", "candidate · bounded review recorded.")
 
+    # A completed run's proposals are written once, then owned by the approvals
+    # table: a rerun cannot silently un-decide something a human already decided.
+    if coordinator:
+        records = financial_records(ws)["records"]
+        for run in coordinator:
+            if run["status"] not in {"queued", "planning", "running"}:
+                approvals_module.sync(ws, run, records)
+    with db.connect() as connection:
+        pending_approvals = approvals_module.listing(connection, ws)
+        task_approval = {f"{row['run_id']}-{row['task_id']}": (row["id"], row["status"])
+                         for row in connection.execute(
+                             "SELECT id, run_id, task_id, status FROM approvals"
+                             " WHERE ws=? AND task_id IS NOT NULL", (ws,))}
+
     cited = {source_id for run in coordinator for accepted in run["accepted"]
              for source_id in accepted["claim"]["evidence_ids"]}
     previews = _previews(ws, cited)
@@ -449,12 +480,31 @@ def _derived(ws):
     used += sum(run["tool_calls"] for run in coordinator)
     total = 12 * len(triage) + sum(run["request"]["limits"]["max_tool_calls"] for run in coordinator)
 
-    report = _report(cov, findings, coordinator)
+    # A task that is waiting on a decision says so, and links to the decision.
+    for task in tasks:
+        linked = task_approval.get(task["id"])
+        if not linked:
+            continue
+        approval_id, status = linked
+        task["approval_id"] = approval_id
+        if status == "pending":
+            task["column"], task["note"], task["note_tone"] = "needs_you", "Waiting on your decision", "warn"
+        elif status == "approved":
+            task["column"], task["progress"] = "done", 100
+            task["note"], task["note_tone"] = f"{approval_id} approved", "info"
+
+    comparisons, gate = approvals_module.comparisons(pending_approvals, findings)
+    report = _report(cov, findings, coordinator, comparisons, gate)
+    waiting = sum(1 for a in pending_approvals if a["status"] == "pending")
     actions = []
     if findings:
         actions.append({"label": "Review findings", "href": "findings", "primary": True})
+    if waiting:
+        actions.insert(0, {"label": f"Decide {waiting} proposal(s)", "href": "approvals", "primary": True})
+        for action in actions[1:]:
+            action["primary"] = False
     if report["markdown"]:
-        actions.append({"label": "Open the report", "href": "reports", "primary": not findings})
+        actions.append({"label": "Open the report", "href": "reports", "primary": not actions})
 
     return {
         "contract_version": 2,
@@ -462,7 +512,7 @@ def _derived(ws):
             "id": ws, "name": w["name"], "kind": w["kind"], "period": f"{w['start']} — {w['end']}",
             "mode": "live" if (triage_run or coordinator) else "not_started",
             "snapshot_id": snapshot_id or "No committed records",
-            "disabled_tabs": ["workflows", "approvals", "learning"],
+            "disabled_tabs": _disabled_tabs(w),
             "model": triage_run["model"] if triage_run else (reported["model_label"] if reported else "Not configured"),
             "run_budget": {"used": used, "total": total},
             "intake": True, "currency": w["currency"], "profile": w["profile"],
@@ -474,7 +524,7 @@ def _derived(ws):
             "actions": actions,
         },
         "kpis": _kpis(cov, findings, triage, coordinator),
-        "workflows": [], "tasks": tasks, "findings": findings, "approvals": [],
+        "workflows": [], "tasks": tasks, "findings": findings, "approvals": pending_approvals,
         "decisions": decisions,
         # Owned by the Learning workstream; this layer must keep emitting them unchanged.
         "playbooks": [], "ablation": None,

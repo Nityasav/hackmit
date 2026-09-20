@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import ingestion, projection, store
+from . import approvals, ingestion, projection, store
 from .agents import cfo
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
@@ -47,7 +47,10 @@ app.add_middleware(
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
-    if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/workspaces"):
+    # /api/approvals is a write path into intake data too, now that a decision on an
+    # intake workspace is recorded rather than refused.
+    guarded = ("/api/workspaces", "/api/approvals")
+    if request.method in {"POST", "PATCH"} and request.url.path.startswith(guarded):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
     length = request.headers.get("content-length")
@@ -77,13 +80,17 @@ def get_bundle(ws: WorkspaceId) -> Bundle:
 
 @app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
 def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
-    """Human approval. The only path that may apply a change to a scenario."""
-    if body.workspace not in {"sandbox", "mit"}:
-        raise HTTPException(409, "Intake workspaces do not have an agent approval runtime yet")
-    try:
-        return store.decide_approval(body.workspace, approval_id, body.decision)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    """Human approval. The only path that may apply a change to a scenario.
+
+    Agents propose; nothing they can call reaches this endpoint.
+    """
+    if body.workspace in projection.RECORDED:
+        try:
+            return store.decide_approval(body.workspace, approval_id, body.decision)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown approval {approval_id}")
+    approvals.decide(body.workspace, approval_id, body.decision)
+    return projection.bundle(body.workspace)
 
 
 @app.post("/api/demo/{action}", response_model=Bundle)
