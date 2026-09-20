@@ -34,7 +34,6 @@ export default function BooksPage() {
         </p>
       </header>
 
-      {/* What to do next, and where that sits in the whole job. */}
       <GuidedWorkflow bundle={bundle} intake={intake} />
 
       {/* Keyed so switching schools resets the upload draft rather than carrying

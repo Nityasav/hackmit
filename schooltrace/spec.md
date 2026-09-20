@@ -16,7 +16,7 @@ Product copy should name the task and next action directly. Prefer short heading
 
 | Screen | Route | Implementation | User action |
 | --- | --- | --- | --- |
-| Books | `/` | `SourcesPanel`, `DocumentIntake`, `FileUpdates`, `GuidedWorkflow` | Create institution; upload, map, validate and commit records; add later revisions |
+| Books | `/` | `GuidedWorkflow`, `SourcesPanel`, `DocumentIntake` | Institution dashboard and intake guidance; upload, map, validate and commit records; add later revisions |
 | Investigation | `/investigation` | `components/investigation/` | Set objective; start five-agent review; inspect progress, sources, findings and precedent |
 | Briefing | `/briefing` | `ReviewWorkspace` with `section="reports"` | Review snapshot findings, limitations and saved follow-up; export Markdown or print |
 | Access | `/access` | Access page and local API access routes | Inspect local access, sign in when configured, delete a workspace |
@@ -24,7 +24,7 @@ Product copy should name the task and next action directly. Prefer short heading
 
 `web/src/lib/tabs.ts` owns primary navigation. Historical `/command`, `/board`, `/findings`, `/reports`, `/learning`, and `/cfo` page references are not current destinations. Some legacy tab identifiers remain in bundle contracts; do not confuse them with public routes. Current `disabled_tabs` is empty to avoid returning removed navigation identifiers to the frontend schema.
 
-The normal sequence is create → upload → preview/map → commit → investigate → review/export. Committing data does not call a model. Starting a live investigation does. Books still exposes separate CFO, Grants and Auditor controls as well as the main Investigation flow; this is existing duplication, not an additional orchestration system to build.
+The normal sequence is create → upload → preview/map → commit → investigate → review/export. Committing data does not call a model. Starting a live investigation does. Books retains its institution dashboard, creation guidance, workflow progress and coverage cards. Only the standalone Open Investigation agent panel, File Updates panel and missing-evidence request form were removed from intake. Agent execution and record checks remain on Investigation. Evidence-request and update APIs remain available; removing their intake panels does not delete stored evidence or disable revision imports. Native file selectors have contrasting buttons. Labels have a small gap and focus outlines are inset; institution fields are compact (34px), not globally enlarged.
 
 ## 3. Architecture and ownership
 

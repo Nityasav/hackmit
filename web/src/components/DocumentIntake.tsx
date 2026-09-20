@@ -16,7 +16,7 @@ type Correction = { id: string; document_id: string; output: Output; group: stri
 type State = { documents: Doc[]; model: Model[]; prediction: { id: string; document_id: string; output: Output | null; error: string | null }[];
   correction: Correction[]; retirement: { model_id: string }[];
   active: { model_id: string; version: number } | null; schemas: Record<string, string[]>; schema_version: string };
-const button = "border border-line px-3 py-2 text-sm disabled:opacity-40";
+const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
 
 function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {
@@ -115,8 +115,8 @@ function Lab({ ws }: { ws: string }) {
     {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this school&rsquo;s documents…</p> : <>
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
-        <div className="flex flex-wrap items-end gap-3 text-[13px]"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
-          <label>Choose document<input className={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+        <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
+          <label>Choose document<input className="w-full border border-line bg-white text-sm" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
           <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
