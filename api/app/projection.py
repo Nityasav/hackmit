@@ -254,15 +254,22 @@ def _coordinator_decisions(run):
     events = run["events"]
     decisions = []
 
-    def add(event, agent, action, summary, why, outcome, how=None):
+    def add(event, agent, action, summary, why, outcome, how=None, memory_checks=None):
         decisions.append({
             "id": f"decision-{run['id']}-{len(decisions) + 1}", "run": run["id"], "time": event["at"],
             "agent": agent, "action": action, "summary": summary, "tags": [],
             "when": {"run": run["id"], "step": event["action"], "started": run["created_at"],
                      "finished": event["at"], "trigger": run["request"]["objective"]},
             "how": how or [], "why": why, "alternatives": [],
-            "memory_checks": [], "outcome": outcome,
+            "memory_checks": memory_checks or [], "outcome": outcome,
         })
+
+    # Precedent is weighed once, when the plan is formed, so it belongs on the
+    # planning decision rather than repeated onto every specialist's record.
+    plan_memory = [
+        {"text": f"{check['precedent_id']}: {check['reason']}", "ok": bool(check.get("applied"))}
+        for check in run.get("memory_checks", [])
+    ]
 
     specs = {state["spec"]["id"]: state["spec"] for state in run["tasks"]}
     for event in events:
@@ -270,7 +277,8 @@ def _coordinator_decisions(run):
         if action == "plan.accepted":
             add(event, "cfo", "Plan the investigation",
                 f"{len(run['tasks'])} task(s) delegated across the specialist agents.",
-                event["detail"], "Plan accepted; specialists dispatched.")
+                event["detail"], "Plan accepted; specialists dispatched.",
+                memory_checks=plan_memory)
         elif action.startswith("review."):
             verdict = action[len("review."):]
             if verdict in {"accept", "reject", "needs_evidence"}:

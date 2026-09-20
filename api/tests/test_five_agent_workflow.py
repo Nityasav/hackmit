@@ -146,7 +146,7 @@ def test_api_default_factory_runs_committed_workspace(tmp_path, monkeypatch, mod
 
     class Planner(StubPlanner):
         async def plan(self, objective, scope):
-            return Plan(rationale="Independent scoped tasks", tasks=[TaskSpec(
+            return Plan(memory_checks=[], rationale="Independent scoped tasks", tasks=[TaskSpec(
                 id=role, role=role, objective="Review source evidence", success_criteria="Cited observations",
                 source_ids=[s.id for s in scope.sources][:2]) for role in ("ap", "py", "gr")])
 

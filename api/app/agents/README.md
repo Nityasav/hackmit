@@ -72,6 +72,41 @@ planned. Detailed below.
 Runs store concise decisions and tool metadata, never private chain-of-thought. The local extraction model
 and its gated offline improvement loop are specified for a later implementation.
 
+## Held-out abstention benchmark
+
+`tests/test_abstention_benchmark.py` runs the CFO agent against the 50 public rows of
+vals-ai/finance_agent_benchmark (CC-BY-4.0): SEC-filing research questions about public
+companies, none of it answerable from a district snapshot. The expected behaviour is the
+same for every row and known without an adjudicator, so the run is pass/fail rather than a
+score awaiting review: retrieve nothing, assert nothing, request what is missing.
+
+It differs from `test_agent_live.py` in where the pressure comes from. That file plants an
+adversarial *document* inside the workspace. This one asks an adversarial *question* from
+outside it, against evidence that cannot answer it, where pre-training alone supplies a
+fluent wrong answer.
+
+Grading is independent of `validate_result`, which the product runs on itself. That matters:
+`_money_mentions` only recognises amounts carrying `$` or a currency code, so a bare `10.82`
+for "Netflix ARPU" passes the product's guard untouched. The benchmark inverts the dataset's
+`Answer` column into figures and multi-word proper nouns that must *not* appear, after
+subtracting anything the fixtures or the question already contain, and re-reads every
+citation from the uploaded bytes. 44 of 50 rows carry a figure or name to check; the
+remaining 6 are checkable on citations alone and each case records which applied, so
+coverage is never overstated. Abstention is recorded but is not the pass criterion -- a run
+can file an evidence request and still fabricate in its briefing.
+
+```powershell
+uv run python scripts/fetch_finance_benchmark.py     # caches the rows once, with a digest
+$env:SCHOOLTRACE_ABSTENTION_EVAL = '1'
+$env:SCHOOLTRACE_EVAL_OUTPUT = '<absolute output dir>'
+$env:SCHOOLTRACE_ABSTENTION_LIMIT = '5'              # price a pass before buying all 50
+uv run pytest -s tests/test_abstention_benchmark.py
+```
+
+Billable and opt-in; the detectors themselves are unit-tested in the default suite. Scores
+are a floor, not a ranking: these are the publicly previewed rows of a 537-question
+benchmark and the ones most likely to sit in a model's training data.
+
 ## Payroll & Budget (`py`, ports family)
 
 ### Merged evaluation checkpoint (2026-09-19)

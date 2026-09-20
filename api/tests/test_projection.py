@@ -55,7 +55,7 @@ def _run(workspace, snapshot_id, *, accepted=(), tasks=(), status="completed", s
                       period="2026-09-01 to 2026-09-30", accounting_profile="DEMO",
                       sources=[Source(id=s, title=f"{s}.csv", locator=f"{s}.csv lines 1-9", domain="ap")
                                for s in sources])
-    run.plan = Plan(rationale="Split the close by domain.", tasks=[
+    run.plan = Plan(memory_checks=[], rationale="Split the close by domain.", tasks=[
         TaskSpec(id="ap-task", role="ap", objective="Review AP evidence", source_ids=list(sources),
                  success_criteria="Cited observations")])
     run.tasks = list(tasks) or [TaskState(spec=run.plan.tasks[0], status="done", tool_calls=3,
