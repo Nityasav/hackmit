@@ -103,6 +103,9 @@ export interface Decision {
   run: string;
   time: string;
   agent: AgentId;
+  /** Set when a person took this decision rather than an agent; `agent` only
+   *  groups it with its run and must not be shown as the author. */
+  actor?: string | null;
   action: string;
   summary: string;
   when: { run: string; step: string; started: string; finished: string; trigger: string };
@@ -167,6 +170,12 @@ export interface Coverage {
 export interface SourceDetail {
   id: string; name: string; sha256: string; committed: boolean; options: SourceOptions;
   line_count: number; lines: { number: number; text: string }[];
+  /** Set when this source was staged from a reviewed document extraction, so the
+   *  preserved original can be opened beside the text that was derived from it. */
+  extraction_origin?: {
+    document_id: string; name: string; sha256: string;
+    correction_id: string; has_images: boolean; pages: number[];
+  } | null;
 }
 export interface AgentCitation { source_id: string; line: number; quote: string }
 export interface AgentRun {

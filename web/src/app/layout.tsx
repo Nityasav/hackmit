@@ -17,8 +17,10 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfa
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: "SchoolTrace",
-  description: "An Office of the CFO for schools, run by AI agents.",
+  title: "Sherlock",
+  description: "Sherlock — evidence-led financial investigation for education. Five AI agents, traceable findings, human decisions.",
+  applicationName: "Sherlock",
+  icons: { icon: [{ url: "/sherlock-mark.svg", type: "image/svg+xml" }] },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

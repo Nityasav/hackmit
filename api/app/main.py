@@ -1,4 +1,4 @@
-"""SchoolTrace API.
+"""Sherlock API.
 
 Run: uv run uvicorn app.main:app --reload --port 8000
 Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -19,27 +19,33 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import ingestion
+from . import approvals, ingestion, projection
 from .agents import cfo
-from .models import Bundle, WorkspaceId
+from .models import ApprovalDecision, Bundle, WorkspaceId
 from .cfo.api import router as cfo_router
 from .reviews import router as review_router
 from . import security
+from .extraction import router as extraction_router
+from .updates import router as updates_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .extraction import interrupt_jobs
+    interrupt_jobs()
     yield
     if hasattr(app.state, "cfo_runtime"):
         await app.state.cfo_runtime.close()
 
 
-app = FastAPI(title="SchoolTrace API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
 app.include_router(cfo_router)
 app.include_router(review_router)
 app.include_router(security.router)
+app.include_router(extraction_router)
+app.include_router(updates_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +62,10 @@ async def intake_write_guard(request: Request, call_next):
         await security.guard(request)
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/workspaces"):
+    # /api/approvals is a write path into intake data too, now that a decision on an
+    # intake workspace is recorded rather than refused.
+    guarded = ("/api/workspaces", "/api/approvals")
+    if request.method in {"POST", "PATCH"} and request.url.path.startswith(guarded):
         if request.headers.get("X-SchoolTrace-Reviewer") != "local-reviewer":
             return JSONResponse(status_code=403, content={"detail": {"code": "reviewer_required", "message": "Confirm the local reviewer before changing intake data"}})
     length = request.headers.get("content-length")
@@ -82,9 +91,25 @@ def health() -> dict[str, str]:
 def get_bundle(ws: WorkspaceId) -> Bundle:
     """Everything the dashboard renders, in one payload. The web app polls this."""
     try:
-        return Bundle.model_validate(ingestion.bundle(ws))
+        return projection.bundle(ws)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"unknown workspace {ws}")
+
+
+@app.post("/api/approvals/{approval_id}/decision", response_model=Bundle)
+def decide(approval_id: str, body: ApprovalDecision) -> Bundle:
+    """Human approval. The only path that may apply a change to a scenario.
+
+    Agents propose; nothing they can call reaches this endpoint. It decides
+    approvals recorded in the database only: the two workspaces served from a
+    recording are read-only here, because a decision written into a fixture
+    would show a status no reviewer of this installation ever took.
+    """
+    if body.workspace in projection.RECORDED:
+        raise HTTPException(status_code=409,
+                            detail=f"{body.workspace} is a recorded workspace and cannot be decided on")
+    approvals.decide(body.workspace, approval_id, body.decision)
+    return projection.bundle(body.workspace)
 
 
 @app.get("/api/workspaces")

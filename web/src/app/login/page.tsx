@@ -7,6 +7,7 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { markReturningVisitor, returningVisitorStore } from "@/lib/session-cookie";
 import { track } from "@/lib/activity";
 import { NAV } from "@/lib/tabs";
+import { SherlockMark } from "@/components/SherlockMark";
 
 type Mode = "signin" | "signup";
 
@@ -85,7 +86,13 @@ function AuthForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-6">
       <div className="w-full max-w-[400px]">
-        <h1 className="text-2xl font-bold tracking-tight">SchoolTrace</h1>
+        <div className="flex items-center gap-3">
+          <SherlockMark size={42} />
+          <div>
+            <h1 className="text-3xl font-semibold leading-none tracking-[-0.035em]">Sherlock</h1>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-ink-dim">Follow the evidence.</p>
+          </div>
+        </div>
         <p className="mt-2 font-accent text-[14px] text-ink-dim">
           {returning
             ? "Welcome back. Sign in to pick up where you left off."

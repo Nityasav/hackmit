@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
+import type { SourceDetail } from "@/lib/types";
 
 type FollowUp = { version: number; owner: string; status: string; note: string; actor: string };
 type Finding = { id: string; title: string; role: string; status: string; explanation: string; amount_cents: number | null;
@@ -31,7 +32,7 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
   const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState("attention");
   const [selected, setSelected] = useState("");
-  const [source, setSource] = useState<{ name: string; lines: { number: number; text: string }[]; line_count: number } | null>(null);
+  const [source, setSource] = useState<SourceDetail | null>(null);
   const [sourceRef, setSourceRef] = useState<{ id: string; start: number } | null>(null);
   const uploaded = ws.startsWith("ws-");
   const refresh = useCallback(async () => {
@@ -95,7 +96,11 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           {f.follow_up && <small className="mt-2 block">Follow-up: {f.follow_up.status.replaceAll("_", " ")} · {f.follow_up.owner || "Unassigned"}</small>}</button></Fragment>)}</div>
           {current && <article className="self-start border border-line p-5"><h2 className="text-xl font-semibold">{current.title}</h2><p className="my-3 leading-relaxed">{current.explanation}</p><p className="text-sm text-ink-dim">{current.review}</p><h3 className="mt-5 font-semibold">Suggested next step</h3><p className="mt-1 text-sm">{current.action}</p>
             <h3 className="mt-5 font-semibold">Inspect original evidence</h3><div className="my-3 flex flex-wrap gap-2">{current.evidence.map((e, i) => <button className={control} key={`${e.source_id}-${e.line}`} onClick={() => void readSource(e.source_id, Math.max(1, e.line - 1))}>Source {i + 1} · line {e.line}</button>)}{!current.evidence.length && <p className="text-sm text-ink-dim">This is a missing-input check; no source has been fabricated.</p>}</div>
-            {source && <section aria-label="Original source" className="my-4 border border-line bg-surface-2 p-3"><b>{source.name}</b><pre className="my-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">{source.lines.map(l => `${l.number}: ${l.text}`).join("\n")}</pre><p className="text-xs">Showing a bounded excerpt of {source.line_count} lines.</p><button className={control} disabled={!sourceRef || sourceRef.start + 20 > source.line_count} onClick={() => sourceRef && void readSource(sourceRef.id, sourceRef.start + 20)}>Next lines</button></section>}
+            {source && <section aria-label="Original source" className="my-4 border border-line bg-surface-2 p-3"><b>{source.name}</b>
+              {source.extraction_origin && <div className="my-2 text-sm"><p>This is text someone read out of a document and checked, not the document itself.</p>
+                <a className="underline" href={`${API_URL}/api/workspaces/${ws}/extraction/documents/${source.extraction_origin.document_id}/original`}>Download the original: {source.extraction_origin.name}</a>
+                {source.extraction_origin.has_images && source.extraction_origin.pages.map(page => <a key={page} target="_blank" rel="noreferrer" className="ml-3 underline" href={`${API_URL}/api/workspaces/${ws}/extraction/documents/${source.extraction_origin!.document_id}/pages/${page}`}>Original page {page}</a>)}</div>}
+              <pre className="my-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">{source.lines.map(l => `${l.number}: ${l.text}`).join("\n")}</pre><p className="text-xs">Showing a bounded excerpt of {source.line_count} lines.</p><button className={control} disabled={!sourceRef || sourceRef.start + 20 > source.line_count} onClick={() => sourceRef && void readSource(sourceRef.id, sourceRef.start + 20)}>Next lines</button></section>}
             <FollowUpForm key={`${current.id}-${current.snapshot_id}-${current.follow_up?.version || 0}`} ws={ws} finding={current} saved={refresh} />
           </article>}</div>
       </>}

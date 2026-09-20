@@ -5,7 +5,6 @@ import importlib
 import os
 from threading import Lock
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -100,8 +99,9 @@ def _runtime(request: Request) -> CFORuntime:
                     raise TypeError("Factory must return Adapters.")
             except Exception:
                 raise HTTPException(503, "CFO_ADAPTER_FACTORY could not be loaded; check the server's integration configuration.")
-        default_path = Path(__file__).resolve().parents[2] / ".venv" / "cfo-runs.sqlite3"
-        repository = RunRepository(os.getenv("CFO_DB_PATH", str(default_path)))
+        # Use the shared intake database by default. Tests and isolated CLI/demo
+        # environments may still opt into a dedicated run database.
+        repository = RunRepository(os.getenv("CFO_DB_PATH"))
         request.app.state.cfo_runtime = CFORuntime(repository, adapters)
     return request.app.state.cfo_runtime
 

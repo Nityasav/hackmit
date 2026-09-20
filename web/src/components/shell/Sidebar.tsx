@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, FileText, LogOut, type LucideIcon, Search } from "lucide-react";
 import { Sidebar, SidebarBody, useSidebar } from "@/components/ui/sidebar";
+import { SherlockMark } from "@/components/SherlockMark";
 import { endActivitySession } from "@/lib/activity";
 import { useData } from "@/lib/data";
 import { NAV, type NavId } from "@/lib/tabs";
@@ -180,13 +181,13 @@ export const Logo = () => {
       href="/"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={28} />
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="whitespace-pre font-medium text-ink"
+        className="whitespace-nowrap text-xl font-semibold leading-none tracking-[-0.035em] text-ink"
       >
-        SchoolTrace
+        Sherlock
       </motion.span>
     </Link>
   );
@@ -196,9 +197,10 @@ export const LogoIcon = () => {
   return (
     <Link
       href="/"
+      aria-label="Sherlock home"
       className="relative z-20 flex items-center space-x-2 py-1 text-sm font-normal text-ink"
     >
-      <div className="h-5 w-6 flex-shrink-0     bg-gradient-to-br from-ink to-ink-dim" />
+      <SherlockMark size={28} />
     </Link>
   );
 };

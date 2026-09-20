@@ -1,0 +1,136 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { API_URL, intakeApi, useData } from "@/lib/data";
+
+type Observation = { status: "present" | "missing" | "ambiguous" | "unreadable"; value: string | null; page: number | null; start: number | null; end: number | null };
+type Output = { schema_version: string; records: Record<string, Observation>[] };
+type Doc = { id: string; name: string; role: string; sha256: string; text_sha256: string; suffix: string; version: number; lineage_id: string; pages: { page: number; text: string; method: string; warnings: string[] }[] };
+type Model = { id: string; name: string; note: string };
+type Correction = { id: string; document_id: string; output: Output; group: string; training_authorized: boolean; text_sha256: string };
+// Only the parts of the extraction service this screen renders. The service
+// also carries a model-evaluation lifecycle; none of it belongs on Books, so
+// none of it is declared here.
+type State = { documents: Doc[]; model: Model[]; prediction: { id: string; document_id: string; output: Output | null; error: string | null }[];
+  correction: Correction[]; retirement: { model_id: string }[];
+  active: { model_id: string; version: number } | null; schemas: Record<string, string[]>; schema_version: string };
+const button = "border border-line px-3 py-2 text-sm disabled:opacity-40";
+const input = "w-full border border-line bg-white p-2 text-sm";
+
+function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {
+  let output: Output;
+  try {
+    output = JSON.parse(text);
+    if (!Array.isArray(output.records) || !output.records.every(r => r && typeof r === "object" && Object.values(r).every(v => v && typeof v === "object" && "status" in v))) return null;
+  } catch { return <p className="text-sm text-amber-800">Fix the advanced JSON syntax to restore the field editor.</p>; }
+  function update(index: number, field: string, next: Observation) {
+    const records = output.records.map((r, i) => i === index ? { ...r, [field]: next } : r);
+    change(JSON.stringify({ ...output, records }, null, 2));
+  }
+  function locate(value: string): Observation {
+    const matches: { page: number; start: number; end: number }[] = [];
+    if (value) for (const p of doc.pages) {
+      let at = p.text.indexOf(value);
+      while (at >= 0 && matches.length < 2) {
+        const start = Array.from(p.text.slice(0, at)).length;
+        matches.push({ page: p.page, start, end: start + Array.from(value).length });
+        at = p.text.indexOf(value, at + Math.max(1, value.length));
+      }
+    }
+    return { status: value ? "present" : "missing", value: value || null, page: null, start: null, end: null, ...(matches.length === 1 ? matches[0] : {}) };
+  }
+  return <div className="space-y-3"><p className="text-sm">Copy a value from the page text. A unique match fills its citation automatically. Repeated values require you to choose the exact page and character span.</p>
+    {output.records.map((record, index) => <details key={index} open={index === 0} className="border border-line p-2"><summary>Record {index + 1}</summary><div className="max-h-[500px] overflow-auto">{fields.map(field => {
+      const value = record[field] || { status: "missing", value: null, page: null, start: null, end: null };
+      return <div className="my-3 border-b border-line pb-2" key={field}><label className="text-sm font-semibold">{field.replaceAll("_", " ")}<input aria-label={`Record ${index + 1} ${field} value`} className={input} value={value.value || ""} onChange={e => update(index, field, locate(e.target.value))} /></label>
+        <div className="mt-1 grid grid-cols-4 gap-1"><select aria-label={`Record ${index + 1} ${field} status`} className={input} value={value.status} onChange={e => update(index, field, e.target.value === "present" ? { ...value, status: "present" } : { status: e.target.value as Observation["status"], value: null, page: null, start: null, end: null })}>{["present", "missing", "ambiguous", "unreadable"].map(s => <option key={s}>{s}</option>)}</select>
+          {(["page", "start", "end"] as const).map(locator => <label key={locator} className="text-xs">{locator}<input aria-label={`Record ${index + 1} ${field} ${locator}`} type="number" min={locator === "page" ? 1 : 0} disabled={value.status !== "present"} className={input} value={value[locator] ?? ""} onChange={e => update(index, field, { ...value, [locator]: e.target.value === "" ? null : Number(e.target.value) })} /></label>)}</div>
+        {value.status === "present" && value.page === null && <p className="text-xs text-amber-800">No unique source match. Check the value and specify the correct citation before approval.</p>}
+      </div>;
+    })}</div></details>)}
+    <button className={button} type="button" onClick={() => change(JSON.stringify({ ...output, records: [...output.records, Object.fromEntries(fields.map(f => [f, { status: "missing", value: null, page: null, start: null, end: null }]))] }, null, 2))}>Add another source record</button>
+  </div>;
+}
+
+/**
+ * Getting a PDF, a photo or a scan into the books.
+ *
+ * A document is preserved byte for byte, read into page text, and then a person
+ * checks every extracted value against the page it came from before any of it
+ * is staged for import. Nothing here is committed: staging hands the records to
+ * the import on Books, which is still where a person commits them.
+ */
+export function DocumentIntake() {
+  const { ws } = useData();
+  if (!ws) {
+    return <p className="border border-line bg-surface p-5 text-[13px] text-ink-dim">Add a school first, then its documents can go here.</p>;
+  }
+  return <Lab key={ws} ws={ws} />;
+}
+
+function Lab({ ws }: { ws: string }) {
+  const base = `/api/workspaces/${ws}/extraction`;
+  const [state, setState] = useState<State | null>(null);
+  const [selected, setSelected] = useState("");
+  const [role, setRole] = useState("invoice");
+  const [file, setFile] = useState<File | null>(null);
+  const [replaces, setReplaces] = useState("");
+  const [editor, setEditor] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [group, setGroup] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [includeRecords, setIncludeRecords] = useState(false);
+  const [note, setNote] = useState("");
+  const [authorization, setAuthorization] = useState("");
+  const [model, setModel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const refresh = useCallback(async () => { const next = await intakeApi<State>(base); setState(next); return next; }, [base]);
+  useEffect(() => { let active = true; intakeApi<State>(base).then(s => { if (active) setState(s); }).catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); }); return () => { active = false; }; }, [base]);
+  const doc = state?.documents.find(d => d.id === selected);
+  const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
+  const prediction = state?.prediction.filter(p => p.document_id === selected).at(-1);
+  async function act(action: () => Promise<unknown>, success: string) {
+    setBusy(true); setError(""); setMessage("");
+    try { await action(); await refresh(); setMessage(success); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+  const post = (path: string, body: unknown) => intakeApi(base + path, { method: "POST", body });
+  function choose(d: Doc) {
+    setSelected(d.id);
+    const saved = state?.correction.filter(c => c.document_id === d.id).at(-1);
+    const predicted = state?.prediction.filter(p => p.document_id === d.id && p.output).at(-1);
+    const blank = { schema_version: state?.schema_version, records: [Object.fromEntries((state?.schemas[d.role] || []).map(k => [k, { status: "missing", value: null, page: null, start: null, end: null }]))] };
+    setEditor(JSON.stringify(saved?.output || predicted?.output || blank, null, 2));
+    setTranscript(JSON.stringify(d.pages.map(p => p.text), null, 2));
+    setGroup(saved?.group || ""); setConsent(saved?.training_authorized || false); setIncludeRecords(false); setNote(""); setAuthorization("");
+  }
+  const availableModels = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
+  return <div className="space-y-4">
+    {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
+    {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
+    {!state ? <p className="text-[13px] text-ink-dim">Opening this school&rsquo;s documents…</p> : <>
+      <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages, 12 megapixels a page. The original file is kept exactly as you gave it, and adding a new one never disturbs the records already in.</p>
+        <div className="flex flex-wrap items-end gap-3 text-[13px]"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r}>{r}</option>)}</select></label>
+          <label>Choose document<input className={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+          <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
+          <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
+        <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
+      </section>
+      {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
+        <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
+          <button className={button} disabled={busy || (!model && !state.active)} onClick={() => act(async () => { const p = await intakeApi<{ output: Output | null; error: string | null }>(base + "/predict", { method: "POST", body: { document_id: doc.id, model_id: model || null } }); if (p.error) throw new Error(p.error); setEditor(JSON.stringify(p.output, null, 2)); }, "A first pass is ready for you to check. Nothing has been accepted.")}>Read it with the configured model</button></div>
+        <div className="grid gap-4 lg:grid-cols-2"><div className="max-h-[650px] overflow-auto">{doc.pages.map(p => <article className="mb-4 border border-line p-3" key={p.page}><h4 className="text-[13px] font-semibold">Page {p.page} · {p.method}</h4>{p.warnings.map(w => <p className="text-[12px] text-amber-800" key={w}>{w}</p>)}{![".txt", ".md"].includes(doc.suffix) && <a target="_blank" rel="noreferrer" className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/pages/${p.page}`}>View the original page image</a>}<pre className="whitespace-pre-wrap text-xs">{p.text}</pre></article>)}</div>
+          <div><p className="mb-2 text-[13px]">Every value you mark present has to appear in the page text. Character offsets start at zero and the end is exclusive. Records keep the order they appear in.</p><FieldEditor text={editor} doc={doc} fields={state.schemas[doc.role]} change={setEditor} /><details className="mt-3"><summary className="text-[13px]">Edit the raw extraction JSON</summary><label>Extraction JSON<textarea aria-label="Extraction JSON" spellCheck={false} className={`${input} h-96 font-mono text-xs`} value={editor} onChange={e => setEditor(e.target.value)} /></label></details></div></div>
+        <details className="my-3"><summary className="cursor-pointer text-[13px]">The page text itself is wrong</summary><p className="my-2 text-[13px]">Compare each page image first. Saving this creates a new text revision and invalidates the values already placed against the old one. The original file is never overwritten.</p><textarea aria-label="Page transcription JSON array" className={`${input} h-40 font-mono`} value={transcript} onChange={e => setTranscript(e.target.value)} /><button disabled={busy || !note.trim()} className={button} onClick={() => act(() => post(`/documents/${doc.id}/transcription`, { expected_text_sha256: doc.text_sha256, pages: JSON.parse(transcript), note }), "New text revision saved. Re-open the document and check every value again.")}>Save a corrected transcription</button></details>
+        <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Which school, supplier or template this belongs with<input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Why you are accepting this<input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>What you are allowed to do with it<input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim()} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
+          <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Also stage these as records — only if they are not already imported; otherwise leave the document as supporting evidence</label>
+          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
+      </section>}
+    </>}
+    {busy && <p role="status" className="text-[13px]">Working… keep this open. The original is safe; do not repeat the action.</p>}
+  </div>;
+}
