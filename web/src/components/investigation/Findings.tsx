@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AGENT_NAME, AgentAvatar, Pill } from "@/components/ui";
-import { CFO_API_URL, intakeApi, isAbort } from "@/lib/api";
+import { CFO_API_URL, API_URL, intakeApi, isAbort } from "@/lib/api";
 import { money } from "@/lib/format";
 
 import { agentOf } from "./agents";
@@ -175,6 +175,15 @@ interface SourceView {
   name: string;
   line_count: number;
   lines: { number: number; text: string }[];
+  /** Present when this file was read out of a document rather than uploaded as
+   *  one. The document itself is kept, so the claim can be traced past the
+   *  transcription to the page it was read from. */
+  extraction_origin?: {
+    document_id: string;
+    name: string;
+    has_images: boolean;
+    pages: number[];
+  } | null;
 }
 
 const PAGE = 20;
@@ -215,9 +224,30 @@ function SourceReader({ ws, sourceId }: { ws: string; sourceId: string }) {
   }
 
   const last = Math.min(view.line_count, start + PAGE - 1);
+  const origin = view.extraction_origin;
+  const documents = `${API_URL}/api/workspaces/${encodeURIComponent(ws)}/extraction/documents`;
   return (
     <section aria-label={`Lines from ${view.name}`} className="mt-3 border border-line bg-surface-2 p-3">
       <p className="break-words text-[13px] font-medium">{view.name}</p>
+      {origin && (
+        <div className="mt-1.5 text-[12.5px] leading-relaxed text-ink-dim">
+          <p>Someone read this out of a document and checked it. The document is kept unchanged.</p>
+          <a className="underline" href={`${documents}/${encodeURIComponent(origin.document_id)}/original`}>
+            Open the original: {origin.name}
+          </a>
+          {origin.has_images && origin.pages.map((page) => (
+            <a
+              key={page}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-3 underline"
+              href={`${documents}/${encodeURIComponent(origin.document_id)}/pages/${page}`}
+            >
+              Page {page}
+            </a>
+          ))}
+        </div>
+      )}
       <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed">
         {view.lines.map((line) => `${line.number}  ${line.text}`).join("\n")}
       </pre>

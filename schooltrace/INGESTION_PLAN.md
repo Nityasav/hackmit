@@ -1,4 +1,4 @@
-# SchoolTrace — documents and financial records implementation plan
+# Sherlock — documents and financial records implementation plan
 
 Status: APPROVED — intake implementation delivered; agent integration remains a later milestone.
 Prepared: 2026-09-19. Repository inspected: branch `max`, commit `bc066ca`.
@@ -7,7 +7,7 @@ Related tracker: [PROJECT_TRACKER.md](../PROJECT_TRACKER.md).
 
 ## 1. Product and source of truth
 
-SchoolTrace is an AI-agent auditor and audit-preparation assistant for education systems. It investigates financial records, traces conclusions to evidence, asks for missing records, and routes proposed corrections through human review. The CFO and specialist roles organize this work; the Internal Auditor independently checks it. It does not issue a professional audit opinion.
+Sherlock is an AI-agent auditor and audit-preparation assistant for education systems. It investigates financial records, traces conclusions to evidence, asks for missing records, and routes proposed corrections through human review. The CFO and specialist roles organize this work; the Internal Auditor independently checks it. It does not issue a professional audit opinion.
 
 The user-supplied **HackMIT 2026 Maximor track brief** is the challenge reference. Its central requirements are multi-step reasoning over documents and data, coordination or memory that changes actions, consistency across workflows, and human review under uncertainty. Uploading and extracting files is the first foundation, not the finished competition entry. The brief explicitly permits invented institutions and data; a synthetic school is a valid development setting.
 

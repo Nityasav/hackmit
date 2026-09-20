@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { starterPackSchema, type StarterPack } from "@/lib/schemas";
+import type { IntakeUiProgress } from "@/lib/workflow";
+import { FileUpdates } from "@/components/FileUpdates";
 import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
@@ -45,7 +47,12 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
 
 const EMPTY_PACK: StarterPack = { name: "", start: "", end: "", files: [] };
 
-export function SourcesPanel() {
+/**
+ * `onProgressChange` lets the step guide above this panel read where the import
+ * actually is. It is reported, never inferred: the guide can only ever say what
+ * this panel has already seen.
+ */
+export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progress: IntakeUiProgress) => void }) {
   const [sample, setSample] = useState<StarterPack>(EMPTY_PACK);
   const stageable = sample.files.filter((f) => !f.later);
   const laterFiles = sample.files.filter((f) => f.later);
@@ -106,6 +113,32 @@ export function SourcesPanel() {
     const interval = setInterval(load, 10000);
     return () => { mounted = false; clearInterval(interval); };
   }, [base, isIntake, ws]);
+
+  // The step guide and the sidebar both ask for the creator by name rather than
+  // reaching into this component's state.
+  useEffect(() => {
+    const openCreator = () => setCreating(true);
+    const openFromHash = () => { if (window.location.hash === "#new-institution") openCreator(); };
+    openFromHash();
+    window.addEventListener("schooltrace:new-institution", openCreator);
+    window.addEventListener("hashchange", openFromHash);
+    return () => {
+      window.removeEventListener("schooltrace:new-institution", openCreator);
+      window.removeEventListener("hashchange", openFromHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!onProgressChange) return;
+    onProgressChange({
+      loaded: coverage !== null,
+      selectedFileCount: files.length,
+      batchStatus: batch?.status ?? null,
+      batchIssues: batch?.counts.issues ?? 0,
+      hasSnapshot: Boolean(snapshot),
+      runRunning: agentRunning,
+    });
+  }, [agentRunning, batch?.counts.issues, batch?.status, coverage, files.length, onProgressChange, snapshot]);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true); setError(""); setMessage("");
@@ -226,7 +259,9 @@ export function SourcesPanel() {
         </div>}
       </div>
 
-      <div className="mt-5 border-t border-line pt-4">
+      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
+
+      <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
         <p className="my-2 text-xs text-ink-dim">CSV, TXT or Markdown · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. No real private institutional data in this local demo.</p>
         <input ref={fileInput} aria-label="Choose source files" type="file" multiple accept=".csv,.txt,.md" disabled={busy}
@@ -274,7 +309,7 @@ export function SourcesPanel() {
         </select>
       </label>}
 
-      {batch && <div className="mt-4 border border-line p-3">
+      {batch && <div id="source-import" className="mt-4 scroll-mt-4 border border-line p-3">
         <h3 className="font-semibold">2. Review import · {batch.status.replaceAll("_", " ")}</h3>
         <p className="my-2 text-xs">{batch.counts.parsed} source rows/lines · {batch.counts.valid_records} valid records · {batch.counts.new_records} new · {batch.counts.duplicate_records} duplicates · {batch.counts.issues} issues</p>
         <p className="text-xs">Validated debit total: {(batch.totals.debit_cents / 100).toFixed(2)} · credit: {(batch.totals.credit_cents / 100).toFixed(2)} {coverage?.workspace.currency}</p>
@@ -377,8 +412,13 @@ export function SourcesPanel() {
     </Modal>}
     {source && <Modal title={source.name} close={() => setSource(null)}>
       <p className="break-all font-mono text-[10px] text-ink-faint">SHA-256 {source.sha256}</p>
-      <p className="my-2 text-xs">{source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
-      <a className="text-xs text-ink underline" href={API_URL + base + "/sources/" + source.id + "/download"}>Download unchanged original</a>
+      <p className="my-2 text-xs">{source.extraction_origin ? "Reviewed extraction — derived from the document below" : source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
+      <a className="text-xs text-ink underline" href={API_URL + base + "/sources/" + source.id + "/download"}>{source.extraction_origin ? "Download the reviewed extraction" : "Download unchanged original"}</a>
+      {source.extraction_origin && <div className="my-2 text-xs">
+        <p>Someone read this out of a document and checked it. The document itself is kept unchanged.</p>
+        <a className="text-ink underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin.document_id}/original`}>Download the original: {source.extraction_origin.name}</a>
+        {source.extraction_origin.has_images && source.extraction_origin.pages.map((page) => <a key={page} target="_blank" rel="noreferrer" className="ml-3 text-ink underline" href={`${API_URL}${base}/extraction/documents/${source.extraction_origin!.document_id}/pages/${page}`}>Original page {page}</a>)}
+      </div>}
       <div className="my-3 max-h-[50vh] overflow-auto border border-line bg-surface-2 p-3">
         {source.lines.map((l) => <div key={l.number} className="flex gap-3 font-mono text-xs"><span className="w-10 flex-none select-none text-right text-ink-faint">{l.number}</span><pre className="whitespace-pre-wrap break-all">{l.text || " "}</pre></div>)}
       </div>

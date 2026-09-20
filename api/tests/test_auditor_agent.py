@@ -19,7 +19,7 @@ def prepare(client, monkeypatch):
 
 
 def review_result(fid, citation, verdict="accept"):
-    return AuditResult(executive_briefing="Reviewed one limited preparer observation.", scope_assessed="Pinned evidence.",
+    return AuditResult(memory_checks=[], executive_briefing="Reviewed one limited preparer observation.", scope_assessed="Pinned evidence.",
                        limitations=["Not an audit opinion."], findings=[], evidence_requests=[], next_tasks=[],
                        reviews=[Review(finding_id=fid, verdict=verdict, rationale="The source supports the stated documentation requirement.",
                                        citations=[cfo.Citation.model_validate(citation)], required_action="Review service evidence before any adjustment.")])

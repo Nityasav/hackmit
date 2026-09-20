@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
   // Fail closed with an actionable message instead of crashing or bypassing login.
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return new NextResponse(
-      "SchoolTrace login needs configuration. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in web/.env.local, then restart the web server. Use the Supabase publishable/anon key, never a service-role key.",
+      "Sherlock login needs configuration. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in web/.env.local, then restart the web server. Use the Supabase publishable/anon key, never a service-role key.",
       { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } },
     );
   }

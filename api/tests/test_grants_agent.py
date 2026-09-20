@@ -141,7 +141,7 @@ def test_grants_tools_reject_scope_escape_and_invalid_arguments(client):
 def test_grants_requires_context_and_deterministic_check(client):
     ws, _ = committed_workspace(client)
     tools = GrantsTools(ws)
-    result = cfo.CfoResult(executive_briefing="Evidence review needed.", scope_assessed="Supplied records.",
+    result = cfo.CfoResult(memory_checks=[], executive_briefing="Evidence review needed.", scope_assessed="Supplied records.",
                            limitations=[], findings=[], evidence_requests=[], next_tasks=[])
     assert tools.validate_result(result)
     tools.context()

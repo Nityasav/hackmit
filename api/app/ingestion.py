@@ -394,27 +394,31 @@ def revalidate(connection, ws, batch_id):
 
 
 def stage(ws, uploads: list[tuple[str, bytes, FileOptions]]):
+    with db.connect() as connection:
+        return stage_in_transaction(connection, ws, uploads)
+
+
+def stage_in_transaction(connection, ws, uploads):
     if not 1 <= len(uploads) <= MAX_FILES or sum(len(b) for _, b, _ in uploads) > MAX_BATCH:
         fail("batch_limit", "Upload 1–20 files with a combined size of at most 50 MB", 413)
-    with db.connect() as connection:
-        config = workspace(connection, ws)
-        bid = db.uid("import")
-        connection.execute("INSERT INTO batches(id,ws,status,base_revision,created_at) VALUES(?,?,?,?,?)",
-                           (bid, ws, "parsing", config["revision"], db.now()))
-        for name, content, options in uploads:
-            if not name or len(name) > 200 or "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
-                fail("invalid_filename", "Use a simple filename without directories or control characters")
-            if PurePath(name).suffix.lower() not in {".csv", ".txt", ".md"}:
-                fail("unsupported_format", "Supported formats: CSV, UTF-8 TXT and Markdown. PDF/OCR and spreadsheets are not enabled.", 415)
-            if not content or len(content) > MAX_FILE:
-                fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
-            connection.execute(
-                "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
-                (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),
-            )
-        revalidate(connection, ws, bid)
-        db.event(connection, ws, "import_staged", {"batch_id": bid})
-    return get_batch(ws, bid)
+    config = workspace(connection, ws)
+    bid = db.uid("import")
+    connection.execute("INSERT INTO batches(id,ws,status,base_revision,created_at) VALUES(?,?,?,?,?)",
+                       (bid, ws, "parsing", config["revision"], db.now()))
+    for name, content, options in uploads:
+        if not name or len(name) > 200 or "/" in name or "\\" in name or any(ord(c) < 32 for c in name):
+            fail("invalid_filename", "Use a simple filename without directories or control characters")
+        if PurePath(name).suffix.lower() not in {".csv", ".txt", ".md"}:
+            fail("unsupported_format", "This intake accepts CSV/TXT/Markdown. Use the Document lab for PDF/image extraction.", 415)
+        if not content or len(content) > MAX_FILE:
+            fail("file_limit", "Each file must be nonempty and at most 10 MB", 413)
+        connection.execute(
+            "INSERT INTO sources(id,ws,batch_id,name,sha256,original,options) VALUES(?,?,?,?,?,?,?)",
+            (db.uid("source"), ws, bid, name, hashlib.sha256(content).hexdigest(), content, options.model_dump_json()),
+        )
+    revalidate(connection, ws, bid)
+    db.event(connection, ws, "import_staged", {"batch_id": bid})
+    return batch_view(connection, ws, bid)
 
 
 def batch_view(connection, ws, bid):
@@ -475,6 +479,16 @@ def commit(ws, bid, body: CommitRequest):
             fail("stale_preview", "Workspace or mappings changed. Revalidate the preview before committing.", 409)
         if batch["status"] != "ready_to_commit":
             fail("validation_blocked", "Resolve or explicitly exclude invalid files before committing", 409)
+        # Corrections can change after a document-derived preview was staged.
+        # Never commit a stale transcription or superseded review as current facts.
+        from . import extraction
+        for staged in extraction.items(connection, ws, "staging"):
+            if staged["batch_id"] == bid:
+                correction = extraction.get(connection, ws, staged["correction_id"], "correction")
+                document = extraction.document(connection, ws, correction["document_id"])
+                latest = [x for x in extraction.items(connection, ws, "correction") if x["document_id"] == document["id"]][-1]
+                if latest["id"] != correction["id"] or correction["text_sha256"] != document["text_sha256"]:
+                    fail("stale_extraction", "Extraction correction changed; stage the latest reviewed version", 409)
         files = connection.execute("SELECT * FROM sources WHERE ws=? AND batch_id=?", (ws, bid)).fetchall()
         current, additions, issues, _ = candidate_records(connection, ws, files)
         issues += ledger_issues(current, config)
@@ -525,7 +539,17 @@ def source_view(ws, sid, start=1, limit=100):
             lines = bytes(source["original"]).decode("utf-8-sig").splitlines()
         except UnicodeDecodeError:
             lines = ["[Not readable UTF-8; original preserved for download]"]
+        origin = None
+        from . import extraction
+        for staged in extraction.items(connection, ws, "staging"):
+            if staged["batch_id"] == source["batch_id"]:
+                corrected = extraction.get(connection, ws, staged["correction_id"], "correction")
+                doc = extraction.document(connection, ws, staged["document_id"])
+                origin = {"document_id": doc["id"], "name": doc["name"], "sha256": doc["sha256"],
+                          "correction_id": corrected["id"], "has_images": doc["suffix"] not in {".txt", ".md"},
+                          "pages": sorted({v["page"] for r in corrected["output"]["records"] for v in r.values() if v["status"] == "present"})}
         return {"id": sid, "name": source["name"], "sha256": source["sha256"],
+                "extraction_origin": origin,
                 "committed": bool(source["committed"]), "options": json.loads(source["options"]),
                 "line_count": len(lines), "lines": [{"number": i + 1, "text": line} for i, line in enumerate(lines) if start <= i + 1 < start + limit]}
 
@@ -631,106 +655,3 @@ def respond(ws, rid, body: EvidenceResponse):
                                                     "next_action": "review_evidence_then_resume", "agent_runtime_available": False})
     return coverage(ws)
 
-
-SNAPSHOT_AGENTS = {
-    "cfo": {"id": "cfo", "name": "CFO Agent", "short": "CFO", "role": "Lead investigator / orchestrator"},
-    "grants_compliance": {"id": "gr", "name": "Grants & Compliance agent", "short": "GR", "role": "Restricted-funds specialist"},
-    "internal_auditor": {"id": "au", "name": "Internal Auditor agent", "short": "AU", "role": "Independent reviewer"},
-}
-
-
-def _agent_projection(run):
-    agent = SNAPSHOT_AGENTS[run["agent"]]
-    output = json.loads(run["output"]) if run else {}
-    analysis = output.get("analysis", {})
-    role_ids = {"ap_payments": "ap", "payroll_budget": "py", "grants_compliance": "gr", "internal_auditor": "au"}
-    tasks = [{
-        "id": f"{run['id']}-task-{index}", "agent": role_ids[task["specialist"]], "title": task["title"],
-        "workflow": agent["name"] + " follow-up", "column": "queued", "progress": 0, "eta_s": None,
-        "started_at": None, "tool_calls": {"used": 0, "budget": 12},
-        "steps": [{"title": task["objective"], "state": "todo", "memory": False}], "todos": [],
-        "rationale": "Proposed by " + agent["name"] + "; this follow-up has not been executed.",
-        "note": "Candidate task", "note_tone": "info",
-    } for index, task in enumerate(analysis.get("next_tasks", []), 1)] if run else []
-    findings = [{
-        "id": f"{run['id']}-finding-{index}", "agent": agent["id"], "title": finding["title"],
-        "summary": agent["name"] + " candidate · independent review pending. " + finding["summary"],
-        "status": "hypothesized" if finding["status"] == "cleared" else finding["status"],
-        "amount_cents": None, "amount_note": "No independently reviewed finding amount", "verified_by": None,
-        "evidence": [{"label": f"{cite['source_id']} line {cite['line']}: {cite['quote']}",
-                      "kind": "doc", "tone": "neutral"} for cite in finding["citations"]],
-    } for index, finding in enumerate(analysis.get("findings", []), 1)] if run else []
-    decisions = []
-    if run:
-        decision = output.get("decision", {})
-        decisions = [{
-            "id": f"decision-{run['id']}", "run": run["id"], "time": run["completed_at"], "agent": agent["id"],
-            "action": decision.get("action", "Initial snapshot triage"),
-            "summary": decision.get("summary", analysis.get("executive_briefing", "")), "tags": [],
-            "when": {"run": run["id"], "step": agent["name"] + " review", "started": run["created_at"],
-                     "finished": run["completed_at"], "trigger": run["focus"]},
-            "how": [{"tool": item["tool"], "input": item["input_hash"], "output": item["output_ref"]}
-                    for item in output.get("tool_calls", [])],
-            "why": decision.get("why", "Identify bounded follow-up work from committed evidence."),
-            "alternatives": [],
-            "memory_checks": [], "outcome": decision.get("outcome", "Candidate triage saved."),
-        }]
-    return tasks, findings, decisions
-
-
-def bundle(ws):
-    cov = coverage(ws)
-    w = cov["workspace"]
-    snapshot_id = cov["snapshot"]["id"] if cov["snapshot"] else None
-    with db.connect() as connection:
-        # Recover abandoned runs even if only the dashboard bundle is being polled.
-        from .agents.cfo import _expire_runs
-        _expire_runs(connection, ws)
-        running = connection.execute(
-            "SELECT * FROM agent_runs WHERE ws=? AND status='running' ORDER BY created_at DESC LIMIT 1", (ws,),
-        ).fetchone()
-        runs = [row for agent in SNAPSHOT_AGENTS if (row := connection.execute(
-            "SELECT * FROM agent_runs WHERE ws=? AND snapshot_id=? AND agent=? AND status='completed' ORDER BY created_at DESC LIMIT 1",
-            (ws, snapshot_id, agent),
-        ).fetchone())] if snapshot_id else []
-        audit_history = connection.execute(
-            "SELECT output FROM agent_runs WHERE ws=? AND snapshot_id=? AND agent='internal_auditor' AND status='completed' ORDER BY created_at DESC LIMIT 20",
-            (ws, snapshot_id),
-        ).fetchall() if snapshot_id else []
-    # Preserve the CFO's briefing when present; grants findings stay alongside it, never replace it.
-    run = runs[0] if runs else None
-    output = json.loads(run["output"]) if run else {}
-    analysis = output.get("analysis", {})
-    tasks, findings, decisions = [], [], []
-    for saved in runs:
-        t, f, d = _agent_projection(saved)
-        tasks.extend(t); findings.extend(f); decisions.extend(d)
-    # Verdicts are attached only to their exact preparer-run finding IDs. Rerunning a
-    # preparer cannot silently inherit an old review, even on the same source snapshot.
-    latest_reviews = {}
-    for saved in audit_history:
-        for review in json.loads(saved["output"]).get("analysis", {}).get("reviews", []):
-            latest_reviews.setdefault(review["finding_id"], review)
-    for finding in findings:
-        if review := latest_reviews.get(finding["id"]):
-            finding["summary"] = f"Internal Auditor: {review['verdict']} — {review['rationale']} Human approval remains separate. " + finding["summary"].replace("candidate · independent review pending.", "candidate · bounded review recorded.")
-    agents = []
-    for name, meta in SNAPSHOT_AGENTS.items():
-        active = running is not None and running["agent"] == name
-        if active or any(saved["agent"] == name for saved in runs):
-            agents.append({**meta, "status": "working" if active else "idle",
-                           "doing": "Reviewing snapshot evidence" if active else "Bounded review saved; see exact verdicts and scope." if name == "internal_auditor" else "Candidate review saved; consult Auditor verdicts if available."})
-    return {
-        "contract_version": 2,
-        "workspace": {"id": ws, "name": w["name"], "kind": w["kind"], "period": f"{w['start']} — {w['end']}",
-                      "mode": "live" if run else "not_started", "snapshot_id": snapshot_id or "No committed records",
-                      "disabled_tabs": [], "model": run["model"] if run else "Not configured",
-                      "run_budget": {"used": sum(len(json.loads(r["output"]).get("tool_calls", [])) for r in runs), "total": 12 * len(runs)},
-                      "intake": True, "currency": w["currency"], "profile": w["profile"]},
-        "agents": agents,
-        "briefing": {"generated_at": run["completed_at"] if run else "—",
-                     "text": analysis.get("executive_briefing", "Upload records and review source coverage. Agent investigations have not run."),
-                     "actions": ([{"label": "Review candidate findings", "href": "findings", "primary": True}] if findings else [])},
-        "kpis": [], "workflows": [], "tasks": tasks, "findings": findings, "approvals": [], "decisions": decisions, "playbooks": [], "ablation": None,
-        "report": {"title": "No investigation report yet", "sections": [], "comparisons": []},
-    }

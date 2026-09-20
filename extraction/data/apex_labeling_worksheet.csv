@@ -1,0 +1,22 @@
+file,invoice_number,invoice_date,payment_due_date,subtotal,total,vendor_name,currency,service_date,tax,purchase_order_reference,receipt_reference,_hint_matter_reference,_hint_first_line
+Avila_AVILA-202403-A1.pdf,AVILA-202403-A1,March 20 2024,April 19 2024,3500.00,3500.00,,,,,,,M-2024-0004,"Marcus Avila, Esq."
+Avila_AVILA-202405-A2.pdf,AVILA-202405-A2,May 18 2024,June 17 2024,3800.00,3800.00,,,,,,,M-2024-0007,"Marcus Avila, Esq."
+Avila_AVILA-202407-A3.pdf,AVILA-202407-A3,July 12 2024,August 11 2024,3200.00,3200.00,,,,,,,M-2024-0008,"Marcus Avila, Esq."
+Avila_AVILA-202409-A4.pdf,AVILA-202409-A4,September 25 2024,October 25 2024,3500.00,3500.00,,,,,,,M-2024-0018,"Marcus Avila, Esq."
+Avila_AVILA-202410-A5.pdf,AVILA-202410-A5,October 22 2024,November 21 2024,3000.00,3000.00,,,,,,,M-2024-0007,"Marcus Avila, Esq."
+Avila_AVILA-202412-A6.pdf,AVILA-202412-A6,December 10 2024,January 09 2025,3000.00,3000.00,,,,,,,M-2024-0013,"Marcus Avila, Esq."
+Kao_KAO-202401-001.pdf,KAO-202401-001,January 15 2024,February 14 2024,4000.00,4000.00,,,,,,,M-2024-0007,Jennifer Kao Law PLLC
+Kao_KAO-202402-002.pdf,KAO-202402-002,February 15 2024,March 16 2024,4000.00,4000.00,,,,,,,M-2024-0004,Jennifer Kao Law PLLC
+Kao_KAO-202403-003.pdf,KAO-202403-003,March 15 2024,April 14 2024,4000.00,4000.00,,,,,,,M-2024-0008,Jennifer Kao Law PLLC
+Kao_KAO-202404-004.pdf,KAO-202404-004,April 15 2024,May 15 2024,4000.00,4000.00,,,,,,,M-2024-0013,Jennifer Kao Law PLLC
+Kao_KAO-202405-005.pdf,KAO-202405-005,May 15 2024,June 14 2024,4000.00,4000.00,,,,,,,M-2024-0007,Jennifer Kao Law PLLC
+Kao_KAO-202406-006.pdf,KAO-202406-006,June 15 2024,July 15 2024,4000.00,4000.00,,,,,,,M-2024-0004,Jennifer Kao Law PLLC
+Kao_KAO-202407-007.pdf,KAO-202407-007,July 15 2024,August 14 2024,4000.00,4000.00,,,,,,,M-2024-0008,Jennifer Kao Law PLLC
+Kao_KAO-202408-008.pdf,KAO-202408-008,August 15 2024,September 14 2024,4000.00,4000.00,,,,,,,M-2024-0018,Jennifer Kao Law PLLC
+Kao_KAO-202409-009.pdf,KAO-202409-009,September 15 2024,October 15 2024,4000.00,4000.00,,,,,,,M-2024-0018,Jennifer Kao Law PLLC
+Kao_KAO-202410-010.pdf,KAO-202410-010,October 15 2024,November 14 2024,4000.00,4000.00,,,,,,,M-2024-0018,Jennifer Kao Law PLLC
+Kao_KAO-202411-011.pdf,KAO-202411-011,November 15 2024,December 15 2024,4000.00,4000.00,,,,,,,M-2024-0007,Jennifer Kao Law PLLC
+Kao_KAO-202412-012.pdf,KAO-202412-012,December 15 2024,January 14 2025,4000.00,4000.00,,,,,,,M-2024-0004,Jennifer Kao Law PLLC
+Westfield_WLS-2024-Q2-1.pdf,WLS-2024-Q2-1,April 30 2024,May 30 2024,4000.00,4000.00,,,,,,,M-2024-0018,Westfield Legal Services LLC
+Westfield_WLS-2024-Q3-2.pdf,WLS-2024-Q3-2,August 31 2024,September 30 2024,4000.00,4000.00,,,,,,,M-2024-0018,Westfield Legal Services LLC
+Westfield_WLS-2024-Q4-3.pdf,WLS-2024-Q4-3,November 29 2024,December 29 2024,4000.00,4000.00,,,,,,,M-2024-0004,Westfield Legal Services LLC

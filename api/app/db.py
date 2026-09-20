@@ -13,6 +13,8 @@ import sqlite3
 from uuid import uuid4
 
 
+SCHEMA_VERSION = 5
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY, config TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0
@@ -64,9 +66,22 @@ CREATE TABLE IF NOT EXISTS agent_requests (
     run_id TEXT NOT NULL REFERENCES agent_runs(id),
     PRIMARY KEY(ws, request_id)
 );
+CREATE TABLE IF NOT EXISTS cfo_runs (
+    id TEXT PRIMARY KEY, workspace TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    snapshot_id TEXT, run_id TEXT, finding_id TEXT, task_id TEXT,
+    agent TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+    journal TEXT, effects TEXT, verified INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL,
+    decided_at TEXT, decided_by TEXT
+);
 CREATE INDEX IF NOT EXISTS active_records ON records(ws, active);
 CREATE INDEX IF NOT EXISTS workspace_sources ON sources(ws, committed);
 CREATE INDEX IF NOT EXISTS workspace_agent_runs ON agent_runs(ws, created_at);
+CREATE INDEX IF NOT EXISTS workspace_cfo_runs ON cfo_runs(workspace, created_at);
+CREATE INDEX IF NOT EXISTS workspace_approvals ON approvals(ws, status);
 CREATE TABLE IF NOT EXISTS review_scans (
     id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
     snapshot_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL
@@ -76,8 +91,37 @@ CREATE TABLE IF NOT EXISTS review_actions (
     finding_id TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL,
     PRIMARY KEY(ws, snapshot_id, finding_id)
 );
-PRAGMA user_version = 2;
-"""
+-- The scripted demo is gone, and so is its table. Dropping it here clears the
+-- rows an older database still holds, whose workspace references would
+-- otherwise refuse the deletion of the workspace that created them.
+DROP TABLE IF EXISTS demo_sessions;
+CREATE TABLE IF NOT EXISTS extraction_items (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
+);
+-- Reviewed precedent: what a human decided, in a form a later run can check.
+-- Written only by approvals.decide(), so a precedent can never exist without a
+-- human decision behind it. `status` is how a precedent is retired when its
+-- governing evidence changes; nothing is ever deleted, so the history of what
+-- the agent was told stays auditable.
+CREATE TABLE IF NOT EXISTS precedents (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    pattern TEXT NOT NULL, verdict TEXT NOT NULL, guidance TEXT NOT NULL,
+    scope TEXT NOT NULL, source_finding_id TEXT, source_approval_id TEXT,
+    decided_by TEXT NOT NULL, created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active', uses INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS extraction_workspace ON extraction_items(ws, kind);
+CREATE TABLE IF NOT EXISTS extraction_documents (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    name TEXT NOT NULL, sha256 TEXT NOT NULL, original BLOB NOT NULL,
+    payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(ws, sha256)
+);
+CREATE TABLE IF NOT EXISTS extraction_active (
+    ws TEXT PRIMARY KEY REFERENCES workspaces(id), model_id TEXT NOT NULL,
+    version INTEGER NOT NULL, evaluation_id TEXT NOT NULL
+);
+""" + f"PRAGMA user_version = {SCHEMA_VERSION};"
 
 
 def uid(prefix: str) -> str:
@@ -102,7 +146,7 @@ def connect():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version > 2:
+    if version > SCHEMA_VERSION:
         connection.close()
         raise RuntimeError("Database is newer than this application; refusing to downgrade")
     connection.executescript(SCHEMA)

@@ -63,6 +63,16 @@ SAMPLE_FILES = [
                    "All entities and terms in this document are fictional.\n",
     },
     {
+        # main grew the shared pack with an invoice register, so every domain the
+        # engine prices - payroll, grants and AP - has records in the same pack.
+        "name": "invoices.csv",
+        "role": "invoice",
+        "content": "record_id,vendor_id,invoice_number,service_date,amount,po_id,receipt_id,award_id\n"
+                   "INV-1,V-1,A-100,2026-09-08,1200.00,PO-1,GR-1,\n"
+                   "INV-2,V-1,A-100,2026-09-22,1200.00,,,\n"
+                   "INV-3,V-2,B-200,2026-09-20,850.00,PO-2,,GRANT-1\n",
+    },
+    {
         "name": "service-record.md",
         "role": "service",
         "later": True,

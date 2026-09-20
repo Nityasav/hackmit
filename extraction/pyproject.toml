@@ -1,0 +1,28 @@
+[project]
+name = "schooltrace-extraction"
+version = "0.1.0"
+description = "Local document-extraction model: training, benchmarking, evaluation (spec.md §5, §7.5)"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4",
+    # No stable release recognizes NuExtract3's `qwen3_5` architecture yet
+    # (verified against transformers 4.57.6, 2026-09-19) — install from git
+    # main instead, which itself requires Python >=3.10:
+    #   pip install git+https://github.com/huggingface/transformers.git
+    # Re-check before assuming this is still true; pin to a stable release
+    # the day qwen3_5 lands in one.
+    "transformers",
+    "accelerate>=0.34",
+    "peft>=0.13",
+    "trl>=0.11",
+    "pillow>=10.0",
+    "pymupdf>=1.24",
+    "pydantic>=2.9",
+    "jsonschema>=4.23",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

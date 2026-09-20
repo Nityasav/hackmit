@@ -58,11 +58,14 @@ def test_snapshot_maps_committed_sources_domains_and_gaps(client):
     # Document evidence is a first-class source, not just ledger CSVs.
     assert domains["award-terms.md"] == "shared"
     assert any("missing service" in gap for gap in scope.gaps)
-    # Payroll amounts come from the accounting engine; other domains still have none.
+    # Amounts come from the accounting engine, per domain that has records to work on.
     published = {c.id for c in scope.calculations}
     assert "payroll-gross-to-net" in published and "payroll-award-ceiling-excess" in published
-    assert all(c.id.startswith("payroll-") for c in scope.calculations)
-    assert any("payroll only" in gap for gap in scope.gaps)
+    # The pack charges an award through payroll, so the award-level tests publish too.
+    assert "grants-combined-ceiling-excess" in published
+    # The pack commits invoices too, so all three domains can price a finding.
+    assert "ap-duplicate-exposure" in published
+    assert not any("cannot be confirmed" in gap for gap in scope.gaps)
     # Each published calculation names sources the specialist can actually read.
     available = {s.id for s in scope.sources}
     assert all(set(c.source_ids) <= available and c.source_ids for c in scope.calculations)
@@ -112,7 +115,7 @@ def test_calculate_fails_closed_for_identifiers_the_engine_does_not_publish(clie
     ws = commit_pack(client)
     data = IntakeDataSource()
     scope = asyncio.run(data.snapshot(ws))
-    # An AP or grant amount has no engine behind it yet, and is refused rather than guessed.
+    # An identifier the engine does not publish is refused rather than guessed at.
     with pytest.raises(ValueError, match="No deterministic calculation"):
         asyncio.run(data.calculate(scope, "invoice-duplicate-exposure"))
 

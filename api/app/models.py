@@ -38,6 +38,9 @@ class Workspace(BaseModel):
     run_budget: RunBudget
     source_url: str | None = None
     intake: bool = False
+    #: For a recorded workspace, what the recording is of: the run, when, and
+    #: with which model. Absent on a live workspace, which speaks for itself.
+    recorded_from: str | None = None
     currency: str = "USD"
     profile: str | None = None
 
@@ -154,13 +157,15 @@ class Effect(BaseModel):
 class Approval(BaseModel):
     id: str
     agent: AgentId
-    kind: Literal["journal", "payment", "playbook", "evidence"]
+    kind: Literal["journal", "payment", "playbook", "evidence", "decision"]
     title: str
     summary: str
     verified: bool
     status: ApprovalStatus
     journal: list[JournalLine] | None = None
     effects: list[Effect] | None = None
+    #: The finding this proposal would resolve, when it came from one.
+    finding_id: str | None = None
 
 
 class DecisionWhen(BaseModel):
@@ -203,6 +208,10 @@ class Decision(BaseModel):
     run: str
     time: str
     agent: AgentId
+    #: Set when a person took this decision rather than an agent. `agent` has no
+    #: value that means "a human", and a human approval is the decision the log
+    #: most needs to carry, so the reviewer is named here instead of faked there.
+    actor: str | None = None
     action: str
     summary: str
     tags: list[Tag]
@@ -255,6 +264,9 @@ class Report(BaseModel):
     title: str
     sections: list[str]
     comparisons: list[Comparison]
+    #: The run's own published Markdown, when a run produced one. Rendered by
+    #: app/cfo/reporting.py so the export is the report, not a second rendering.
+    markdown: str | None = None
     applies_approval: str | None = None
     before_label: str | None = None
     after_label: str | None = None

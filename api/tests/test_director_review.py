@@ -50,7 +50,10 @@ def start(client):
         "scope": "September close: invoice register, budget variance, payroll and grant support."})
     assert created.status_code == 201, created.text
     ws = created.json()["id"]
-    import_files(client, ws, sample_files() + TRANSACTION_FILES)
+    # The shared pack now carries its own invoice register. These tests assert on the
+    # labelled duplicate cases below, so that role is replaced rather than staged twice
+    # under two sources with overlapping record identifiers.
+    import_files(client, ws, [f for f in sample_files() if f["role"] != "invoice"] + TRANSACTION_FILES)
     assert client.post(f"/api/workspaces/{ws}/review/scans").status_code == 201
     return ws
 

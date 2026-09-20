@@ -64,7 +64,7 @@ class FakeResponses:
             }, "call-2")]
         else:
             output = [function_call("submit_cfo_analysis", {
-                "executive_briefing": "The supplied award terms require service evidence before allocation support can be assessed.",
+                "memory_checks": [], "executive_briefing": "The supplied award terms require service evidence before allocation support can be assessed.",
                 "scope_assessed": "September close within the committed synthetic snapshot.",
                 "limitations": ["Population completeness is not verified."],
                 "findings": [{
@@ -154,7 +154,7 @@ def test_invalid_model_citation_is_rejected(client):
     tools.context()
     source_id = tools.list_sources("policy")[0]["source_id"]
     result = cfo.CfoResult.model_validate({
-        "executive_briefing": "Review needed.", "scope_assessed": "September.", "limitations": [],
+        "memory_checks": [], "executive_briefing": "Review needed.", "scope_assessed": "September.", "limitations": [],
         "findings": [{"title": "Bad citation", "status": "hypothesized", "summary": "Unsupported.",
                       "citations": [{"source_id": source_id, "line": 4, "quote": "words not in the source"}],
                       "limitations": []}],
@@ -203,6 +203,7 @@ def test_tool_boundaries_and_blank_citations(client):
         tools.dispatch("execute_sql", {"query": "SELECT * FROM records"})
     sid = tools.list_sources("policy")[0]["source_id"]
     result = cfo.CfoResult(
+        memory_checks=[],
         executive_briefing="Draft", scope_assessed="September", limitations=[], next_tasks=[], evidence_requests=[],
         findings=[cfo.CandidateFinding(title="Claim", status="hypothesized", summary="Draft", limitations=[],
                   citations=[cfo.Citation(source_id=sid, line=1, quote=" ")])],
@@ -264,7 +265,7 @@ def test_source_overview_and_cents_guard(client):
     assert context["source_previews"]
     totals = tools.compute_ledger_totals()
     assert totals["debit_display"] == "10,000.00"
-    result = cfo.CfoResult(executive_briefing="Ledger total: $1,000,000", scope_assessed="September",
+    result = cfo.CfoResult(memory_checks=[], executive_briefing="Ledger total: $1,000,000", scope_assessed="September",
                            limitations=[], findings=[], evidence_requests=[], next_tasks=[])
     assert any("cents versus dollars" in error for error in tools.validate_result(result))
     result.executive_briefing = "Ledger total: $10,000.00"

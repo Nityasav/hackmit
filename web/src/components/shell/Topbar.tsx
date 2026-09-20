@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useData } from "@/lib/data";
+import { HelpGuide } from "@/components/HelpGuide";
 
 /**
- * One bar, one job: which school's books you are looking at. Navigation lives
- * in the sidebar and nowhere else.
+ * One bar, two jobs: which school's books you are looking at, and the way back
+ * to the walkthrough. Navigation lives in the sidebar and nowhere else.
  */
 export function Topbar() {
   const { ws, setWs, intakeWorkspaces, apiError } = useData();
@@ -30,6 +31,9 @@ export function Topbar() {
           <Link href="/" className="underline">Add a school&rsquo;s records</Link> to start.
         </p>
       )}
+      <div className="ml-auto">
+        <HelpGuide />
+      </div>
       {apiError && (
         <p role="alert" className="w-full text-xs text-red-700">
           {apiError} · <Link href="/access" className="underline">Check access</Link>
