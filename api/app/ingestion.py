@@ -714,6 +714,14 @@ def coverage(ws):
         # What Books asks for, and which agents each missing input is holding up.
         # One registry decides this, so an agent cannot depend on data nobody requested.
         coverage_requirements = requirements.status(config, present)
+        # Who can actually be asked to work. `requirements.status` answers the Books
+        # question — what is still missing, and who wants it — where this answers the
+        # dispatch question, which is narrower: an agent is held up only by the records
+        # its work is about. The two disagreed on purpose once and the result was an
+        # organization where twenty-one of twenty-two agents refused to start.
+        from .agents.registry import blocked as blocked_agents
+        coverage_requirements["blocked_agents"] = blocked_agents(
+            present, config.get(requirements.SETTINGS_KEY) or {})
         sources = []
         active_ids = {r["source_id"] for r in records}
         # How many of the workspace's live records each file is still answering for.

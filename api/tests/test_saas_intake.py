@@ -198,15 +198,20 @@ def test_committing_records_satisfies_their_requirement_and_unblocks_agents(work
     satisfied = {r["id"] for r in after["requirements"] if r["satisfied"]}
     assert {"chart", "ledger", "vendors", "vendor_invoices", "purchase_orders"} <= satisfied
     assert after["satisfied_count"] > before["satisfied_count"]
-    # A1 still needs the policy it tests against and the limit above which a payment
-    # needs a person. Both are real dependencies, and Books is now asking for exactly
-    # those two rather than repeating everything A1 ever wanted.
-    assert after["blocked_agents"].get("A1") == ["approval_limit_cents", "policy"]
+    # A1 has the bills its work is about, so it runs. The policy it tests against and
+    # the limit above which a payment needs a person are still missing, and Books still
+    # asks for them — but they narrow what A1 can conclude rather than standing it down.
+    # The engine already reports each one as a gap in its own result.
+    assert "A1" not in after["blocked_agents"]
+    still_wanted = {r["id"] for r in after["requirements"]
+                    if not r["satisfied"] and "A1" in r["needed_by"]}
+    assert {"approval_limit_cents", "policy"} <= still_wanted
 
 
 def test_a_setting_is_answered_in_books_rather_than_uploaded(workspace):
-    blocked = ingestion.coverage(workspace)["blocked_agents"]
-    assert "materiality_cents" in blocked["D1"]
+    unanswered = {r["id"]: r for r in ingestion.coverage(workspace)["requirements"]}
+    assert not unanswered["materiality_cents"]["satisfied"]
+    assert "D1" in unanswered["materiality_cents"]["needed_by"]
 
     updated = ingestion.update_settings(workspace, ingestion.SettingsUpdate(
         settings={"materiality_cents": 250_000, "home_jurisdiction": "US-CA"}))
@@ -214,7 +219,22 @@ def test_a_setting_is_answered_in_books_rather_than_uploaded(workspace):
     answered = {r["id"]: r for r in updated["requirements"]}
     assert answered["materiality_cents"]["satisfied"]
     assert answered["materiality_cents"]["value"] == 250_000
-    assert "materiality_cents" not in updated["blocked_agents"].get("D1", [])
+
+
+def test_no_setting_ever_stands_an_agent_down(workspace, generated):
+    """A setting says how to judge what was read. It cannot stop the reading.
+
+    This is the bug that stopped the whole organization: Month-End Close held the
+    chart, the opening balances and the ledger, and refused to run because a fiscal
+    year end that no line of the engine reads was unanswered.
+    """
+    _commit_all(workspace, generated, ["chart", "opening", "ledger"])
+    view = ingestion.coverage(workspace)
+
+    settings = {r["id"] for r in view["requirements"] if r["kind"] == "setting"}
+    assert settings, "the fixture must have settings to be a test of settings"
+    assert not any(set(missing) & settings for missing in view["blocked_agents"].values())
+    assert "B1" not in view["blocked_agents"] and "B3" not in view["blocked_agents"]
 
 
 def test_clearing_a_setting_makes_it_unanswered_again(workspace):

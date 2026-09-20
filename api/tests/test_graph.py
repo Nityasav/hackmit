@@ -347,7 +347,9 @@ def _clear_model():
         spec = _spec(kwargs)
         if spec and "three_way_match" in spec.tools and "vendor_invoices" in roles:
             return [("read_records", {"role": "vendor_invoices"})]
-        return [("read_records", {"role": roles[0]})]
+        # D3 assembles the trail and declares no roles of its own. Routing now reaches
+        # it, so the double has to answer for an agent with nothing to read.
+        return [("read_records", {"role": roles[0]})] if roles else []
 
     def score(kwargs):
         spec = _spec(kwargs)

@@ -402,7 +402,7 @@ def test_an_agent_whose_inputs_are_missing_says_so_instead_of_guessing(tmp_path,
     ingestion.commit(workspace, batch["id"], ingestion.CommitRequest(
         expected_version=batch["version"], idempotency_key="k"))
 
-    with pytest.raises(AgentFailed, match="needs data that has not been supplied"):
+    with pytest.raises(AgentFailed, match="cannot start without"):
         run(workspace, "A1", "Review payables.", FakeModel([([], ap_result())]))
 
 
