@@ -295,13 +295,32 @@ def test_expected_collections_are_shown_apart_from_committed_outflows(ws):
 # --------------------------------------------------------------------------- #
 
 def _clear_model():
-    """Every agent reads, then reports a clear result that needs nobody.
+    """Every agent reads, scores what it can, then reports a result that needs nobody.
 
-    `insufficient_evidence` escalates by design, so a run built on it now pauses — which
-    is correct, and not what these two tests are about.
+    `insufficient_evidence` escalates by design, so a run built on it pauses — which is
+    correct, and not what these tests are about. Neither is the second escalation this
+    helper has to avoid: an agent holding a scoring tool that concludes without calling
+    it has produced an unscored answer, and the runtime sends that to a person too. So
+    the script calls the scoring tool wherever the agent has one, which is also what a
+    real agent does.
     """
     import json as _json
     from app.agents import schemas as _s
+    from app.agents.registry import AGENTS
+    from app.agents.runtime import SCORING_TOOLS
+
+    def _spec(kwargs):
+        system = kwargs["input"][0].get("content", "")
+        return next((spec for spec in AGENTS.values()
+                     if system.startswith(f"You are {spec.name} ({spec.id})")), None)
+
+    def _first_key(kwargs, role):
+        for message in reversed(kwargs.get("input", [])):
+            if isinstance(message, dict) and message.get("type") == "function_call_output":
+                body = _json.loads(message["output"])
+                if body.get("role") == role and body.get("records"):
+                    return body["records"][0]["record_key"]
+        return None
 
     def answer(schema, kwargs):
         role, key = "vendor_invoices", "VI-1"
@@ -319,9 +338,25 @@ def _clear_model():
 
     def read(kwargs):
         context = _json.loads(kwargs["input"][1]["content"])
-        return [("read_records", {"role": context["readable_roles"][0]})]
+        roles = context["readable_roles"]
+        # An agent that will score an invoice has to read invoices, not whichever role
+        # happens to be first in its scope.
+        spec = _spec(kwargs)
+        if spec and "three_way_match" in spec.tools and "vendor_invoices" in roles:
+            return [("read_records", {"role": "vendor_invoices"})]
+        return [("read_records", {"role": roles[0]})]
 
-    return FakeModel([(read, None), ([], None)], build=answer)
+    def score(kwargs):
+        spec = _spec(kwargs)
+        held = sorted(set(spec.tools) & SCORING_TOOLS) if spec else []
+        if not held:
+            return []
+        if held[0] == "three_way_match":
+            key = _first_key(kwargs, "vendor_invoices")
+            return [("three_way_match", {"invoice_key": key})] if key else []
+        return [(held[0], {})]
+
+    return FakeModel([(read, None), (score, None), ([], None)], build=answer)
 
 
 def test_the_graph_is_built_from_the_registry(ws):

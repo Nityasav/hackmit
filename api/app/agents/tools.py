@@ -21,7 +21,8 @@ import json
 from typing import Any
 
 from .. import db, roles
-from ..accounting import accruals, cash, close, match, reconcile, statements
+from ..accounting import (accruals, cash, close, match, planning, reconcile,
+                          reporting, statements, variance)
 from .budget import BudgetExceeded, Meter
 
 
@@ -264,6 +265,88 @@ class Toolbox:
         }
         return result
 
+
+    def roll_up(self) -> dict:
+        """The budget and the actuals gathered into the chart's own categories."""
+        self._charge("roll_up")
+        result = planning.roll_up(self._records, self.config)
+        self.calculations["roll_up"] = result
+        return result
+
+    def forecast_series(self) -> dict:
+        """How the forecast did, account by account, with the basis each one recorded."""
+        self._charge("forecast_series")
+        result = planning.forecast_accuracy(self._records, self.config)
+        for account in result["accounts"]:
+            for citation in account["evidence"]:
+                self.read_keys.add(citation["record_key"])
+                self.read_sources.add(citation["source_id"])
+        self.calculations["forecast"] = result
+        return result
+
+    def decompose_variance(self, account: str = "", plan: str = "budgets") -> dict:
+        """A variance broken into the transactions that caused it.
+
+        One account when named, otherwise the largest variances in the period. Every
+        driver carries the ledger lines behind it, so what the agent writes about a
+        variance is constrained to what the arithmetic already attributed.
+        """
+        self._charge("decompose_variance")
+        if account:
+            result = variance.decompose(self._records, account, self.config, plan=plan)
+            explained = [result]
+        else:
+            result = variance.explain(self._records, self.config, plan=plan)
+            explained = result["explained"]
+        for item in explained:
+            for driver in item.get("drivers", []):
+                for citation in driver["evidence"]:
+                    self.read_keys.add(citation["record_key"])
+                    self.read_sources.add(citation["source_id"])
+        # Scored so an escalation threshold has something to read. `attributed_pct` is the
+        # share of the activity that reached a named transaction, which is exactly what
+        # confidence in an explanation should mean.
+        self.calculations["variance:" + (account or "period")] = {
+            "confidence": result["attributed_pct"],
+            "amount_cents": abs(result.get("variance_cents") or result.get("amount_cents") or 0),
+            "unexplained_cents": result["unexplained_cents"],
+            "detail": result,
+        }
+        return result
+
+    def model_scenario(self, revenue_growth_pct: int = 0, expense_growth_pct: int = 0,
+                       headcount_change: int = 0, periods: int = 3) -> dict:
+        """Project this period forward under supplied assumptions.
+
+        A projection, never a measurement. C4 escalates unconditionally because there is
+        nothing to score one against.
+        """
+        self._charge("model_scenario")
+        result = planning.scenario(
+            self._records, self.config, revenue_growth_pct=revenue_growth_pct,
+            expense_growth_pct=expense_growth_pct, headcount_change=headcount_change,
+            periods=periods)
+        self.calculations["scenario"] = result
+        return result
+
+    def build_report(self) -> dict:
+        """The period's reporting, assembled from figures that already tie.
+
+        Returns sections with their figures and an `intent` for the prose that belongs in
+        each. There is no slot for a figure, which is what makes "writes prose, never
+        numbers" a property of the tool rather than an instruction in a prompt.
+        """
+        self._charge("build_report")
+        result = reporting.management_report(self._records, self.config)
+        for section in result["sections"]:
+            for item in section.get("drivers", []):
+                for driver in item.get("drivers", []):
+                    for citation in driver["evidence"]:
+                        self.read_keys.add(citation["record_key"])
+                        self.read_sources.add(citation["source_id"])
+        self.calculations["report"] = result
+        return result
+
     # ----------------------------------------------------------------- writes --
     def record_decision(self, *, agent: str, action: str, summary: str, why: str,
                         confidence: int | None, evidence: list[dict], model: str,
@@ -338,6 +421,11 @@ def dispatch(toolbox: Toolbox, name: str, arguments: dict) -> dict:
         "close_checklist": toolbox.close_checklist,
         "propose_journal": toolbox.propose_journal,
         "reperform": toolbox.reperform,
+        "roll_up": toolbox.roll_up,
+        "forecast_series": toolbox.forecast_series,
+        "decompose_variance": toolbox.decompose_variance,
+        "model_scenario": toolbox.model_scenario,
+        "build_report": toolbox.build_report,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -402,6 +490,37 @@ def tool_definitions(spec) -> list[dict]:
         "reperform": {
             "description": "Recompute the statements and the close independently, so a "
                            "preparer's figure can be checked rather than believed.",
+            "properties": {}, "required": []},
+        "roll_up": {
+            "description": "Budget and actuals gathered into the chart's own reporting "
+                           "categories, with headcount where it was supplied.",
+            "properties": {}, "required": []},
+        "forecast_series": {
+            "description": "How the recorded forecast did against the actuals, account "
+                           "by account, with the basis each forecast claimed for itself.",
+            "properties": {}, "required": []},
+        "decompose_variance": {
+            "description": "A variance broken into the economic events that caused it, "
+                           "each naming the ledger lines behind it. Name an account, or "
+                           "leave it out for the largest variances in the period. You "
+                           "explain what the drivers mean; you never compute one.",
+            "properties": {"account": {"type": "string"},
+                           "plan": {"type": "string", "enum": ["budgets", "forecasts"]}},
+            "required": []},
+        "model_scenario": {
+            "description": "Project this period forward under assumptions you are given. "
+                           "The result is a projection about a period that has not "
+                           "happened, and must be reported as one.",
+            "properties": {
+                "revenue_growth_pct": {"type": "integer", "minimum": -100, "maximum": 200},
+                "expense_growth_pct": {"type": "integer", "minimum": -100, "maximum": 200},
+                "headcount_change": {"type": "integer", "minimum": -500, "maximum": 500},
+                "periods": {"type": "integer", "minimum": 1, "maximum": 24}},
+            "required": []},
+        "build_report": {
+            "description": "The period's reporting assembled from figures that already "
+                           "tie, as sections each naming the prose that belongs in it. "
+                           "Write the prose; every figure is already computed.",
             "properties": {}, "required": []},
     }
     return [{

@@ -22,6 +22,7 @@ from app.agents import budget as budget_module
 from app.agents import schemas
 from app.agents.budget import BudgetExceeded, Meter, cost_cents
 from app.agents.registry import AGENTS, ancestry, children
+from app.agents import runtime
 from app.agents.runtime import AgentFailed, escalation_reasons, run_agent
 from app.agents.tools import ScopeError, Toolbox
 from tests.conftest import SAMPLE_FILES, sample
@@ -488,3 +489,76 @@ def test_escalation_reads_thresholds_from_the_spec_not_the_model():
     assert escalation_reasons(spec, result, 100, 1_000) == ()
     assert escalation_reasons(spec, result, 84, 1_000)  # below the confidence threshold
     assert escalation_reasons(spec, result, 100, 500_000)  # at the amount that always escalates
+
+
+def test_an_agent_that_can_score_and_did_not_does_not_pass_as_confident():
+    """The hole this closes: a threshold is only consulted when a score exists, so the
+    cheapest way past one was to skip the calculation it is measured against."""
+    spec = AGENTS["A1"]
+    result = ap_result(citations=[schemas.Citation(role="vendor_invoices", record_key="k")])
+
+    reasons = escalation_reasons(spec, result, None, None)
+
+    assert reasons
+    assert any("without running the calculation" in reason for reason in reasons)
+
+
+def test_an_agent_with_nothing_to_score_is_not_punished_for_not_scoring():
+    """B3 computes statements, which either tie or do not. There is no rubric to run,
+    and demanding one would escalate every reporting task for no reason."""
+    spec = AGENTS["B3"]
+    assert not set(spec.tools) & runtime.SCORING_TOOLS
+
+    result = schemas.AgentResult(
+        summary="The statements tie to the ledger.", disposition="clear",
+        rationale="Every check the engine performs holds.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="No action proposed.")
+
+    assert escalation_reasons(spec, result, None, None) == ()
+
+
+def test_work_that_cannot_be_scored_against_an_outcome_always_reaches_a_person():
+    """C4 projects a period that has not happened, so there is nothing to score it
+    against. Said outright rather than by a threshold no score would ever meet."""
+    spec = AGENTS["C4"]
+    assert spec.escalate_when.always
+
+    result = schemas.AgentResult(
+        summary="Three periods projected under the assumptions supplied.",
+        disposition="clear",
+        rationale="The projection follows from the assumptions given.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="Weigh the projection against your own view.")
+
+    reasons = escalation_reasons(spec, result, 100, None)
+
+    assert reasons
+    assert any("cannot be scored against an outcome" in reason for reason in reasons)
+
+
+def test_a_condition_the_engine_found_escalates_even_when_the_agent_omits_it():
+    """An escalation rule that reads only the model's own exception list is decorative."""
+    spec = AGENTS["C3"]
+    assert "unexplained_residual" in spec.escalate_when.on
+
+    result = schemas.AgentResult(
+        summary="The variance is explained by the drivers listed.", disposition="clear",
+        rationale="Each driver names the transactions behind it.",
+        citations=[schemas.Citation(role="ledger", record_key="k")],
+        proposed_action="No action proposed.")
+    assert result.exceptions == []
+
+    engine = runtime.engine_exceptions(
+        {"variance:6100": {"confidence": 96, "amount_cents": 100, "unexplained_cents": 4_000}})
+
+    assert engine == frozenset({"unexplained_residual"})
+    assert any("unexplained_residual" in reason
+               for reason in escalation_reasons(spec, result, 96, 100, engine))
+
+
+def test_a_fully_attributed_variance_raises_no_engine_condition():
+    """A check whose exception fires on a clean baseline teaches people to skim past it."""
+    assert runtime.engine_exceptions(
+        {"variance:6100": {"confidence": 100, "amount_cents": 100,
+                           "unexplained_cents": 0}}) == frozenset()

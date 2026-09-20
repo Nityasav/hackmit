@@ -68,6 +68,10 @@ class EscalationRule:
     amount_above_cents: int | None = None
     #: Named conditions that always escalate, regardless of confidence.
     on: tuple[str, ...] = ()
+    #: Every conclusion goes to a person, whatever was computed. For work that cannot be
+    #: scored against anything — a projection about a period that has not happened —
+    #: which is a different statement from "scored, and the score was low".
+    always: bool = False
 
 
 @dataclass(frozen=True)
@@ -266,8 +270,10 @@ FPA = (
         model=MODEL_SOL,
         tools=("read_records", "model_scenario"),
         requires=("ledger", "budgets", "forecasts", "headcount"),
-        # Nothing here can be scored against a fixture, so it always says so.
-        escalate_when=EscalationRule(confidence_below=101),
+        # Nothing here can be scored against an outcome, so it always goes to a person.
+        # Stated outright: a threshold of 101 would have looked equivalent and was not,
+        # because a threshold is only consulted when a score exists at all.
+        escalate_when=EscalationRule(always=True),
         budget=Budget(model_calls=4, tool_calls=20, usd_cents=100)),
     AgentSpec(
         id="C5", name="Board Reporting", tier="subagent", parent="C",

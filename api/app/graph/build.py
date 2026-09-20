@@ -14,9 +14,9 @@ of them. Here every delegation returns.
 concurrent branches draw on the same allowance. A per-branch meter would let four agents
 each spend the run's cap.
 
-Treasurer and Controller are wired. C and D are registered the same way and the router
-already knows them; what each still needs is its subagents' tools, which is the whole of
-the work — the graph itself is built from the registry and gains a worker for free.
+Treasurer, Controller and FP&A are wired. D is registered the same way and the router
+already knows it; what it still needs is its subagents' tools, which is the whole of the
+work — the graph itself is built from the registry and gains a worker for free.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from .state import RunState, initial
 
 #: Worker subgraphs wired so far. The rest are registered as they gain their tools;
 #: routing to an unwired worker reports that plainly rather than silently doing nothing.
-WIRED_WORKERS = ("A", "B")
+WIRED_WORKERS = ("A", "B", "C")
 
 
 # --------------------------------------------------------------------------- #
