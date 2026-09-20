@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useData } from "@/lib/data";
 import { HelpGuide } from "@/components/HelpGuide";
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 
 /**
  * One bar, two jobs: which company's books you are looking at, and the way back
@@ -14,17 +15,17 @@ export function Topbar() {
     <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-6 py-3">
       <label className="flex items-center gap-2 text-xs text-ink-dim">
         Company
-        <select
+        <AnimatedDropdown
           aria-label="Company"
           value={ws}
-          onChange={(e) => setWs(e.target.value)}
-          className="max-w-64 border border-line bg-white px-2 py-1.5 text-sm text-ink"
-        >
-          {intakeWorkspaces.length === 0 && <option value="">No company added yet</option>}
-          {intakeWorkspaces.map((w) => (
-            <option key={w.id} value={w.id}>{w.name} · {w.id.slice(-4)}</option>
-          ))}
-        </select>
+          onChange={setWs}
+          placeholder="No company added yet"
+          options={intakeWorkspaces.map((w) => ({
+            value: w.id,
+            label: `${w.name} · ${w.id.slice(-4)}`,
+          }))}
+          className="max-w-64"
+        />
       </label>
       {intakeWorkspaces.length === 0 && (
         <p className="text-xs text-ink-dim">

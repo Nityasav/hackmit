@@ -3,7 +3,12 @@
 import { displayLabel } from "@/lib/format";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
+import { FileCard } from "@/components/ui/file-card-collections";
+import { fileFormat } from "@/lib/fileFormat";
 import { API_URL, intakeApi, useData } from "@/lib/data";
+import { sampleInvoicePdf } from "@/lib/samplePdf";
+import { periodDay } from "@/lib/starterPacks";
 
 type Observation = { status: "present" | "missing" | "ambiguous" | "unreadable"; value: string | null; page: number | null; start: number | null; end: number | null };
 type Output = { schema_version: string; records: Record<string, Observation>[] };
@@ -69,7 +74,7 @@ function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fi
     {output.records.map((record, index) => <details key={index} open={index === 0} className="border border-line p-2"><summary>Record {index + 1}</summary><div className="max-h-[500px] overflow-auto">{fields.map(field => {
       const value = record[field] || { status: "missing", value: null, page: null, start: null, end: null };
       return <div className="my-3 border-b border-line pb-2" key={field}><label className="text-sm font-semibold">{displayLabel(field)}<input aria-label={`Record ${index + 1} ${field} value`} className={input} value={value.value || ""} onChange={e => update(index, field, locate(e.target.value))} /></label>
-        <div className="mt-1 grid grid-cols-4 gap-1"><select aria-label={`Record ${index + 1} ${field} status`} className={input} value={value.status} onChange={e => update(index, field, e.target.value === "present" ? { ...value, status: "present" } : { status: e.target.value as Observation["status"], value: null, page: null, start: null, end: null })}>{["present", "missing", "ambiguous", "unreadable"].map(s => <option key={s} value={s}>{displayLabel(s)}</option>)}</select>
+        <div className="mt-1 grid grid-cols-4 gap-1"><AnimatedDropdown aria-label={`Record ${index + 1} ${field} status`} className="w-full" options={["present", "missing", "ambiguous", "unreadable"].map(s => ({ value: s, label: displayLabel(s) }))} value={value.status} onChange={next => update(index, field, next === "present" ? { ...value, status: "present" } : { status: next as Observation["status"], value: null, page: null, start: null, end: null })} />
           {(["page", "start", "end"] as const).map(locator => <label key={locator} className="text-xs">{displayLabel(locator)}<input aria-label={`Record ${index + 1} ${field} ${locator}`} type="number" min={locator === "page" ? 1 : 0} disabled={value.status !== "present"} className={input} value={value[locator] ?? ""} onChange={e => update(index, field, { ...value, [locator]: e.target.value === "" ? null : Number(e.target.value) })} /></label>)}</div>
         {value.status === "present" && value.page === null && <p className="text-xs text-amber-800">No unique source match. Check the value and specify the correct citation before approval.</p>}
       </div>;
@@ -99,6 +104,10 @@ export function DocumentIntake() {
 
 function Lab({ ws }: { ws: string }) {
   const base = `/api/workspaces/${ws}/extraction`;
+  // Only for dating the sample invoice: staged extraction is validated against
+  // the review period like any other record, so a sample dated outside it would
+  // be refused at import.
+  const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
   const [state, setState] = useState<State | null>(null);
   const [selected, setSelected] = useState("");
   const [role, setRole] = useState("invoice");
@@ -129,6 +138,7 @@ function Lab({ ws }: { ws: string }) {
   // is left to the person.
   const onlyModel = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
   const model = selectedModel || (!state?.active && onlyModel.length === 1 ? onlyModel[0].id : "");
+  useEffect(() => { let active = true; intakeApi<{ workspace: { start: string; end: string } }>(`/api/workspaces/${ws}/coverage`).then(c => { if (active) setPeriod(c.workspace); }).catch(() => { /* The sample invoice falls back to today's date; the lab itself does not need the period. */ }); return () => { active = false; }; }, [ws]);
   const doc = state?.documents.find(d => d.id === selected);
   const correction = state?.correction.filter(c => c.document_id === selected).at(-1);
   const prediction = state?.prediction.filter(p => p.document_id === selected).at(-1);
@@ -206,6 +216,7 @@ function Lab({ ws }: { ws: string }) {
     };
   }
 
+  const sampleDate = period ? periodDay(period, 10) : new Date().toISOString().slice(0, 10);
   function choose(d: Doc) {
     setSelected(d.id);
     const fields = state?.schemas[d.role] || [];
@@ -225,19 +236,43 @@ function Lab({ ws }: { ws: string }) {
     {message && scope === "top" && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="mt-2 text-[13px] leading-relaxed text-ink-dim">Text-based PDF · Up to 10 MB and 20 pages. Scans and photos aren’t supported.</p>
+        <p className="mt-1 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
         {READERS[role] ? <p className="mt-1 text-[12.5px] text-ink-dim">After review and staging: available to {READERS[role]}.</p> : <p className="mt-1 text-[12.5px] text-amber-800">Saved as reference only; no agent uses this document type yet.</p>}
-        <div className="mt-4 grid items-end gap-4 text-[13px] sm:grid-cols-2"><label style={uploadField}>Document type<select style={uploadControl} className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
+        <div className="mt-4 grid items-end gap-4 text-[13px] sm:grid-cols-2"><label style={uploadField}>Document type<AnimatedDropdown className="w-full" options={Object.keys(state.schemas).map(r => ({ value: r, label: displayLabel(r) }))} value={role} onChange={setRole} /></label>
           <div style={uploadField}>
             <span>PDF file</span>
             <div className="flex min-w-0 items-center gap-3">
               <button type="button" className="shrink-0 text-sm font-semibold disabled:opacity-40" style={{ height: 40, background: "#09090b", color: "white", border: "1px solid #09090b", padding: "8px 12px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
+              {/* Not uploaded yet, so the kind is read from the name — the only thing
+                  known about the file before the server has seen it. */}
+              {file && <span className="shrink-0 pr-2"><FileCard formatFile={fileFormat(file.name)} /></span>}
               <span className="min-w-0 truncate text-xs text-ink-dim" title={file?.name} aria-live="polite">{file?.name || "No document selected"}</span>
             </div>
             <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
           </div>
-          <label style={uploadField}>Save as<select style={uploadControl} className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
+          <label style={uploadField}>Save as<AnimatedDropdown className="w-full" placeholder="New document" options={state.documents.filter(d => d.role === role).map(d => ({ value: d.id, label: `Replaces ${d.name} v${d.version}` }))} value={replaces} onChange={setReplaces} /></label>
           <button style={uploadControl} className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
-        <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
+        {/* Nothing to scan yet: a fictional supplier invoice, the same purchase
+            INV-003 of the full-close starter pack records. */}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[13px]">
+          <button className={button} disabled={busy} onClick={() => { setFile(sampleInvoicePdf(sampleDate)); setError(""); setMessage("Sample invoice ready. Choose its kind of document, then upload and read it."); }}>Use a sample invoice (PDF)</button>
+        </div>
+        {/* The card face is drawn from the extension and carries no information
+            the text below it does not also say, so it is aria-hidden and the
+            name, kind and version remain the accessible label. */}
+        <div className="mt-6 border-t border-line pt-5">
+          <h4 className="text-[13px] font-semibold tracking-tight">Documents in this workspace</h4>
+          {state.documents.length === 0
+            ? <p className="mt-2 text-[13px] text-ink-dim">None yet. Choose a document above, or start from the sample invoice.</p>
+            : <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-6">{state.documents.map(d => <li key={d.id}>
+                <button type="button" onClick={() => choose(d)} aria-pressed={d.id === selected} title={d.name}
+                  className={`flex w-28 flex-col items-center gap-2 rounded-md border p-3 text-center transition-colors hover:bg-surface-2 ${d.id === selected ? "border-ink bg-surface-2" : "border-transparent"}`}>
+                  <FileCard formatFile={fileFormat(d.suffix || d.name)} />
+                  <span className="mt-1 w-full truncate text-[12px] font-medium text-ink">{d.name}</span>
+                  <span className="text-[11px] text-ink-dim">{displayLabel(d.role)} · v{d.version}</span>
+                </button>
+              </li>)}</ul>}
+        </div>
       </section>
       {sameKind.length > 1 && <section className="border border-line p-5">
         <h3 className="text-[15px] font-semibold tracking-tight">Combine several into one register</h3>
@@ -270,7 +305,7 @@ function Lab({ ws }: { ws: string }) {
           still check every value against the pages yourself below, which is the same review a
           model&rsquo;s output would need anyway.
         </p>}
-        <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
+        <div className="my-3 flex flex-wrap gap-2"><AnimatedDropdown aria-label="Extraction model" buttonClassName="min-h-11" placeholder={`Active model ${state.active ? `(${state.active.model_id})` : "— none configured"}`} options={availableModels.map(m => ({ value: m.id, label: m.name }))} value={model} onChange={setModel} />
           {/* The local model takes roughly half a minute per document, so this
               one request opts out of the client's short default deadline. At 20s
               the browser gave up on work the model went on to finish, and the

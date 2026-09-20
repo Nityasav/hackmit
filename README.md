@@ -142,6 +142,14 @@ echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > ../web/.env.local
 
 Run the API and UI, then open **Books → New institution**. Enter the institution and review period,
 select its files, assign each file a record type, and use **Preview import → Confirm & commit records**.
+
+With no files of your own, **Start from a sample pack** on Books loads fictional records for a school
+that does not exist: a full month close (12 files), money coming in on its own (4 files), or chart,
+opening balances and ledger (3 files). They are generated in the browser against the workspace's own
+period, so the dates land inside it, and they load into the file chooser — you still preview the import
+and commit it yourself. The books tie; what is left to find is deliberate, and `web/src/lib/starterPacks.ts`
+says which finding each file is there to produce. **Documents & scans** has the same idea for the
+document lab: **Use a sample invoice (PDF)** generates a one-page supplier invoice with a text layer.
 You can add later records through the same workflow and attach committed sources to evidence requests.
 
 The UI automatically connects to `http://localhost:8000`.
@@ -151,26 +159,24 @@ server after changing environment variables. No model key is needed for intake.
 SQLite stores original bytes, staged imports, accepted record revisions, snapshots, local review events
 and agent runs in ignored `api/data/schooltrace.sqlite3`. Set `SCHOOLTRACE_DATA_DIR` to change the local
 data directory. The app is for synthetic/public data on localhost; the reviewer marker is not production
-authentication. Imports stay local until you explicitly click **Run CFO triage**; that action sends source
-spans and normalized records selected by the agent's scoped tools to the configured OpenAI model.
+authentication. Imports stay local until you explicitly start an investigation; that action sends source
+spans and normalized records selected by the agents' scoped tools to the configured OpenAI model.
 
-After committing records, choose **CFO Agent** or **Grants & Compliance agent** in the records panel's
-**Investigation agent** selector on **/**, then run it. Grants reviews supplied terms, payroll service periods and
-award ceilings, with deterministic payroll-subset totals—not a full grant expenditure schedule or
-compliance certification. `GRANTS_MODEL` optionally overrides the default model. Candidate findings link to the
-original lines; suggested evidence can be added to the existing request queue. Runs are saved with
-their snapshot and become visibly stale after new imports. CFO and Grants findings coexist. Choose
-**Internal Auditor agent** after either preparer runs to review up to four exact findings against fresh
-source reads and reperformed calculations. Its accept/reject/needs-evidence verdicts are bounded claim
-reviews—not financial approvals or audit opinions. The UI shows remaining unreviewed findings and
-warns when a preparer rerun makes a review historical. `AUDITOR_MODEL` optionally overrides the model.
-Follow-up tasks are proposals, not automatically running agents. Training
-and the local extraction model remain future work.
+After committing records, go to **Investigation**, set the review scope and start the run. The CFO
+plans, all three specialists investigate the committed snapshot and the Internal Auditor re-reads every
+cited original and reperforms every calculation before a claim may be reported. Grants reviews supplied
+terms, payroll service periods and award ceilings, with deterministic payroll-subset totals—not a full
+grant expenditure schedule or compliance certification. The Auditor's accept/reject/needs-evidence
+verdicts are bounded claim reviews—not financial approvals or audit opinions. Candidate findings link to
+the original lines; suggested evidence can be added to the existing request queue. Runs are saved with
+their snapshot and become visibly stale after new imports. What survives review appears in Findings, on
+the board, in the Reasoning log and — where a claim is substantiated — as a proposal in Approvals.
+Follow-up tasks are proposals, not automatically running agents. Training and the local extraction model
+remain future work.
 
-The same selector's fourth choice, **Five-agent workflow**, runs the CFO, all three specialists and
-the Internal Auditor over the committed snapshot in one go, and links to `/cfo?run=<id>` for the
-plan, the events and the report. What it accepts appears in Findings, on the board, in the Reasoning
-log and — where a claim is substantiated — as a proposal in Approvals.
+The per-agent triage runs (`POST /api/workspaces/{ws}/agent-runs`, with `GRANTS_MODEL` and
+`AUDITOR_MODEL` overriding their models) are still served by the API, but no screen starts one: the
+single-agent selector was removed from Books, and Investigation runs the five-agent workflow.
 
 Single-agent triage uses `db.py`, `ingestion.py` and `agents/cfo.py`; the five-agent workflow uses
 `app/cfo/` with the adapters in `app/integrations/cfo_factory.py`, which register as soon as a model
@@ -239,7 +245,7 @@ performed by importing. Evidence attachment records a scoped resumption event fo
 ## Honesty rules we hold ourselves to
 
 All institutions and transactions in the sandbox are fictional. The MIT public-report view is not one of the
-three current screens; the fixture behind it (`contracts/fixtures/mit.json`) carries MIT's **published** audit
+three current screens; the fixture behind it carries MIT's **published** audit
 reports only, read-only, with page citations. We do not have MIT's ledger and make no claims beyond what those
 reports state. Measured numbers come from the evaluator, never from a slide.
 

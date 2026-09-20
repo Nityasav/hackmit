@@ -664,3 +664,37 @@ def test_a_dollar_amount_normalises_against_the_workspace_currency(client):
     register = next(f for f in batch["files"] if f["name"].endswith(".csv"))
     assert register["preview"][0]["payload"]["amount_cents"] == 320000
     assert not [i for i in batch["issues"] if i["code"] == "invalid_value"], batch["issues"]
+
+
+def test_coverage_names_the_document_each_staged_file_came_from(client):
+    """Files draws a file back to its document from the coverage payload alone.
+
+    Without provenance on the listing it would take one source-detail request
+    per file to learn the same thing, and a screen listing every upload would
+    make that request once per row.
+    """
+    ws = workspace(client)
+    doc = upload(client, ws)
+    reviewed = correction(client, ws, doc)
+    staged = client.post(path(ws) + "/stage", json={"correction_id": reviewed["id"], "include_records": True}).json()
+    batch = ingestion.get_batch(ws, staged["batch_id"])
+    ingestion.commit(ws, batch["id"], ingestion.CommitRequest(expected_version=batch["version"], idempotency_key="files"))
+
+    sources = client.get(f"/api/workspaces/{ws}/coverage").json()["sources"]
+    by_name = {s["name"]: s for s in sources}
+    evidence = by_name["reviewed-evidence.txt"]
+    assert evidence["source_system"] == "reviewed-extraction"
+    # The document's lineage id, not its document id: a replacement keeps the
+    # lineage, so a staged file stays joined to the chain and not to one version.
+    assert evidence["external_id"] == doc["lineage_id"]
+    assert evidence["uploaded_at"]
+    records = by_name["reviewed-records.csv"]
+    assert records["active"] and records["record_count"] >= 1
+    # The file carrying the numbers names its document too. Without this the
+    # evidence text traces back to a page and the figures beside it do not.
+    assert records["external_id"] == doc["lineage_id"]
+    # Every live record is answered for by exactly one file, so the per-file
+    # counts have to add up to the workspace's own total rather than to a number
+    # only this screen believes.
+    total = client.get(f"/api/workspaces/{ws}/updates").json()["total_records"]
+    assert sum(s["record_count"] for s in sources) == total

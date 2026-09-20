@@ -5,6 +5,7 @@ import { displayLabel } from "@/lib/format";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import { Deliverables } from "@/components/investigation/Deliverables";
 import type { SourceDetail } from "@/lib/types";
@@ -155,7 +156,13 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           <div className="mt-4"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a></div>
           <pre className="mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></details>
       </> : <>
-        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="agent">Agent conclusions</option></select></label></div>
+        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <AnimatedDropdown buttonClassName="h-9" value={filter} onChange={setFilter} options={[
+          { value: "attention", label: "Attention + gaps" },
+          { value: "all", label: "All checks" },
+          { value: "pass", label: "Narrow passes" },
+          { value: "gap", label: "Evidence gaps" },
+          { value: "agent", label: "Agent conclusions" },
+        ]} /></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
           {f.origin === "agent" && filtered[i - 1]?.origin !== "agent" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Agent conclusions · candidates until a person decides them</h3>}

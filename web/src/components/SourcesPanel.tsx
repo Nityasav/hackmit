@@ -3,9 +3,13 @@
 import { displayLabel } from "@/lib/format";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import type { IntakeUiProgress } from "@/lib/workflow";
 import { DataRequirements } from "@/components/DataRequirements";
+import { FileUpdates } from "@/components/FileUpdates";
+import { StarterPacks } from "@/components/StarterPacks";
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 
@@ -22,6 +26,8 @@ const ROLES: Record<string, string> = {
   approvals: "Approvals", period_locks: "Period locks", tax_registrations: "Tax registrations",
   contract: "Contracts", policy: "Policies", document: "Other document",
 };
+//: The same role list the three role dropdowns offer, in the order ROLES declares it.
+const ROLE_OPTIONS = Object.entries(ROLES).map(([value, label]) => ({ value, label }));
 const input = "w-full border border-line bg-white px-2.5 py-2 text-xs";
 const button = "border border-line px-3 py-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-40";
 const primary = "bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
@@ -181,6 +187,31 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       {coverage && <DataRequirements ws={ws} coverage={coverage} onSaved={refresh} />}
       <p className="mt-2 text-[11px] text-ink-dim">{coverage?.note}</p>
 
+      <div className="mt-5 border border-line bg-surface-2 p-4">
+        <h3 className="font-semibold">Running the agents</h3>
+        <p className="mt-1 max-w-prose text-xs text-ink-dim">
+          Books is where the records go in. The agents are started from Investigation, so
+          there is one place a paid run can begin rather than two.
+        </p>
+        <Link href="/investigation" className="mt-3 inline-block text-sm font-semibold text-ink underline">
+          Open the investigation &rarr;
+        </Link>
+      </div>
+
+      <FileUpdates key={ws} ws={ws} revision={snapshot?.id} />
+
+      <StarterPacks
+        period={coverage?.workspace.id === ws ? coverage.workspace : null}
+        disabled={busy}
+        onLoad={(loaded) => {
+          setFiles(loaded.map(({ file, role }) => ({ file, options: defaults(role) })));
+          // The chooser holds the browser's own selection, which a pack has not
+          // touched; clearing it stops it contradicting the list below.
+          if (fileInput.current) fileInput.current.value = "";
+          setBatch(null);
+          setMessage(`${loaded.length} sample files staged below. Preview the import to check how they were read.`);
+        }}
+      />
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
         <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
@@ -198,9 +229,8 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           }} />
         {files.map((f, i) => <div key={i} className="mt-2 grid gap-2 border border-line p-2 sm:grid-cols-[1fr_200px_100px]">
           <span className="self-center truncate text-xs">{f.file.name} · {(f.file.size / 1024).toFixed(1)} KB</span>
-          <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
-            {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{r === "document" ? "Detect from CSV columns" : label}</option>)}
-          </select>
+          <AnimatedDropdown aria-label={`Role for ${f.file.name}`} className="w-full" options={ROLE_OPTIONS} value={f.options.role}
+            onChange={(value) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: value as SourceRole } } : x))} />
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
         <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
@@ -232,10 +262,9 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       </div>}
 
       {history.length > 0 && <label className="mt-4 block text-xs">Resume an import
-        <select className={input + " mt-1"} value={batch?.id || ""} disabled={busy} onChange={(e) => { const id = e.target.value; if (id) act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + id))); }}>
-          <option value="">Choose saved import…</option>
-          {history.map((h) => <option key={h.id} value={h.id}>{h.created_at.slice(0, 19)} · {displayLabel(h.status)} · {h.id.slice(-6)}</option>)}
-        </select>
+        <AnimatedDropdown className="mt-1 w-full" placeholder="Choose saved import…" value={batch?.id || ""} disabled={busy}
+          options={history.map((h) => ({ value: h.id, label: `${h.created_at.slice(0, 19)} · ${displayLabel(h.status)} · ${h.id.slice(-6)}` }))}
+          onChange={(id) => { if (id) act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + id))); }} />
       </label>}
 
       {batch && <div id="source-import" className="mt-4 scroll-mt-4 border border-line p-3">
@@ -248,19 +277,19 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <button className={button + " mt-2"} onClick={() => act(() => viewSource(f.id))}>View original</button>
           {batch.status !== "committed" && draft[f.id] && <>
             <div className="my-2 grid gap-2 sm:grid-cols-3">
-              <label className="text-xs">Record type<select className={input} value={draft[f.id].role} onChange={(e) => edit(f.id, { role: e.target.value as SourceRole, mapping: {} })}>{Object.entries(ROLES).map(([role, label]) => <option key={role} value={role}>{label}</option>)}</select></label>
+              <label className="text-xs">Record type<AnimatedDropdown className="w-full" options={ROLE_OPTIONS} value={draft[f.id].role} onChange={(value) => edit(f.id, { role: value as SourceRole, mapping: {} })} /></label>
               <label className="text-xs">Source system<input className={input} value={draft[f.id].source_system} onChange={(e) => edit(f.id, { source_system: e.target.value })} /></label>
               <label className="text-xs">Source version<input className={input} type="number" min={1} value={draft[f.id].source_version} onChange={(e) => edit(f.id, { source_version: Number(e.target.value) })} /></label>
-              <label className="text-xs">Amount units<select className={input} value={draft[f.id].amount_unit} onChange={(e) => edit(f.id, { amount_unit: e.target.value as "major" | "minor" })}><option value="major">Dollars (100.00)</option><option value="minor">Cents (10000)</option></select></label>
+              <label className="text-xs">Amount units<AnimatedDropdown className="w-full" options={[{ value: "major", label: "Dollars (100.00)" }, { value: "minor", label: "Cents (10000)" }]} value={draft[f.id].amount_unit} onChange={(value) => edit(f.id, { amount_unit: value as "major" | "minor" })} /></label>
               <label className="text-xs">Document ID (for revisions)<input className={input} value={draft[f.id].external_id} onChange={(e) => edit(f.id, { external_id: e.target.value })} placeholder="Stable document identifier" /></label>
               <label className="text-xs">Applies to<input className={input} value={draft[f.id].applies_to} onChange={(e) => edit(f.id, { applies_to: e.target.value })} placeholder="Record or award ID" /></label>
               <label className="text-xs">Expected CSV rows<input className={input} type="number" min={0} value={draft[f.id].expected_rows ?? ""} onChange={(e) => edit(f.id, { expected_rows: e.target.value === "" ? null : Number(e.target.value) })} /></label>
               {(["debit", "credit"] as const).map((side) => <label key={side} className="text-xs">Expected {side} total<input className={input} value={draft[f.id][`expected_${side}`] ?? ""} onChange={(e) => edit(f.id, { [`expected_${side}`]: e.target.value || null })} /></label>)}
             </div>
             <div className="grid gap-2 sm:grid-cols-3">{f.required_fields.map((field) => <label key={field} className="text-xs">{field}
-              <select className={input} value={draft[f.id].mapping[field] ?? (f.headers.includes(field) ? field : "")} onChange={(e) => edit(f.id, { mapping: { ...draft[f.id].mapping, [field]: e.target.value } })}>
-                <option value="">Select CSV column…</option>{f.headers.map((h) => <option key={h}>{h}</option>)}
-              </select></label>)}</div>
+              <AnimatedDropdown className="w-full" placeholder="Select CSV column…" options={f.headers.map((h) => ({ value: h, label: h }))}
+                value={draft[f.id].mapping[field] ?? (f.headers.includes(field) ? field : "")}
+                onChange={(value) => edit(f.id, { mapping: { ...draft[f.id].mapping, [field]: value } })} /></label>)}</div>
             <label className="mt-3 flex items-center gap-2 text-xs"><input type="checkbox" checked={draft[f.id].excluded} onChange={(e) => edit(f.id, { excluded: e.target.checked })} />Exclude this file from the import</label>
             {draft[f.id].excluded && <input aria-label="Exclusion reason" className={input + " mt-1"} placeholder="Reason required" value={draft[f.id].exclusion_reason} onChange={(e) => edit(f.id, { exclusion_reason: e.target.value })} />}
           </>}
@@ -343,19 +372,20 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
             act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
             <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
-            <select name="role" defaultValue="service" aria-label="Requested evidence role" className={input}>{Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}</select>
+            <AnimatedDropdown name="role" defaultValue="service" aria-label="Requested evidence role" className="w-full" options={ROLE_OPTIONS} />
             <button disabled={busy} className={button}>Add request</button>
           </form>
           {coverage?.requests.map((r) => <div key={r.id} className="mt-3 border border-line p-3">
             <b>{r.title}</b><span className="ml-2 text-xs text-ink-dim">{displayLabel(r.status)}</span>
-            <select aria-label={`Attach evidence for ${r.title}`} disabled={busy} className={input + " mt-2"} value="" onChange={(e) => {
-              const id = e.target.value; if (!id) return;
-              act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests/" + r.id + "/responses", {
-                method: "POST", body: { source_id: id, expected_version: r.version },
-              })); setMessage("Evidence linked. A resumption event is saved for the future agent runtime; review is still required."); });
-            }}><option value="">Attach a committed {ROLES[r.role].toLowerCase()} source…</option>
-              {coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <AnimatedDropdown aria-label={`Attach evidence for ${r.title}`} disabled={busy} className="mt-2 w-full" value=""
+              placeholder={`Attach a committed ${ROLES[r.role].toLowerCase()} source…`}
+              options={coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => ({ value: s.id, label: s.name }))}
+              onChange={(id) => {
+                if (!id) return;
+                act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests/" + r.id + "/responses", {
+                  method: "POST", body: { source_id: id, expected_version: r.version },
+                })); setMessage("Evidence linked. A resumption event is saved for the future agent runtime; review is still required."); });
+              }} />
             {r.source_id && <button className="mt-1 text-xs text-ink underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
           </div>)}
         </details>
@@ -367,9 +397,12 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
         act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
         <label style={fieldLayout} className="text-xs">Institution name<input style={fieldControl} name="name" required maxLength={120} placeholder="Institution name" className={input} /></label>
-        <label style={fieldLayout} className="text-xs">Entity type<select style={fieldControl} name="entity_type" className={input}>{["company", "subsidiary", "group"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
-        <label style={fieldLayout} className="text-xs">Data origin<select style={fieldControl} name="kind" className={input}><option value="synthetic">Synthetic records</option><option value="public">Public documents only</option></select></label>
-        <label style={fieldLayout} className="text-xs">Currency<select style={fieldControl} name="currency" className={input}>{["USD", "CAD", "EUR", "GBP"].map((v) => <option key={v} value={v}>{displayLabel(v)}</option>)}</select></label>
+        {/* A native select submits its first option when nothing is chosen, so each of
+            these carries that first option as `defaultValue` and the form posts what it
+            always posted. */}
+        <label style={fieldLayout} className="text-xs">Entity type<AnimatedDropdown name="entity_type" defaultValue="company" className="w-full" options={["company", "subsidiary", "group"].map((v) => ({ value: v, label: displayLabel(v) }))} /></label>
+        <label style={fieldLayout} className="text-xs">Data origin<AnimatedDropdown name="kind" defaultValue="synthetic" className="w-full" options={[{ value: "synthetic", label: "Synthetic records" }, { value: "public", label: "Public documents only" }]} /></label>
+        <label style={fieldLayout} className="text-xs">Currency<AnimatedDropdown name="currency" defaultValue="USD" className="w-full" options={["USD", "CAD", "EUR", "GBP"].map((v) => ({ value: v, label: displayLabel(v) }))} /></label>
         <label style={fieldLayout} className="text-xs">Period start<input style={fieldControl} type="date" name="start" required defaultValue="2026-09-01" className={input} /></label>
         <label style={fieldLayout} className="text-xs">Period end<input style={fieldControl} type="date" name="end" required defaultValue="2026-09-30" className={input} /></label>
         <label style={fieldLayout} className="text-xs">Jurisdiction<input style={fieldControl} name="jurisdiction" required placeholder="Province, state or region" className={input} /></label>

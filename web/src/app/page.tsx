@@ -24,11 +24,14 @@ export default function BooksPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-10">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-dim">Sherlock</p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
+        <h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-5xl">
           Upload your records.
           <br />
-          <span className="text-ink-dim">Start a review.</span>
+          {/* Playfair italic: the high-contrast serif carries the second line,
+              so the pair reads as one sentence in two voices. */}
+          <span className="font-accent text-[1.12em] font-normal italic tracking-[-0.01em] text-ink">
+            Start a review.
+          </span>
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-dim">
           Upload your records, check the import, then start an investigation.

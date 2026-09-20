@@ -18,12 +18,7 @@ export function markReturningVisitor(): void {
   document.cookie = `${RETURNING_COOKIE}=1; Path=/; Max-Age=${ONE_YEAR_SECONDS}; SameSite=Lax${secure}`;
 }
 
-export function clearReturningVisitor(): void {
-  if (typeof document === "undefined") return;
-  document.cookie = `${RETURNING_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
-}
-
-export function hasReturningCookie(): boolean {
+function hasReturningCookie(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split("; ").some((c) => c.startsWith(`${RETURNING_COOKIE}=`));
 }

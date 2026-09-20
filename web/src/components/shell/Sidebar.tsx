@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, FileText, LogOut, type LucideIcon, Search } from "lucide-react";
+import { BookOpen, FileText, Files, LogOut, type LucideIcon, Search } from "lucide-react";
 import { Sidebar, SidebarBody, useSidebar } from "@/components/ui/sidebar";
 import { SherlockMark } from "@/components/SherlockMark";
 import { endActivitySession } from "@/lib/activity";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 const ICON: Record<NavId, LucideIcon> = {
   books: BookOpen,
+  files: Files,
   investigation: Search,
   briefing: FileText,
 };
@@ -175,7 +176,7 @@ function NavIcon({ id, active }: { id: NavId; active: boolean }) {
   return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-ink" : "text-ink-dim")} />;
 }
 
-export const Logo = () => {
+const Logo = () => {
   return (
     <Link
       href="/"
@@ -193,7 +194,7 @@ export const Logo = () => {
   );
 };
 
-export const LogoIcon = () => {
+const LogoIcon = () => {
   return (
     <Link
       href="/"

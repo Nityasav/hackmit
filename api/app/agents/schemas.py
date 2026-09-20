@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 #: Digits, currency symbols and percent signs. Dates are written as words in prose, or
 #: cited through evidence, so excluding digits entirely costs nothing and removes the
@@ -124,22 +124,6 @@ class APResult(AgentResult):
     matched_receipt: str = Field(default="", max_length=100)
 
 
-class ReviewVerdict(Contract):
-    """An independent reviewer's answer. Separate from `AgentResult` on purpose: a
-    reviewer does not restate the work, it accepts, rejects, or asks for more."""
-
-    verdict: Literal["accept", "reject", "needs_evidence"]
-    rationale: str = Field(min_length=1, max_length=1500)
-    required_action: str = Field(default="", max_length=800)
-
-    @field_validator("rationale", "required_action")
-    @classmethod
-    def no_figures_in_prose(cls, value: str) -> str:
-        if _FIGURE.search(value):
-            raise ValueError("Prose must not contain figures; cite the re-performed calculation.")
-        return value
-
-
 class Delegation(Contract):
     """One unit of work an orchestrator or worker hands down."""
 
@@ -149,10 +133,3 @@ class Delegation(Contract):
     event_ids: list[str] = Field(default_factory=list, max_length=50)
     record_keys: list[str] = Field(default_factory=list, max_length=50)
 
-
-class Usage(Contract):
-    """What one model call actually cost. Tokens are reported; cents are computed."""
-
-    input_tokens: StrictInt = 0
-    output_tokens: StrictInt = 0
-    cost_cents: StrictInt = 0
