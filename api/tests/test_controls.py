@@ -175,22 +175,44 @@ def test_a_second_delivery_is_not_a_duplicate_invoice(tmp_path, monkeypatch, dir
     assert not (lookalike & flagged), "same vendor and amount, different number and date"
 
 
+#: Which control test each planted family is scored against. A lookalike built for the
+#: duplicate test must not be flagged *by that test*; another check finding something
+#: real about the same record is a true positive of that check, not a false positive of
+#: this one, and scoring that conflated them would punish a correct finding.
+FAMILY_PREFIX = {
+    "duplicate_invoice": "ctl-duplicate-invoice",
+    "duplicate_vendor": "ctl-duplicate-vendor",
+    "segregation_of_duties": "ctl-self-approval",
+    "post_close": "ctl-post-close",
+    "round_number": "ctl-round-payment",
+}
+
+
+def _flagged_by_family(findings, family: str) -> set[str]:
+    prefix = FAMILY_PREFIX[family]
+    return {k for f in findings
+            if f["status"] == "attention" and f["id"].startswith(prefix)
+            for k in f["record_keys"]}
+
+
 def test_precision_and_recall_are_scored_against_the_truth_file(tmp_path, monkeypatch, dirty_pack):
     """One number each, so a regression in either direction is visible."""
     findings = _findings(tmp_path, monkeypatch, dirty_pack)
-    flagged = {k for f in findings if f["status"] == "attention" for k in f["record_keys"]}
-
     truth = _truth(dirty_pack)
-    should_fire = {k for t in truth if t["expected"] == "attention" for k in t["record_keys"]}
-    should_not = {k for t in truth if t["expected"] == "clear" for k in t["record_keys"]}
 
-    false_positives = should_not & flagged
-    assert not false_positives, f"lookalikes wrongly flagged: {sorted(false_positives)}"
+    false_positives, caught, planted = [], 0, 0
+    for item in truth:
+        hit = bool(set(item["record_keys"]) & _flagged_by_family(findings, item["family"]))
+        if item["expected"] == "clear":
+            if hit:
+                false_positives.append(item["issue_id"])
+        else:
+            planted += 1
+            caught += int(hit)
 
-    # Recall is reported rather than asserted at 100%: one planted defect is known to be
-    # beyond the current tests, and the test below names it rather than hiding it here.
-    caught = should_fire & flagged
-    assert len(caught) >= 4, f"only caught {sorted(caught)} of {sorted(should_fire)}"
+    assert not false_positives, f"lookalikes wrongly flagged: {false_positives}"
+
+    assert caught == planted, f"caught {caught} of {planted} planted defect(s)"
 
 
 def test_the_defect_the_tests_cannot_yet_see_is_named(tmp_path, monkeypatch, dirty_pack):

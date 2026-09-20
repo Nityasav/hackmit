@@ -554,6 +554,15 @@ def plant_defects(books: Books, rng, period, start, end, vendors, customers, emp
     """
     truth: list[dict] = []
 
+    def approve(invoice, actor):
+        """Give a planted invoice the approval a real one would carry."""
+        counter["n"] += 1
+        books.add("approvals", {
+            "record_id": f"AP-P{counter['n']:05d}", "actor": actor,
+            "authority": "Delegated authority", "action": "approve_invoice",
+            "target_type": "vendor_invoice", "target_id": invoice["record_id"],
+            "approved_at": invoice["invoice_date"], "event_ref": invoice["event_ref"]})
+
     def planted(issue_id, family, expectation, record_keys, note):
         truth.append({"issue_id": issue_id, "family": family, "period": period,
                       "expected": expectation, "record_keys": record_keys, "note": note})
@@ -582,6 +591,7 @@ def plant_defects(books: Books, rng, period, start, end, vendors, customers, emp
     twin["invoice_number"] = original["invoice_number"] + "-A"
     twin["event_ref"] = original["event_ref"]
     books.add("vendor_invoices", twin)
+    approve(twin, "Pia Moreau")
     books.post(date.fromisoformat(original["invoice_date"]), original["event_ref"],
                f"Vendor bill {twin['invoice_number']}",
                [("6100", cents(original["amount"]), 0), (AP, 0, cents(original["amount"]))])
@@ -595,6 +605,7 @@ def plant_defects(books: Books, rng, period, start, end, vendors, customers, emp
     exact = dict(original)
     exact["record_id"] = f"VI-D{counter['n']}"
     books.add("vendor_invoices", exact)
+    approve(exact, "Rae Nakamura")
     books.post(date.fromisoformat(original["invoice_date"]), original["event_ref"],
                f"Vendor bill {exact['invoice_number']} (second copy)",
                [("6100", cents(original["amount"]), 0), (AP, 0, cents(original["amount"]))])
@@ -614,6 +625,7 @@ def plant_defects(books: Books, rng, period, start, end, vendors, customers, emp
     separate["due_date"] = (date.fromisoformat(separate["invoice_date"])
                             + timedelta(days=30)).isoformat()
     books.add("vendor_invoices", separate)
+    approve(separate, "Tove Okafor")
     books.post(date.fromisoformat(separate["invoice_date"]), separate["event_ref"],
                f"Vendor bill {separate['invoice_number']}",
                [("6100", cents(separate["amount"]), 0), (AP, 0, cents(separate["amount"]))])
