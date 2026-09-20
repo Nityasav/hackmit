@@ -276,3 +276,46 @@ def test_run_auditor_agent_cannot_reach_ap_write_tools():
     second_request = fake.responses.calls[1]
     assert "unknown tool" in second_request["input"][-1]["output"]
     assert result.tool_calls_used == 0
+
+
+def test_run_ap_agent_extra_tools_are_reachable_without_changing_default_behavior():
+    """extra_tools layers new tools onto one run without touching the AP
+    agent's normal identity/toolkit (used for the AR reconciliation task)."""
+
+    def double(n, **_ignored):
+        return {"doubled": n * 2}
+
+    extra_tools = {"double": double}
+    extra_tool_specs = [
+        {
+            "type": "function",
+            "name": "double",
+            "description": "Doubles a number.",
+            "parameters": {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]},
+        }
+    ]
+
+    fake = FakeClient(
+        [
+            FakeResponse(output=[_function_call("double", {"n": 21}, "call_1")]),
+            FakeResponse(output=[], output_text="Done."),
+        ]
+    )
+
+    result = run_ap_agent(
+        "Use the double tool",
+        client=fake,
+        extra_tools=extra_tools,
+        extra_tool_specs=extra_tool_specs,
+    )
+
+    assert result.tool_calls_used == 1
+    second_request = fake.responses.calls[1]
+    payload = json.loads(second_request["input"][-1]["output"])
+    assert payload["doubled"] == 42
+
+
+def test_run_ap_agent_without_extra_tools_is_unaffected():
+    fake = FakeClient([FakeResponse(output=[], output_text="Normal answer.")])
+    result = run_ap_agent("A normal question", client=fake)
+    assert result.answer == "Normal answer."

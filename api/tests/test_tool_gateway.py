@@ -72,6 +72,24 @@ def test_invalid_arguments_return_error_and_still_spend_budget():
     assert gateway.used == 1
 
 
+def test_filesystem_error_is_correctable_not_a_crash():
+    """Regression: record_decision's store writes raise a real OSError when
+    `workspace` is an arbitrary filesystem path rather than a SchoolTrace
+    bundle id (e.g. the AR reconciliation task's workspace directory). A
+    tool that touches the filesystem must degrade to an {"error": ...}
+    payload like every other tool failure, not crash the whole run — and,
+    since this can happen inside a nested specialist run started via
+    assign_task, it would otherwise crash the CFO's run too."""
+
+    def touches_disk(**_ignored):
+        raise FileNotFoundError("no such bundle for this workspace")
+
+    gateway = ToolGateway(registry={"touches_disk": touches_disk}, budget=3)
+    result = gateway.call("touches_disk")
+    assert "error" in result
+    assert gateway.used == 1
+
+
 def test_budget_exhausts_and_refuses_further_calls():
     gateway = ToolGateway(budget=2)
     gateway.call("get_vendor", vendor_id="V-08")

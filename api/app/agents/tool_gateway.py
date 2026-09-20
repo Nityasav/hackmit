@@ -453,6 +453,15 @@ class ToolGateway:
             # UnknownTool is also a KeyError but is raised above, outside this
             # try block, so it never reaches here.
             result = {"error": f"{tool_name}: no such record {exc}"}
+        except OSError as exc:
+            # A tool touching the filesystem (record_decision's store writes,
+            # or a document-reading tool given a bad path) hit a missing file
+            # or bad path — e.g. `workspace` here is a real directory for an
+            # extra_tools task, not a SchoolTrace bundle id, so store.append_
+            # decision has nothing to write into. Degrade, don't crash a run
+            # that may be nested inside a caller (assign_task -> CFO) with no
+            # other way to see this than an unhandled exception.
+            result = {"error": f"{tool_name}: {exc}"}
 
         self.used += 1
         serialized = _serialize(result)

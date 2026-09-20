@@ -211,16 +211,29 @@ def run_ap_agent(
     max_turns: int = MAX_TURNS,
     client: Any = None,
     task_id: str | None = None,
+    extra_tools: dict[str, Callable[..., Any]] | None = None,
+    extra_tool_specs: list[dict[str, Any]] | None = None,
 ) -> AgentRunResult:
     """Run the AP & Payments agent on one question, end to end. Pass task_id
     (already created via store.create_task, typically by assign_task) to keep
-    that Task's board state current as the run progresses."""
+    that Task's board state current as the run progresses.
+
+    extra_tools/extra_tool_specs layer additional tools onto this one run
+    without changing the AP agent's default identity or toolkit — e.g.
+    ar_tools.AR_READ_TOOLS for a one-off AR reconciliation task
+    (ar_reconciliation.run_ar_reconciliation). `workspace` for such a task is
+    a real filesystem path, not a SchoolTrace bundle id; record_decision's
+    store writes degrade gracefully (see ToolGateway.call's OSError handling)
+    since there's no bundle to write into.
+    """
+    registry = {**TOOL_REGISTRY, **extra_tools} if extra_tools else TOOL_REGISTRY
+    specs = [*TOOL_SPECS, *(extra_tool_specs or []), RECORD_DECISION_SPEC]
     return _run_agent(
         question,
         agent_id="ap",
         system_prompt=AP_SYSTEM_PROMPT,
-        tool_specs=[*TOOL_SPECS, RECORD_DECISION_SPEC],
-        base_registry=TOOL_REGISTRY,
+        tool_specs=specs,
+        base_registry=registry,
         workspace=workspace,
         budget=budget,
         max_turns=max_turns,

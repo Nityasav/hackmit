@@ -11,13 +11,14 @@ dependencies = [
     "openai>=2.0",
     "jsonschema>=4.23",
     "python-dotenv>=1.0",
+    "pypdf>=4.0",
 ]
 
 [project.optional-dependencies]
 cfo = ["openai"]
 
 [dependency-groups]
-dev = ["pytest>=8.3", "httpx>=0.28"]
+dev = ["pytest>=8.3", "httpx>=0.28", "reportlab>=4.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
