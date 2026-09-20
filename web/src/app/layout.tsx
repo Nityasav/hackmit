@@ -3,6 +3,7 @@ import { JetBrains_Mono, Playfair_Display, Poppins, Raleway } from "next/font/go
 import { DataProvider } from "@/lib/data";
 import { AppSidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 // Raleway carries the titles and the interface text.
@@ -19,19 +20,30 @@ export const metadata: Metadata = {
   description: "An Office of the CFO for schools, run by AI agents.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <html lang="en" className={`${raleway.variable} ${poppins.variable} ${playfair.variable} ${jetbrains.variable}`}>
       <body className="font-sans text-[14px] leading-snug antialiased">
-        <DataProvider>
-          <div className="flex h-screen flex-col overflow-hidden md:flex-row">
-            <AppSidebar />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Topbar />
-              <main className="relative flex-1 overflow-auto px-6 py-6">{children}</main>
+        {/* Signed out, the only reachable page is the login screen, and it gets
+            the window to itself rather than being framed by the dashboard. */}
+        {user ? (
+          <DataProvider>
+            <div className="flex h-screen flex-col overflow-hidden md:flex-row">
+              <AppSidebar userEmail={user.email ?? ""} />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <Topbar />
+                <main className="relative flex-1 overflow-auto px-6 py-6">{children}</main>
+              </div>
             </div>
-          </div>
-        </DataProvider>
+          </DataProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

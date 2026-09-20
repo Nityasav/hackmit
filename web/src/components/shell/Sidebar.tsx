@@ -10,6 +10,7 @@ import {
   FileSearch,
   FileText,
   LayoutDashboard,
+  LogOut,
   type LucideIcon,
   ScrollText,
   SquareKanban,
@@ -33,7 +34,7 @@ const ICON: Record<TabId, LucideIcon> = {
   learning: Brain,
 };
 
-export function AppSidebar() {
+export function AppSidebar({ userEmail }: { userEmail: string }) {
   const [open, setOpen] = useState(false);
 
   // Keeps `open` true only while the cursor is actually over the rail. The component's
@@ -64,13 +65,13 @@ export function AppSidebar() {
   return (
     <Sidebar open={open} setOpen={setOpen}>
       <SidebarBody data-sidebar-rail className="justify-between gap-10">
-        <SidebarContent />
+        <SidebarContent userEmail={userEmail} />
       </SidebarBody>
     </Sidebar>
   );
 }
 
-function SidebarContent() {
+function SidebarContent({ userEmail }: { userEmail: string }) {
   const { open } = useSidebar();
   const { bundle, ws, setWs, intakeWorkspaces } = useData();
   const pathname = usePathname();
@@ -153,7 +154,7 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-col gap-1">
         <SidebarLink
           link={{
             label: `${bundle.agents.length} agents · ${bundle.workspace.model}`,
@@ -161,6 +162,33 @@ function SidebarContent() {
             icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
           }}
         />
+
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            title={`Sign out ${userEmail}`}
+            className={cn(
+              "group/sidebar flex w-full cursor-pointer items-center gap-2 py-2 transition-colors hover:bg-surface-3",
+              open ? "justify-start px-2" : "justify-center px-0",
+            )}
+          >
+            <LogOut className="h-7 w-7 flex-shrink-0 p-1 text-ink-dim" />
+            <motion.span
+              animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
+              className="min-w-0 truncate text-sm text-ink-dim transition duration-150 group-hover/sidebar:translate-x-1"
+            >
+              Sign out
+            </motion.span>
+          </button>
+        </form>
+
+        <motion.div
+          animate={{ display: open ? "block" : "none", opacity: open ? 1 : 0 }}
+          className="truncate px-2 pb-1 font-accent text-[12px] text-ink-faint"
+          title={userEmail}
+        >
+          {userEmail}
+        </motion.div>
       </div>
     </>
   );
