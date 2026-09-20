@@ -3,7 +3,7 @@ import json
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from . import db, ingestion
@@ -151,6 +151,11 @@ def review(ws: str, request: Request):
         # Agent conclusions now live in `agent_decisions`, written by the graph.
         decisions = [dict(row) for row in c.execute(
             "SELECT * FROM agent_decisions WHERE ws=? ORDER BY rowid DESC LIMIT 50", (ws,))]
+        decision_snapshots = {p["decision_id"]: p["snapshot_id"] for row in c.execute(
+            "SELECT payload FROM events WHERE ws=? AND kind='agent.decision_snapshot'", (ws,))
+            for p in [json.loads(row[0])]}
+        snapshots = [dict(row) for row in c.execute(
+            "SELECT id,created_at FROM snapshots WHERE ws=? ORDER BY revision DESC", (ws,))]
     findings = []
     if scans:
         findings.extend(dict(item, snapshot_id=scans[0]["snapshot_id"],
@@ -162,10 +167,20 @@ def review(ws: str, request: Request):
     # threshold that escalated it is the workspace's and not the agent's.
     for decision in decisions:
         reviewed = decision["reviewer"]
+        disposition = decision["action"].rsplit(":", 1)[-1].strip()
+        # Acknowledging a conclusion does not turn an exception or missing evidence
+        # into a pass. Preserve the recorded disposition after human follow-up.
+        status = ("gap" if disposition == "insufficient_evidence" else "attention"
+                  if decision["escalated"] or disposition in {"exception", "propose"}
+                  or decision["review_verdict"] in {"rejected", "needs_evidence"} else "pass")
+        # Old decisions lack an explicit snapshot. Infer their historical period, never
+        # relabel all old conclusions as if they had checked today's records.
+        decision_snapshot = decision_snapshots.get(decision["id"]) or next(
+            (s["id"] for s in snapshots if s["created_at"] <= decision["created_at"]), None)
         findings.append(dict(
             id=decision["id"], title=decision["action"], role=decision["agent"],
             role_label=role_label(decision["agent"]),
-            status="attention" if decision["escalated"] else "pass",
+            status=status,
             explanation=decision["summary"], amount_cents=None,
             action=decision["why"] or "Review the cited evidence.",
             origin="agent",
@@ -176,7 +191,7 @@ def review(ws: str, request: Request):
             evidence=[dict(source_id=e.get("source_id", ""), line=e.get("line") or 1)
                       for e in json.loads(decision["evidence"] or "[]")],
             confidence=decision["confidence"],
-            snapshot_id=snapshot, stale=False))
+            snapshot_id=decision_snapshot, stale=decision_snapshot != snapshot))
     # What the agents have done in this workspace, counted from the decisions they
     # wrote. Deliberately not a run status: a conclusion outlives the run that reached
     # it, and "the last run finished" is not a statement about the books.
@@ -197,6 +212,14 @@ def review(ws: str, request: Request):
     return dict(workspace=config, snapshot_id=snapshot, scan=scans[0] if scans else None,
                 live=live, live_stale=False,
                 findings=findings, changes=changes, history=history, limitations=LIMITATIONS)
+
+
+@router.get("/workspaces/{ws}/review/report.pdf")
+def pdf_report(ws: str, request: Request):
+    from .briefing_pdf import render
+    return Response(render(review(ws, request)), media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="sherlock-financial-review.pdf"',
+                             "Cache-Control": "no-store"})
 
 
 def markdown(view):

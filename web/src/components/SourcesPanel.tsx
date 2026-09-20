@@ -183,7 +183,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
 
       <div id="source-records" className="mt-5 scroll-mt-4 border-t border-line pt-4">
         <h3 className="font-semibold">1. Add records</h3>
-        <p className="my-2 text-xs text-ink-dim">CSV only · 20 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. A document — an invoice, a policy, a contract — goes through <a href="#source-documents" className="underline">Add a document</a> as a PDF instead. Upload only records you are authorized to process.</p>
+        <p className="my-2 text-xs text-ink-dim">CSV only · 30 files per import · 10 MB each / 50 MB total. Use ISO dates and exact amounts. Upload only records you are authorized to process.</p>
         <div className="my-3 flex flex-wrap items-center gap-3">
           <button type="button" className={primary} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose files</button>
           <span className="text-xs text-ink-dim" aria-live="polite">{files.length ? `${files.length} files selected` : "No files selected"}</span>
@@ -204,7 +204,7 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
           <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
         <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
-          if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
+          if (files.length > 30 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
           const form = new FormData();
           files.forEach((f) => form.append("files", f.file));
           form.append("metadata", JSON.stringify(files.map((f) => ({ ...f.options, auto_detect: f.options.role === "document" }))));
@@ -334,9 +334,19 @@ export function SourcesPanel({ onProgressChange }: { onProgressChange?: (progres
       <div className="mt-5 space-y-3">
         <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Committed sources ({coverage?.sources.length || 0})</summary>
           {!coverage?.sources.length && <p className="mt-2 text-xs text-ink-dim">No committed sources yet.</p>}
-          {coverage?.sources.map((s) => <button key={s.id} className="mt-2 flex w-full justify-between gap-2 border border-line p-2 text-left text-xs hover:bg-surface-2" onClick={() => act(() => viewSource(s.id))}>
-            <span>{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
-          </button>)}
+          {coverage?.sources.map((s) => <div key={s.id} className="mt-2 flex items-center gap-3 border border-line p-3 text-xs">
+            <button className="flex min-w-0 flex-1 justify-between gap-2 text-left" onClick={() => act(() => viewSource(s.id))}>
+              <span className="break-all">{s.name}<small className="block text-ink-faint">{ROLES[s.role]}</small></span><span>{s.active ? "Active" : "Historical / duplicate"} ↗</span>
+            </button>
+            {s.active && <button disabled={busy} className="border border-red-200 px-3 py-2 text-red-800 disabled:opacity-40" onClick={() => {
+              if (!window.confirm(`Remove "${s.name}" from active books? Coverage will update and earlier results may become outdated. The original file and history are retained.`)) return;
+              void act(async () => {
+                await intakeApi(base + "/sources/" + encodeURIComponent(s.id), { method: "DELETE",
+                  body: { expected_revision: coverage.workspace.revision, confirmation: s.name } });
+                await Promise.all([refresh(), refreshBundle()]);
+              });
+            }}>Remove</button>}
+          </div>)}
         </details>
         <details className="border border-line p-3"><summary className="cursor-pointer font-semibold">Evidence requests ({coverage?.requests.length || 0})</summary>
           <p className="my-2 text-[11px] text-ink-dim">Request missing evidence and link supporting files.</p>

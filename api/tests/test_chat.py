@@ -27,6 +27,7 @@ from tests.conftest import HEADERS, SAMPLE_FILES
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    _mock_conversation(monkeypatch)
     monkeypatch.setenv("SCHOOLTRACE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("CFO_DB_PATH", str(tmp_path / "cfo.db"))
     monkeypatch.delenv("SCHOOLTRACE_USERS", raising=False)
@@ -63,6 +64,7 @@ def _scripted(monkeypatch, disposition="clear"):
     namespace. Patching the module it was defined in leaves the package's copy alone and
     the test then exercises nothing it thinks it is exercising.
     """
+    _mock_conversation(monkeypatch)
     import app.graph as graph_package
     from app.graph import build as build_module
     from tests.test_graph import _clear_model
@@ -82,6 +84,33 @@ def _scripted(monkeypatch, disposition="clear"):
     monkeypatch.setattr(graph_package, "run_investigation", run)
     monkeypatch.setattr(graph_package, "resume_investigation", again)
     return model
+
+
+def _mock_conversation(monkeypatch):
+    from app.agents import chat
+    from app.agents.cfo_conversation import CFOResponse
+    from app.agents.registry import children
+    from app.graph.build import _plan_node
+
+    async def scripted(ws, message, thread_id, meter):
+        plan = await _plan_node({"objective": message})
+        ids = plan["selected_agents"] or [s.id for worker in plan["plan"] for s in children(worker)]
+        return CFOResponse(mode="run_agents", text="Checking the requested books.", agent_ids=ids,
+                           objective=message, source_decision_ids=[], title="Financial review"), {}
+    monkeypatch.setattr(chat, "converse", scripted)
+
+
+def test_full_review_routes_all_domains_and_records_scan(client, ws, monkeypatch):
+    _scripted(monkeypatch)
+    result = client.post(f"/api/workspaces/{ws}/chat", json={
+        "message": "Find issues in this period.", "full_review": True})
+    assert result.status_code == 201, result.text
+    assert set(result.json()["run"]["plan"]) == {"A", "B", "C", "D"}
+    with db.connect() as connection:
+        assert connection.execute("SELECT count(*) FROM review_scans WHERE ws=?", (ws,)).fetchone()[0] == 1
+    activity = client.get(f"/api/workspaces/{ws}/agents/activity", params={"thread_id": result.json()["thread_id"]})
+    assert activity.status_code == 200
+    assert activity.json()["events"]
 
 
 def _insufficient():

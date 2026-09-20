@@ -5,6 +5,8 @@ import { useEffect } from "react";
 import { AGENT_NAME, AgentAvatar, Pill, ProgressBar, Pulse } from "@/components/ui";
 import { duration, elapsedSeconds } from "@/lib/format";
 import type { Column, Task } from "@/lib/types";
+import { useData } from "@/lib/data";
+import { TaskDeliverable } from "./TaskDeliverable";
 
 const COLUMN_LABEL: Record<Column, string> = {
   queued: "Queued",
@@ -28,6 +30,7 @@ function startedAtLabel(startedAt: string | null): string | null {
  * line of it is a field the run emitted.
  */
 export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: number | null; onClose: () => void }) {
+  const { ws } = useData();
   useEffect(() => {
     if (!task) return;
     const onKey = (event: KeyboardEvent) => {
@@ -51,7 +54,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
         role="dialog"
         aria-modal="true"
         aria-label={`${task.id}: ${task.title}`}
-        className="fixed inset-y-0 right-0 z-40 flex w-[440px] max-w-[92vw] animate-slide-in flex-col border-l border-line bg-surface shadow-[-12px_0_30px_rgb(9_9_11_/_0.14)]"
+        className="fixed inset-y-0 right-0 z-40 flex w-[680px] max-w-[96vw] animate-slide-in flex-col border-l border-line bg-surface shadow-[-12px_0_30px_rgb(9_9_11_/_0.14)]"
       >
         <div className="border-b border-line px-4 py-3.5">
           <button
@@ -72,7 +75,7 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
               {COLUMN_LABEL[task.column]}
             </Pill>
           </div>
-          <p className="mt-1 font-accent text-[13px] text-ink-dim">Run {task.workflow} · {task.id}</p>
+          <p className="mt-1 break-all text-xs text-ink-dim">Run {task.workflow}</p>
 
           <h3 className="my-2 text-[17px] font-semibold leading-snug tracking-tight">{task.title}</h3>
 
@@ -99,6 +102,8 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
         </div>
 
         <div className="flex-1 overflow-auto px-4 py-3.5">
+          {task.id.startsWith("task-decision-") && <TaskDeliverable key={`${ws}-${task.id}`} ws={ws} decision={task.id.slice(5)} />}
+          <details><summary className="cursor-pointer text-sm font-semibold">Task execution details</summary>
           {task.steps.length > 0 && (
             <>
               <Heading>Steps</Heading>
@@ -140,10 +145,11 @@ export function TaskDrawer({ task, now, onClose }: { task: Task | null; now: num
 
           {task.rationale && (
             <>
-              <Heading className="mt-5">Why the coordinator planned it this way</Heading>
+              <Heading className="mt-5">Recorded rationale</Heading>
               <p className="border border-line bg-surface-2 px-3 py-2.5 text-[13.5px] leading-relaxed">{task.rationale}</p>
             </>
           )}
+          </details>
         </div>
       </aside>
     </>

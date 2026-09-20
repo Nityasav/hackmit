@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, intakeApi } from "@/lib/api";
+import { api, ApiError, intakeApi } from "@/lib/api";
 import { Button, Pill } from "@/components/ui";
 import type { ChatReply, ChatTurn, Escalation } from "@/lib/types";
+import { RunActivity } from "./RunActivity";
+import { AuditDeliverable } from "./AuditDeliverable";
+import { TaskDeliverable } from "./TaskDeliverable";
 
 /**
  * The orchestrator, as a conversation.
@@ -34,6 +37,8 @@ export function Orchestrator({ ws }: { ws: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deciding, setDeciding] = useState("");
+  const [activeThread, setActiveThread] = useState("");
+  const [confirmAudit, setConfirmAudit] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -58,17 +63,29 @@ export function Orchestrator({ ws }: { ws: string }) {
   }, [turns.length, busy]);
 
   const thread = turns.length ? turns[turns.length - 1].thread_id : "";
+  const hasUnfinishedRun = turns.some(t => t.status === "running" || t.status === "waiting_on_you");
+  useEffect(() => {
+    if (!hasUnfinishedRun || busy) return;
+    const timer = setInterval(() => { void load().catch(() => undefined); }, 3000);
+    return () => clearInterval(timer);
+  }, [hasUnfinishedRun, busy, load]);
+  const auditRequest = [...turns].reverse().find(t => t.role === "person" && (t.body.full_review || t.body.text.startsWith("Review all domains:")));
+  const auditAnswer = auditRequest && [...turns].reverse().find(t => t.role === "orchestrator" && t.thread_id === auditRequest.thread_id);
 
-  async function send() {
-    const message = draft.trim();
+  async function send(fullReview = false) {
+    const message = fullReview ? "Run a full financial review of these books and identify supported issues." : draft.trim();
     if (!message || busy) return;
     setBusy(true);
     setError("");
     setDraft("");
+    setConfirmAudit(false);
+    const runThread = crypto.randomUUID();
+    setActiveThread(runThread);
     try {
       await intakeApi(`/api/workspaces/${ws}/chat`, {
         method: "POST",
-        body: { message, thread_id: thread },
+        body: { message, thread_id: runThread, full_review: fullReview },
+        timeout: 600000,
       });
     } catch (e) {
       setError(reason(e, "The run did not complete"));
@@ -88,6 +105,7 @@ export function Orchestrator({ ws }: { ws: string }) {
       await intakeApi(`/api/workspaces/${ws}/agents/escalations/decide`, {
         method: "POST",
         body: { thread_id: threadId, approval_id: approvalId, decision },
+        timeout: 600000,
       });
     } catch (e) {
       setError(reason(e, "The decision was not recorded"));
@@ -99,21 +117,23 @@ export function Orchestrator({ ws }: { ws: string }) {
 
   return (
     <section className="border border-line bg-surface">
-      <header className="border-b border-line px-5 py-4">
-        <h2 className="text-[15px] font-semibold">Ask the Chief Financial Agent</h2>
-        <p className="mt-1 text-[13.5px] text-ink-dim">
-          It routes what you ask to the domains it touches and hands back what each one
-          concluded. It cannot approve, post or pay anything.
-        </p>
+      <div className="grid border-b border-line lg:grid-cols-[minmax(0,1.8fr)_minmax(18rem,1fr)]">
+      <header className="min-w-0 p-5 sm:p-6">
+        <div className="flex items-center gap-3"><span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center bg-ink text-xs font-semibold tracking-wide text-white">CFO</span><div><h2 className="text-xl font-semibold">Ask the CFO agent</h2><p className="mt-1 text-xs text-ink-dim">A focused answer, backed by your books.</p></div></div>
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-ink-dim">Choose a starting point or ask your own question. The CFO coordinates the relevant specialists.</p>
+        {!turns.length && <div className="mt-4 flex flex-wrap gap-2">{["Can we close the period?", "Review receivables and overdue balances.", "Explain budget variances."].map(prompt => <button key={prompt} disabled={busy} onClick={() => setDraft(prompt)} className="border border-line bg-white px-3 py-2 text-left text-xs transition-colors hover:border-ink disabled:opacity-40">{prompt}</button>)}</div>}
       </header>
+      <aside className="flex flex-col justify-center border-t border-line bg-surface-2 p-5 sm:p-6 lg:border-l lg:border-t-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-dim">All four finance domains</p>
+        <h3 className="mt-2 text-base font-semibold">Full financial audit</h3><p className="mt-2 text-xs leading-relaxed text-ink-dim">Review the supplied books and get a report with findings, gaps and next steps.</p>
+        <button className="mt-4 w-full bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-40" disabled={busy} onClick={() => setConfirmAudit(true)}>Run financial audit</button>
+        {confirmAudit && <div className="mt-4 border border-line bg-zinc-50 p-4"><p className="text-sm">This runs record checks and requests all 17 specialists across four domains. Missing inputs stay blocked. Selected evidence goes to the model provider; configured API spending limits apply.</p>
+          <div className="mt-3 flex gap-3"><button className="bg-ink px-3 py-2 text-sm text-white" onClick={() => void send(true)}>Start review</button><button className="border border-line px-3 py-2 text-sm" onClick={() => setConfirmAudit(false)}>Cancel</button></div></div>}
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-dim">API charges apply. Not a certified audit. Nothing is posted or paid.</p>
+      </aside>
+      </div>
 
-      <div className="max-h-[28rem] space-y-4 overflow-y-auto px-5 py-5">
-        {turns.length === 0 && (
-          <p className="text-[13.5px] text-ink-dim">
-            Nothing has been asked about this company yet. Try &ldquo;Can we close the
-            period?&rdquo; or &ldquo;Review the payables and the bank.&rdquo;
-          </p>
-        )}
+      {(turns.length > 0 || busy) && <div className="max-h-[28rem] space-y-4 overflow-y-auto p-5 sm:p-6">
         {turns.map((turn) =>
           turn.role === "person" ? (
             <p key={turn.id} className="ml-auto max-w-[80%] border border-ink bg-ink px-4 py-3 text-[14px] text-white">
@@ -123,6 +143,7 @@ export function Orchestrator({ ws }: { ws: string }) {
             <Reply
               key={turn.id}
               turn={turn}
+              ws={ws}
               deciding={deciding}
               onDecide={(approvalId, decision) => void decide(turn.thread_id, approvalId, decision)}
             />
@@ -130,7 +151,7 @@ export function Orchestrator({ ws }: { ws: string }) {
         )}
         {busy && <p className="text-[13.5px] text-ink-dim">The organization is working. This costs money and is not instant.</p>}
         <div ref={bottom} />
-      </div>
+      </div>}
 
       {error && (
         <p role="alert" className="mx-5 mb-4 border border-red-300 bg-red-50 p-3 text-[13.5px] text-red-800">
@@ -138,7 +159,7 @@ export function Orchestrator({ ws }: { ws: string }) {
         </p>
       )}
 
-      <div className="flex items-end gap-3 border-t border-line px-5 py-4">
+      <div className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_7rem] sm:p-6">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -150,28 +171,31 @@ export function Orchestrator({ ws }: { ws: string }) {
           }}
           rows={2}
           maxLength={2000}
-          placeholder="What should the organization look at?"
-          className="min-h-16 flex-1 resize-y border border-line bg-white px-3 py-2 text-[14px]"
+          placeholder="Ask about your books…"
+          className="min-h-20 w-full min-w-0 resize-y border border-line bg-white px-3 py-3 text-sm leading-relaxed focus:outline-2 focus:outline-offset-2 focus:outline-ink"
           aria-label="Ask the orchestrator"
         />
-        <Button primary disabled={busy || !draft.trim()} onClick={() => void send()}>
-          {busy ? "Running…" : "Ask"}
-        </Button>
+        <button className="min-h-12 bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-40" disabled={busy || !draft.trim()} onClick={() => void send()}>{busy ? "Running…" : "Ask CFO →"}</button>
       </div>
+      {!busy && auditAnswer && auditAnswer.status !== "running" && <AuditDeliverable key={`${ws}:${auditAnswer.id}:${auditAnswer.status}:${auditAnswer.body.escalations?.length || 0}`} ws={ws} thread={auditAnswer.thread_id} />}
+      {(activeThread || thread) && <RunActivity key={activeThread || thread} ws={ws} thread={activeThread || thread} running={busy || !!deciding || turns.some(t => t.status === "running")} />}
+      {turns.length > 0 && <a href="/briefing" className="block border-t border-line px-5 py-3 text-sm font-semibold underline">View findings and download the PDF briefing →</a>}
     </section>
   );
 }
 
-function Reply({
+export function Reply({
   turn,
+  ws,
   deciding,
   onDecide,
 }: {
   turn: ChatTurn;
+  ws?: string;
   deciding: string;
   onDecide: (approvalId: string, decision: "approved" | "rejected") => void;
 }) {
-  const body = turn.body as ChatReply & { text: string; code?: string };
+  const body = turn.body as ChatReply & { text: string; code?: string; source_decision_ids?: string[] };
   const waiting = body.escalations ?? [];
   const findings = body.findings ?? [];
 
@@ -187,10 +211,12 @@ function Reply({
         {body.spend && <span className="font-accent text-[12.5px] text-ink-dim">{money(body.spend.spent_cents)}</span>}
       </div>
 
-      <p className="mt-3 text-[14px] leading-relaxed">{body.text}</p>
+      <p className="mt-3 whitespace-pre-wrap text-[14px] leading-relaxed">{body.text}</p>
+      {ws && turn.status !== "running" && turn.status !== "failed" && <ResponseDownload ws={ws} turn={turn} />}
+      {ws && !!body.source_decision_ids?.length && <details className="mt-3 border-t border-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Sources behind this answer ({body.source_decision_ids.length})</summary>{body.source_decision_ids.map(id => <details key={id} className="mt-3"><summary className="cursor-pointer text-xs underline">Saved task {id}</summary><TaskDeliverable ws={ws} decision={id} /></details>)}</details>}
 
       {findings.length > 0 && (
-        <ul className="mt-3 space-y-2">
+        <details className="mt-3 border-t border-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Agent conclusions ({findings.length})</summary><ul className="mt-3 space-y-2">
           {findings.map((finding) => (
             <li key={finding.decision_id ?? finding.agent_id} className="border-l-2 border-line pl-3">
               <p className="text-[13px] font-semibold">
@@ -202,10 +228,13 @@ function Reply({
                 )}
               </p>
               <p className="text-[13.5px]">{finding.summary}</p>
+              {ws && finding.decision_id && <details className="mt-2"><summary className="cursor-pointer text-xs font-semibold underline">View task deliverable</summary><TaskDeliverable ws={ws} decision={finding.decision_id} /></details>}
             </li>
           ))}
-        </ul>
+        </ul></details>
       )}
+
+      {!!body.unresolved?.length && <details className="mt-3 border-t border-line pt-3"><summary className="cursor-pointer text-sm font-semibold">Missing inputs & unresolved questions ({body.unresolved.length})</summary><ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed">{body.unresolved.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}
 
       {waiting.map((question) => (
         <Question
@@ -221,6 +250,23 @@ function Reply({
   );
 }
 
+function ResponseDownload({ ws, turn }: { ws: string; turn: ChatTurn }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function download() {
+    setBusy(true); setError("");
+    try {
+      const response = await api.get(`/api/workspaces/${encodeURIComponent(ws)}/chat/${encodeURIComponent(turn.id)}/pdf`, { responseType: "blob", timeout: 60000 });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a"); link.href = url; link.download = "sherlock-cfo-response.pdf";
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setError("Export failed. Your answer is still saved here."); }
+    finally { setBusy(false); }
+  }
+  return <div className="mt-3"><button className="border border-line bg-white px-3 py-2 text-xs font-semibold disabled:opacity-40" disabled={busy} onClick={() => void download()}>{busy ? "Preparing…" : "Download response PDF"}</button>{error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}</div>;
+}
+
 function Question({
   question,
   busy,
@@ -233,7 +279,7 @@ function Question({
   return (
     <div className="mt-3 border border-amber-300 bg-amber-50 p-4">
       <p className="text-[13px] font-semibold">
-        {question.agent} stopped for you
+        {typeof question.agent === "string" ? question.agent : question.agent?.name || question.agent?.id || "Agent"} stopped for you
       </p>
       <p className="mt-1 text-[14px]">{question.title ?? question.summary}</p>
       {(question.reasons ?? []).length > 0 && (

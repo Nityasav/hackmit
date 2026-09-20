@@ -332,7 +332,7 @@ def _clear_model():
                     break
         fields = dict(summary="Nothing here needs a person.", disposition="clear",
                       rationale="The records supplied agree with one another.",
-                      citations=[_s.Citation(role=role, record_key=key)],
+                      citations=[_s.Citation(role=role, record_key=key)] if _spec(kwargs).roles else [],
                       proposed_action="No action proposed.",
                       # Required, not defaulted: an agent offered no precedent still has
                       # to say so, so silence never reads as a completed check.
@@ -342,6 +342,8 @@ def _clear_model():
     def read(kwargs):
         context = _json.loads(kwargs["input"][1]["content"])
         roles = context["readable_roles"]
+        if not roles:
+            return [("build_evidence_pack", {})]
         # An agent that will score an invoice has to read invoices, not whichever role
         # happens to be first in its scope.
         spec = _spec(kwargs)

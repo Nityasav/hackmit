@@ -109,11 +109,13 @@ def _findings(decisions: list[dict], previews: dict[str, str]) -> list[dict]:
     return out
 
 
-def _tasks(decisions: list[dict]) -> list[dict]:
+def _tasks(decisions: list[dict], approval_rows: list[dict] = ()) -> list[dict]:
     out = []
     for decision in decisions:
         agent = decision["agent"] if decision["agent"] in AGENTS else "orchestrator"
-        escalated = bool(decision["escalated"])
+        related = [a for a in approval_rows if a.get("finding_id") == decision["id"]]
+        resolved = any(a["status"] in {"approved", "rejected"} for a in related)
+        escalated = bool(decision["escalated"]) and not resolved
         out.append({
             "id": f"task-{decision['id']}",
             "agent": agent,
@@ -322,7 +324,7 @@ def _derived(ws):
         },
         "kpis": _kpis(cov, decisions, len(timeline)),
         "workflows": [],
-        "tasks": _tasks(decisions),
+        "tasks": _tasks(decisions, approval_rows),
         "findings": findings,
         "approvals": [_with_known_agent(row) for row in approval_rows],
         "decisions": _reasoning(decisions) + human_decisions,

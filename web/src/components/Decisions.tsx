@@ -23,6 +23,8 @@ export function Decisions() {
   const { bundle, refreshBundle } = useData();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [instructions, setInstructions] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
 
   const pending = bundle.approvals.filter((a) => a.status === "pending");
   const decided = bundle.approvals.filter((a) => a.status !== "pending");
@@ -33,15 +35,38 @@ export function Decisions() {
     try {
       await intakeApi(`/api/approvals/${encodeURIComponent(approval.id)}/decision`, {
         method: "POST",
-        body: { workspace: bundle.workspace.id, decision },
+        body: { workspace: bundle.workspace.id, decision }, timeout: 600000,
       });
       await refreshBundle();
+      setMessage("Decision saved. Paused workflows resume; completed standalone tasks are resolved. Add revised instructions below for further work.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "The decision could not be saved.");
     } finally {
       setBusy("");
     }
   }
+
+  async function revise(approval: Approval) {
+    setBusy(approval.id); setError(""); setMessage("");
+    try {
+      await intakeApi(`/api/workspaces/${bundle.workspace.id}/agents/approvals/${encodeURIComponent(approval.id)}/revise`,
+        { method: "POST", body: { objective: instructions[approval.id] }, timeout: 600000 });
+      await refreshBundle();
+      setMessage("The revised task finished. Its new conclusion and any new approval request are available.");
+    } catch (e) { setError(e instanceof Error ? e.message : "The revised task failed. Check its recorded history."); }
+    finally { setBusy(""); }
+  }
+  const editor = (approval: Approval) => <details className="mt-3 border-t border-line pt-3">
+    <summary className="cursor-pointer text-sm font-semibold">Revise instructions and rerun</summary>
+    <textarea aria-label={`Revised instructions for ${approval.title}`} rows={3} maxLength={2000}
+      className="mt-3 w-full border border-line bg-white p-3 text-sm"
+      placeholder="Describe what the agent should do differently. For example: focus on overdue balances and show the source rows."
+      value={instructions[approval.id] || ""} onChange={e => setInstructions({ ...instructions, [approval.id]: e.target.value })} />
+    <p className="my-2 text-xs text-ink-dim">Starts a new paid task for this agent. A pending proposal is rejected, not silently edited. Existing decisions and evidence remain in history.</p>
+    <button disabled={!!busy || !instructions[approval.id]?.trim()} className="bg-ink px-3 py-2 text-sm text-white disabled:opacity-40" onClick={() => void revise(approval)}>
+      {busy === approval.id ? "Working…" : "Revise and rerun"}
+    </button>
+  </details>;
 
   return (
     <section className="border border-line p-5">
@@ -59,6 +84,7 @@ export function Decisions() {
           {error}
         </p>
       )}
+      {message && <p role="status" className="mt-3 border border-line p-3 text-sm">{message}</p>}
 
       {pending.length === 0 ? (
         <p className="mt-3 max-w-2xl text-sm text-ink-dim">
@@ -90,7 +116,7 @@ export function Decisions() {
                   disabled={busy === approval.id}
                   onClick={() => void decide(approval, "approved")}
                 >
-                  {busy === approval.id ? "Saving…" : "Approve"}
+                  {busy === approval.id ? "Continuing…" : "Approve and continue"}
                 </button>
                 <button
                   className="min-h-11 border border-line px-4 py-2 text-sm disabled:opacity-40"
@@ -104,6 +130,7 @@ export function Decisions() {
                   posted or approved in the books.
                 </span>
               </div>
+              {editor(approval)}
             </li>
           ))}
         </ul>
@@ -125,6 +152,7 @@ export function Decisions() {
                   {approval.status}
                 </span>{" "}
                 · {approval.title}
+                {editor(approval)}
               </li>
             ))}
           </ul>

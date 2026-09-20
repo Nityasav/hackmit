@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,7 +39,7 @@ from ..agents.registry import AGENTS, children
 from ..agents.runtime import AgentFailed
 from ..agents.tools import ScopeError, Toolbox
 from . import escalation
-from .state import RunState, initial
+from .state import RunState, WorkerOutput, initial
 
 #: Worker subgraphs wired so far. The rest are registered as they gain their tools;
 #: routing to an unwired worker reports that plainly rather than silently doing nothing.
@@ -69,7 +70,11 @@ def _subagent_node(agent_id: str):
     """One subagent as a graph node. Every subagent is this same function."""
 
     async def node(state: RunState, config) -> dict:
+        from ..agents.activity import emit
         spec = AGENTS[agent_id]
+        selected = state.get("selected_agents")
+        if selected and agent_id not in selected:
+            return {}
         # The meter and the client travel in `configurable`, not in state: they are
         # runtime dependencies rather than data, LangGraph drops state keys the schema
         # does not declare, and a client serialized into a checkpoint would be both
@@ -78,19 +83,27 @@ def _subagent_node(agent_id: str):
         runtime_config = config.get("configurable", {})
         meter: Meter = runtime_config["meter"]
         event_ids = tuple(state.get("event_ids") or ())
+        emit(state["ws"], state["thread_id"], agent_id, "started", spec.charter)
         try:
             run = await runtime.run_agent(
                 state["ws"], agent_id,
                 f"{state['objective']}\nYour part: {spec.charter}",
                 meter=meter, thread_id=state["thread_id"], event_ids=event_ids,
+                conversation_context=state.get("conversation_context") or [],
                 client=runtime_config.get("client"))
         except (AgentFailed, BudgetExceeded, ScopeError) as exc:
+            emit(state["ws"], state["thread_id"], agent_id, "blocked", str(exc))
             # A refusal is a result. Reporting it as an unresolved item keeps the run
             # honest, where swallowing it would make a missing agent look like a clean one.
             return {"unresolved": [f"{spec.name} ({agent_id}): {exc}"],
                     "results": {agent_id: {"error": str(exc), "type": type(exc).__name__}}}
 
+        except Exception:
+            emit(state["ws"], state["thread_id"], agent_id, "failed", "Execution failed. Check server logs.")
+            raise
         finding = _finding(run, event_ids[0] if event_ids else None)
+        emit(state["ws"], state["thread_id"], agent_id,
+             "needs_review" if run.escalated else "completed", finding["summary"])
         return {
             "findings": [finding],
             "results": {agent_id: run.as_dict()},
@@ -133,21 +146,28 @@ def _decision_node(agent_id: str):
     return node
 
 
-def _worker_subgraph(worker_id: str):
+def _worker_subgraph(worker_id: str, collaborate: bool = False):
     """A worker and its subagents, compiled as one graph.
 
-    The subagents run concurrently: LangGraph fans out on the parallel edges and merges
-    what they return through the reducers in `state.py`. They are independent by
-    construction — each reads its own scope and none reads another's output — so there is
-    no ordering to preserve between them.
+    Independent work runs concurrently. New runs order downstream deliverables after
+    their contributors; legacy paused runs retain their original topology.
     """
-    graph = StateGraph(RunState)
+    graph = StateGraph(RunState, output_schema=WorkerOutput)
+    dependencies = {"A4": ("A1", "A2", "A3"), "B1": ("B2", "B3"), "B4": ("B1",),
+                    "C4": ("C1", "C2", "C3"), "C5": ("C4",),
+                    "D3": ("D1", "D2", "D4")} if collaborate else {}
     for spec in children(worker_id):
         agent_id = spec.id
         decide = f"{agent_id}-decide"
         graph.add_node(agent_id, _subagent_node(agent_id))
         graph.add_node(decide, _decision_node(agent_id))
-        graph.add_edge(START, agent_id)
+    for spec in children(worker_id):
+        agent_id = spec.id
+        decide = f"{agent_id}-decide"
+        if agent_id in dependencies:
+            graph.add_edge(list(dependencies[agent_id]), agent_id)
+        else:
+            graph.add_edge(START, agent_id)
         # Work, then wait. Separating them is what makes a resume free and repeatable.
         graph.add_edge(agent_id, decide)
         graph.add_edge(decide, END)
@@ -162,7 +182,13 @@ async def _plan_node(state: RunState) -> dict:
     latency and a way to be wrong. The orchestrator's model budget is for synthesis,
     where judgment is actually required.
     """
-    text = state["objective"].lower()
+    text = state.get("routing_objective", state["objective"]).lower()
+    named_agents = [key for key, spec in AGENTS.items() if spec.tier == "subagent" and
+                    (re.search(r"\b" + re.escape(key.lower()) + r"\b", text) or spec.name.lower() in text)]
+    aliases = {"A": ("treasurer", "treasury"), "B": ("controller",),
+               "C": ("fp&a", "fp & a", "fp and a", "financial planning and analysis", "financial planning & analysis"),
+               "D": ("audit & controls", "audit and controls", "audit agents")}
+    named_workers = [worker for worker, names in aliases.items() if any(name in text for name in names)]
     domains = {
         "A": ("invoice", "payment", "vendor", "bank", "cash", "reconcil", "payable",
               "receivable", "customer", "collect", "payout", "liquidity"),
@@ -172,7 +198,17 @@ async def _plan_node(state: RunState) -> dict:
         "D": ("audit", "control", "test", "evidence", "compliance", "duplicate",
               "approval", "policy"),
     }
-    chosen = [worker for worker, words in domains.items() if any(w in text for w in words)]
+    inferred = [worker for worker, words in domains.items() if any(w in text for w in words)]
+    selected = set(named_agents)
+    for worker in named_workers:
+        selected.update(spec.id for spec in children(worker))
+    if text.startswith("review all domains:"):
+        selected = {key for key, spec in AGENTS.items() if spec.tier == "subagent"}
+    if named_agents and ("another agent" in text or "other agents" in text):
+        # A requested collaborator must have a domain reason, not just be every leaf.
+        helpers = {"cash": "A4", "bank": "A3", "audit": "D1", "variance": "C3", "forecast": "C2"}
+        selected.update(agent for word, agent in helpers.items() if word in text)
+    chosen = sorted({AGENTS[agent].parent for agent in selected}) if selected else inferred
     if not chosen:
         # Nothing matched: the treasury view is the one that answers "how are we doing"
         # without assuming a close is in progress.
@@ -186,6 +222,7 @@ async def _plan_node(state: RunState) -> dict:
 
     return {
         "plan": wired,
+        "selected_agents": sorted(selected),
         "plan_rationale": "Routed to " + ", ".join(AGENTS[w].name for w in wired)
                           + " from the objective." if wired else
                           "No wired domain matched this objective.",
@@ -256,12 +293,12 @@ async def _saver():
         yield saver
 
 
-def build_graph(checkpointer=None):
+def build_graph(checkpointer=None, *, collaborate=False):
     """The whole organization, compiled. Built from the registry, not hand-wired."""
     graph = StateGraph(RunState)
     graph.add_node("plan", _plan_node)
     for worker_id in WIRED_WORKERS:
-        graph.add_node(worker_id, _worker_subgraph(worker_id))
+        graph.add_node(worker_id, _worker_subgraph(worker_id, collaborate))
         graph.add_edge(worker_id, "synthesize")
     graph.add_node("synthesize", _synthesize_node)
 
@@ -275,8 +312,9 @@ def build_graph(checkpointer=None):
 
 
 async def run_investigation(ws: str, objective: str, *, event_ids: list[str] | None = None,
-                            cap_cents: int | None = None, client=None,
-                            thread_id: str | None = None) -> dict:
+                            cap_cents: int | None = None, client=None, meter: Meter | None = None,
+                            thread_id: str | None = None, conversation_context: list[dict] | None = None,
+                            routing_objective: str | None = None) -> dict:
     """Run the organization against one objective, inside one budget."""
     config = ingestion.workspace_config(ws)
     snapshot = ingestion.coverage(ws)["snapshot"]
@@ -288,16 +326,19 @@ async def run_investigation(ws: str, objective: str, *, event_ids: list[str] | N
 
     thread_id = thread_id or db.uid("thread")
     period = str(config.get("start", ""))[:7]
-    meter = Meter(run_cap_cents=min(cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
+    meter = meter or Meter(run_cap_cents=min(cap_cents or RUN_CAP_CENTS, RUN_CAP_CENTS))
 
     state = initial(ws, thread_id, objective, snapshot["id"], period, event_ids)
+    state["collaboration_version"] = 1
+    state["routing_objective"] = routing_objective or objective
+    state["conversation_context"] = conversation_context or []
     # One thread per (workspace, period, run), so a close that spans days resumes at the
     # node it stopped on rather than starting the period again.
     config = {"configurable": {"thread_id": f"{ws}:{period}:{thread_id}",
                                "meter": meter, "client": client},
               "recursion_limit": 50}
     async with _saver() as saver:
-        final = await build_graph(saver).ainvoke(state, config=config)
+        final = await build_graph(saver, collaborate=True).ainvoke(state, config=config)
     return _outcome(final, meter, thread_id)
 
 
@@ -343,6 +384,9 @@ async def resume_investigation(ws: str, thread_id: str, decision: str, *,
 
     async with _saver() as saver:
         graph = build_graph(saver)
+        saved = await graph.aget_state(config)
+        if saved.values.get("collaboration_version"):
+            graph = build_graph(saver, collaborate=True)
         outstanding = await _outstanding(graph, config)
         if not outstanding:
             raise KeyError(f"No paused run with thread {thread_id!r}.")

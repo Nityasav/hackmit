@@ -32,27 +32,28 @@ export function Precedent() {
   }
 
   return (
-    <div className="space-y-6">
-      <ul className="space-y-3">
+    <details className="border border-line p-4">
+      <summary className="cursor-pointer text-sm font-semibold">Saved guidance ({active.length}) <span className="ml-2 font-normal text-ink-dim">Checked before reuse</span></summary>
+      <ul className="mt-4 max-h-80 space-y-3 overflow-y-auto">
         {active.map((p) => (
-          <li key={p.id} className="border-l-2 border-ink pl-4">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-accent text-[13px] text-ink-dim">{p.id}</span>
-              <span className="text-[15px] font-semibold">{p.title}</span>
+          <li key={p.id} className="border border-line p-3"><details>
+            <summary className="cursor-pointer text-sm">
+              <span className="font-semibold">{p.title.length > 100 ? p.title.slice(0, 100) + "…" : p.title}</span>
               <span className="ml-auto font-accent text-[13px] text-ink-dim">
                 used {p.uses}×
               </span>
-            </div>
+            </summary>
+            <p className="mt-3 text-sm">{p.title}</p>
             <p className="mt-1 text-[13.5px] leading-relaxed text-ink-dim">{p.status_note}</p>
             <p className="mt-0.5 font-accent text-[13px] text-ink-faint">from {p.source}</p>
-          </li>
+          </details></li>
         ))}
       </ul>
 
       {checks.length > 0 && (
-        <div>
-          <h3 className="text-[13.5px] font-semibold">Decisions considered</h3>
-          <ul className="mt-2 space-y-2">
+        <details className="mt-4 border-t border-line pt-3">
+          <summary className="cursor-pointer text-sm font-semibold">Decisions considered ({checks.length})</summary>
+          <ul className="mt-2 max-h-60 space-y-2 overflow-y-auto">
             {checks.map((check, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed">
                 <Pill tone={check.ok ? "green" : "gray"} className="mt-px flex-none">
@@ -62,12 +63,9 @@ export function Precedent() {
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
 
-      <p className="max-w-xl text-[13px] leading-relaxed text-ink-faint">
-        Previous decisions are checked against the current evidence before reuse.
-      </p>
-    </div>
+    </details>
   );
 }

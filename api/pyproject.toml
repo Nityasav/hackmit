@@ -17,6 +17,7 @@ dependencies = [
     "rapidocr-onnxruntime>=1.4.4",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "reportlab>=5.0.1",
 ]
 
 [project.optional-dependencies]

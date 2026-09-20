@@ -1,10 +1,12 @@
 "use client";
 
 import { displayLabel } from "@/lib/format";
+import { api } from "@/lib/api";
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
+import { FinancialReportSummary } from "@/components/FinancialReportSummary";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { SourceDetail } from "@/lib/types";
 
@@ -94,6 +96,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
     try { setSource(await intakeApi(`/api/workspaces/${ws}/sources/${encodeURIComponent(id)}?start=${start}&limit=20`)); setSourceRef({ id, start }); }
     catch (e) { setError(e instanceof Error ? e.message : "Source unavailable"); }
   }
+  async function downloadPdf() {
+    setBusy("pdf"); setError("");
+    try {
+      const response = await api.get(`/api/workspaces/${ws}/review/report.pdf`, { responseType: "blob", timeout: 60000 });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url; link.download = "sherlock-financial-review.pdf"; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setError("The PDF could not be generated. Check API access and try again."); }
+    finally { setBusy(""); }
+  }
   if (!uploaded) return <div className="border border-line p-6"><h1 className="text-2xl font-semibold">No company is selected yet.</h1>
     <p className="my-3 max-w-2xl text-ink-dim">Create an institution and commit its records to prepare a briefing.</p>
     <Link href="/" className={primary + " inline-block"}>Add a company&rsquo;s records →</Link></div>;
@@ -142,7 +155,16 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           comes to review and act, and looking for it here first is the
           reasonable instinct. */}
       <Decisions />
-      {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
+      {section === "reports" ? <section className="border border-line p-5">
+        <FinancialReportSummary findings={view.findings} company={view.workspace.name} period={`${view.workspace.start} – ${view.workspace.end}`} busy={!!busy} onDownload={() => void downloadPdf()} />
+        {view.findings.map(f => <details key={f.id} className="mt-3 border-t border-line pt-3">
+          <summary className="cursor-pointer font-semibold">{f.title}<span className="ml-2 text-xs font-normal text-ink-dim">{f.stale ? "Historical" : displayLabel(f.status)}</span></summary>
+          <p className="mt-3 text-sm leading-relaxed">{f.explanation}</p><p className="mt-2 text-sm"><b>Next step:</b> {f.action}</p>
+          <p className="mt-2 text-xs text-ink-dim">{f.review}</p>
+          <p className="mt-2 break-all text-xs text-ink-dim">{f.evidence.map(e => `${e.source_id}, line ${e.line}`).join("; ") || "No evidence cited"}</p>
+        </details>)}
+        <details className="mt-5"><summary className="cursor-pointer text-sm">Full report text</summary><pre className="print-report mt-4 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></details>
+      </section> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="agent">Agent conclusions</option></select></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
@@ -163,11 +185,12 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           </article>}</div>
       </>}
       <details className="border border-line p-4"><summary className="cursor-pointer font-semibold">Human follow-up &amp; scan history ({shownHistory.length}{shownHistory.length !== view.history.length ? ` of ${view.history.length}` : ""})</summary>
-        <div className="mt-3 flex flex-wrap items-end gap-3 text-xs">
-          <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
-          <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
-          <label>Raised by
-            <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
+        <p className="mt-2 text-sm text-ink-dim">Decisions and record checks. These entries do not represent payments or changes to your books.</p>
+        <div className="my-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_auto] items-end">
+          <label className="grid gap-2">From<input type="date" className={control + " w-full min-w-0 h-11"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
+          <label className="grid gap-2">To<input type="date" className={control + " w-full min-w-0 h-11"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
+          <label className="grid gap-2">Raised by
+            <select className={control + " w-full min-w-0 h-11"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
               <option value="">Any agent</option>
               {historyAgents.map(a => <option key={a} value={a}>{agentName(a)}</option>)}
               {/* A record check is arithmetic over rows, not an agent's conclusion. */}
@@ -178,10 +201,11 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
             <button className={control} onClick={() => { setFromDate(""); setToDate(""); setByAgent(""); }}>Clear</button>}
         </div>{!view.history.length && <p className="mt-3 text-sm text-ink-dim">Nothing yet. Approving or rejecting an agent&rsquo;s conclusion, recording a follow-up on a finding, and running the record checks all appear here.</p>}
         {!!view.history.length && !shownHistory.length && <p className="mt-3 text-sm text-ink-dim">Nothing in this range. The history holds the most recent hundred entries, so something older may exist and not be shown.</p>}
-        {shownHistory.map(e => <div key={e.id} className="border-t border-line py-3 text-sm">
-          <p>{e.summary || `${e.actor} · ${e.kind}`}</p>
-          <p className="mt-1 text-xs text-ink-dim">{e.created_at.slice(0, 19).replace("T", " ")} · {e.kind} · {e.agent ? `raised by ${agentName(e.agent)}` : "record check, no agent"}</p>
-        </div>)}</details>
+        <div className="max-h-[32rem] overflow-y-auto divide-y divide-line">{shownHistory.map(e => <article key={e.id} className="grid gap-3 py-4 text-sm sm:grid-cols-[10rem_minmax(0,1fr)]">
+          <time className="text-xs text-ink-dim tabular-nums">{e.created_at.slice(0, 10)}<span className="mt-1 block">{e.created_at.slice(11, 19)} UTC</span></time>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong>{e.kind === "approval_decided" ? "Decision recorded" : e.kind === "review.scan" ? "Record checks completed" : displayLabel(e.kind)}</strong><span className="text-xs text-ink-dim">{e.agent ? agentName(e.agent) : e.actor}</span></div>
+          <details className="mt-2"><summary className="cursor-pointer text-ink-dim">View details</summary><p className="mt-2 max-w-[75ch] break-words leading-relaxed">{e.summary || `${e.actor} · ${e.kind}`}</p></details></div>
+        </article>)}</div></details>
       <details className="border border-line p-4" open><summary className="font-semibold">Scope & limitations</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">{view.limitations.map(l => <li key={l}>{l}</li>)}</ul></details>
     </>}
   </div>;

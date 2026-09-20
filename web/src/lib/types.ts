@@ -337,6 +337,7 @@ export interface ChatTurn {
 
 export interface ChatReply {
   text: string;
+  full_review?: boolean;
   plan?: string[];
   routed_to?: string[];
   findings?: {
@@ -356,7 +357,7 @@ export interface ChatReply {
 /** One question a run stopped on. Answered by id: several agents can pause at once. */
 export interface Escalation {
   approval_id: string;
-  agent: string;
+  agent: string | { id: string; name: string };
   title?: string;
   summary?: string;
   reasons: string[];

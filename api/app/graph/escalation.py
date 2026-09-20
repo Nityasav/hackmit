@@ -79,7 +79,12 @@ def _apply(ws: str, proposal_id: str, answer: Any) -> dict:
     if decision not in {"approved", "rejected"}:
         raise ValueError("A decision is either approved or rejected.")
     # `decide` is the only path out of pending, and the only writer of precedent.
-    approvals.decide(ws, proposal_id, decision)
+    with db.connect() as connection:
+        existing = connection.execute("SELECT status FROM approvals WHERE ws=? AND id=?", (ws, proposal_id)).fetchone()
+    if existing and existing["status"] not in {"pending", decision}:
+        raise ValueError("This proposal already has a different human decision.")
+    if not existing or existing["status"] == "pending":
+        approvals.decide(ws, proposal_id, decision)
     return {
         "approval_id": proposal_id,
         "decision": decision,

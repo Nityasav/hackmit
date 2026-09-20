@@ -84,8 +84,7 @@ export function AgentBoard() {
   return (
     <>
       <p className="mb-5 max-w-prose text-[13.5px] leading-relaxed text-ink-dim">
-        Every task an agent is running. A card&rsquo;s column is derived from what the agent is actually doing, so it is
-        not something you can drag. Each time is counted from the moment that task started.
+        Open a task for its request, answer, evidence and downloadable report. Outputs remain available after a run ends.
       </p>
 
       <div className="grid gap-px border border-line bg-line md:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
@@ -170,6 +169,8 @@ function TaskCard({ task, now, onOpen }: { task: Task; now: number | null; onOpe
           </div>
         )}
       </button>
+
+      {task.id.startsWith("task-decision-") && <button onClick={onOpen} className="w-full border-t border-line bg-ink px-3 py-2 text-left text-xs font-semibold text-white">View deliverable →</button>}
 
       {/* The one place a card is more than a card: where it hands off to you. */}
       {task.column === "needs_you" && (
