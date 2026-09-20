@@ -19,7 +19,15 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/api/access", tags=["Laptop access"])
 SESSIONS = {}
 ATTEMPTS = {}
-ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"} | {
+    origin.strip() for origin in os.getenv("SCHOOLTRACE_ALLOWED_ORIGINS", "").split(",") if origin.strip()
+}
+# Vercel gives every deployment its own hostname, so previews need a pattern rather than a list.
+ORIGIN_PATTERN = re.compile(os.environ["SCHOOLTRACE_ALLOWED_ORIGIN_REGEX"]) if os.getenv("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX") else None
+# Hosting is opt-in per hostname. Without this the API answers loopback only, which is the single
+# thing standing between an unconfigured deployment and an open admin API: identity() hands anyone
+# admin over every workspace when SCHOOLTRACE_USERS is unset.
+PUBLIC_HOSTS = {host.strip().lower() for host in os.getenv("SCHOOLTRACE_PUBLIC_HOSTS", "").split(",") if host.strip()}
 
 
 def users():
@@ -67,10 +75,15 @@ async def guard(request):
     host = request.url.hostname
     peer = request.client.host if request.client else ""
     testing = host == "testserver" and peer == "testclient"
-    if not testing and (host not in {"localhost", "127.0.0.1", "::1"} or peer not in {"127.0.0.1", "::1"}):
-        raise HTTPException(403, "Laptop demo accepts loopback connections only; public hosting is not configured.")
+    hosted = bool(PUBLIC_HOSTS) and (host or "").lower() in PUBLIC_HOSTS
+    if hosted and not users():
+        # Fails closed rather than serving: opening the gate without accounts would publish an
+        # API on which every caller is an admin.
+        raise HTTPException(503, "Public hosting requires SCHOOLTRACE_USERS; refusing to serve an unauthenticated admin API.")
+    if not testing and not hosted and (host not in {"localhost", "127.0.0.1", "::1"} or peer not in {"127.0.0.1", "::1"}):
+        raise HTTPException(403, "Laptop demo accepts loopback connections only; set SCHOOLTRACE_PUBLIC_HOSTS to host it.")
     origin = request.headers.get("origin")
-    if origin and origin not in ORIGINS:
+    if origin and origin not in ORIGINS and not (ORIGIN_PATTERN and ORIGIN_PATTERN.fullmatch(origin)):
         raise HTTPException(403, "Untrusted browser origin.")
     if request.method == "OPTIONS" or request.url.path in {"/api/health", "/api/access/login", "/api/access/status"}:
         return
@@ -150,7 +163,13 @@ def login(body: Login, response: Response):
     token = secrets.token_urlsafe(32)
     SESSIONS[hashlib.sha256(token.encode()).hexdigest()] = (body.username, now + 8 * 3600)
     # HTTP is loopback-only. Use TLS + Secure cookies before any hosted deployment.
-    response.set_cookie("schooltrace_session", token, httponly=True, samesite="strict", max_age=8 * 3600)
+    # Hosted, the web app and the API are different sites, and a strict cookie is never sent
+    # across them — sign-in would appear to succeed and every later call would be anonymous.
+    # SameSite=None requires Secure, so this only holds over TLS, which a host terminates for us.
+    cross_site = bool(PUBLIC_HOSTS)
+    response.set_cookie("schooltrace_session", token, httponly=True,
+                        samesite="none" if cross_site else "strict", secure=cross_site,
+                        max_age=8 * 3600)
     return {"name": body.username, "role": user["role"]}
 
 

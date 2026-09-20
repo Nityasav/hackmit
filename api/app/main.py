@@ -7,6 +7,7 @@ Point the web app at it with NEXT_PUBLIC_API_URL=http://localhost:8000
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import quote
@@ -50,9 +51,22 @@ app.include_router(security.router)
 app.include_router(extraction_router)
 app.include_router(updates_router)
 
+# A hosted web app is a different origin from a hosted API, so the browser blocks every call
+# until that origin is named here. Local development keeps working with no configuration.
+# SCHOOLTRACE_ALLOWED_ORIGINS is a comma-separated list; SCHOOLTRACE_ALLOWED_ORIGIN_REGEX covers
+# Vercel's per-deployment preview URLs, which change on every push.
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "SCHOOLTRACE_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=os.environ.get("SCHOOLTRACE_ALLOWED_ORIGIN_REGEX") or None,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -61,6 +75,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def intake_write_guard(request: Request, call_next):
+    # A CORS preflight carries no credentials, no reviewer header and no body — by design, the
+    # browser sends it before it will send those. Guarding it means the preflight 403s and the
+    # real request is never attempted, so a hosted web app sees only an opaque CORS failure.
+    # The guard still runs on the request the preflight is asking about.
+    if request.method == "OPTIONS":
+        return await call_next(request)
     try:
         await security.guard(request)
     except HTTPException as exc:
