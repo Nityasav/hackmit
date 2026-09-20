@@ -48,12 +48,12 @@ export default function LearningPage() {
 
       <div className="grid gap-4 min-[900px]:grid-cols-[1.4fr_1fr]">
         <Card>
-          <CardTitle right={`${active} active · ${playbooks.length} total`}>Playbooks the agents wrote</CardTitle>
+          <CardTitle right={`${active} active · ${playbooks.length} total`}>Precedent from human decisions</CardTitle>
           <table className="w-full border-collapse">
             <thead>
               <tr className="text-[12px] text-ink-dim">
                 <th className="border-b border-line p-1.5 text-left font-semibold">Playbook</th>
-                <th className="border-b border-line p-1.5 text-left font-semibold">Replay gate</th>
+                <th className="border-b border-line p-1.5 text-left font-semibold">Gate</th>
                 <th className="border-b border-line p-1.5 text-left font-semibold">Used</th>
                 <th className="border-b border-line p-1.5 text-left font-semibold">Status</th>
               </tr>
@@ -68,9 +68,19 @@ export default function LearningPage() {
                     </div>
                     <div className="pl-7 text-ink-dim">{p.source}</div>
                   </td>
+                  {/* Only claim a replay gate when one actually ran. A precedent
+                      created from a human decision has months: [] — its gate was
+                      the approval queue, and printing "✓ 0 new FP" there would
+                      assert a regression test that never happened. */}
                   <td className={`border-b border-line p-1.5 ${p.replay.passed ? "" : "text-accent-bad"}`}>
-                    {p.replay.passed ? `✓ 0 new FP` : `✗ ${p.replay.new_false_positives} false clear`}
-                    <div className="text-ink-faint">{p.replay.months.join(" + ")}</div>
+                    {p.replay.months.length === 0
+                      ? "Human approval"
+                      : p.replay.passed
+                        ? `✓ 0 new FP`
+                        : `✗ ${p.replay.new_false_positives} false clear`}
+                    <div className="text-ink-faint">
+                      {p.replay.months.length > 0 ? p.replay.months.join(" + ") : "No replay gate yet"}
+                    </div>
                   </td>
                   <td className="border-b border-line p-1.5">{p.uses}</td>
                   <td className="border-b border-line p-1.5">
@@ -81,7 +91,9 @@ export default function LearningPage() {
             </tbody>
           </table>
           <div className="mt-2 text-[13px] text-ink-dim">
-            A playbook is reviewed procedural memory. Agents never edit their own prompts and nothing is fine-tuned.
+            Reviewed procedural memory. Every row here came from a decision you made — an agent cannot
+            create one, so it can never promote its own conclusion into guidance for its next run. Agents
+            never edit their own prompts and nothing is fine-tuned.
           </div>
         </Card>
 

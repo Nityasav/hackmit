@@ -55,8 +55,8 @@ export const Component = () => {
     { label: "Agents on the books", value: String(agents.length), icon: Users },
     { label: "Findings filed", value: String(findings.length), icon: ChartColumn },
     {
-      label: "Playbooks past the gate",
-      value: String(playbooks.filter((p) => p.replay.passed).length),
+      label: "Precedent in use",
+      value: String(playbooks.filter((p) => p.status === "active").length),
       icon: ShieldCheck,
     },
     {
@@ -77,8 +77,9 @@ export const Component = () => {
         </div>
         <h2 className="text-xl font-bold tracking-tight">How the agents learn</h2>
         <p className="text-[14px] leading-relaxed text-ink-dim">
-          Agents write playbooks from cases they have seen before. A playbook only takes
-          effect once a replay of earlier months adds no false positives and you approve it.
+          Agents never write their own memory. A precedent exists only where you approved or
+          rejected something, and the next run must re-check it against current evidence before
+          relying on it — a matching vendor or amount is not enough to reuse one.
         </p>
       </div>
 
