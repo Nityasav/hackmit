@@ -247,3 +247,44 @@ def test_local_adapter_never_uses_openai_secret(monkeypatch):
     monkeypatch.setenv("CFO_LOCAL_BASE_URL", "https://untrusted.example/v1")
     with pytest.raises(ValueError):
         StructuredCFOModel.from_env()
+
+
+class AsksForEvidenceFirst(StubSpecialist):
+    """A `gr` task that returns a reviewable claim AND an evidence request.
+
+    That combination lands the task on `needs_evidence` — the normal outcome
+    for real books, which always have gaps.
+    """
+
+    async def investigate(self, task, scope, tools, dependencies, feedback):
+        result = await super().investigate(task, scope, tools, dependencies, feedback)
+        if task.role == "gr":
+            result.evidence_requests = ["Provide the signed award amendment for completeness."]
+        return result
+
+
+def test_a_dependency_that_asked_for_evidence_does_not_block_its_dependents(tmp_path):
+    """`needs_evidence` means "done, and here is what I could not find", not
+    "failed". Blocking on it meant any workspace whose books have gaps — every
+    workspace worth investigating — could never finish a dependent plan: a real
+    run planned three pairs, blocked all three second stages, and reported
+    `partial` while holding eleven reviewed claims.
+    """
+    run = execute(tmp_path, worker=AsksForEvidenceFirst())
+
+    terms, allocation = run.tasks[0], run.tasks[1]
+    assert terms.status == "needs_evidence"
+    assert allocation.status != "blocked", "a dependency with a result must not block its dependent"
+    assert run.status != "partial"
+    # The upstream gap is still reported; it is carried, not discarded.
+    assert any("amendment" in item for item in run.unresolved)
+
+
+def test_a_dependency_that_actually_failed_still_blocks(tmp_path):
+    """The other half of the same rule: `failed` produced nothing to build on,
+    so a dependent task must not run on it."""
+    run = execute(tmp_path, auditor=RubberStamp())
+
+    assert run.tasks[0].status == "failed"
+    assert run.tasks[1].status == "blocked"
+    assert run.status == "partial"
