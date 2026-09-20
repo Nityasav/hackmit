@@ -51,6 +51,34 @@ const currency = (cents: number) => new Intl.NumberFormat("en-US", { style: "cur
 const control = "border border-line bg-white px-3 py-2 text-sm disabled:opacity-40";
 const primary = "bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-40";
 
+/**
+ * Fill in the parts of `live` a server one deploy behind does not send.
+ *
+ * The agent list and the reviewed count were added to this payload after the
+ * screen that reads them, so an older API answers with three of the six fields.
+ * Reading `.agents.map` off that threw and took the whole briefing down — a
+ * blank page where a missing figure would have done. Every field is defaulted
+ * rather than only the one that threw, because the next field added to this
+ * shape should not be able to blank the page again while a deploy catches up.
+ * An absent list is shown as no agents, which is what "the server did not say"
+ * honestly looks like here.
+ */
+function withLiveDefaults(view: View): View {
+  if (!view.live) return view;
+  const live = view.live;
+  return {
+    ...view,
+    live: {
+      decisions: live.decisions ?? 0,
+      escalated: live.escalated ?? 0,
+      spend_cents: live.spend_cents ?? 0,
+      reviewed: live.reviewed ?? 0,
+      note: live.note ?? "",
+      agents: Array.isArray(live.agents) ? live.agents : [],
+    },
+  };
+}
+
 export function ReviewWorkspace({ section = "overview" }: { section?: "overview" | "findings" | "reports" | "actions" }) {
   const { ws } = useData();
   return <WorkspaceReview key={ws} ws={ws} section={section} />;
@@ -72,14 +100,14 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
   const [sourceRef, setSourceRef] = useState<{ id: string; start: number } | null>(null);
   const uploaded = ws.startsWith("ws-");
   const refresh = useCallback(async () => {
-    const next = await intakeApi<View>(`/api/workspaces/${ws}/review`);
+    const next = withLiveDefaults(await intakeApi<View>(`/api/workspaces/${ws}/review`));
     setView(next); return next;
   }, [ws]);
   useEffect(() => {
     if (!uploaded) return;
     let active = true;
     const load = async () => {
-      try { const next = await intakeApi<View>(`/api/workspaces/${ws}/review`); if (active) { setView(next); setError(""); } }
+      try { const next = withLiveDefaults(await intakeApi<View>(`/api/workspaces/${ws}/review`)); if (active) { setView(next); setError(""); } }
       catch (e) { if (active) setError(e instanceof Error ? e.message : "Review unavailable"); }
     };
     void load(); const timer = setInterval(load, 4000);
