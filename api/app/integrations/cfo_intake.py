@@ -5,19 +5,21 @@ ports so the coordinator can investigate real uploaded records instead of the
 scripted harness. This adapter only reads: it never stages, commits, mutates
 records, publishes snapshots, or reaches evaluator truth.
 
-Deterministic calculations are deliberately NOT implemented here. The accounting
-engine is Functionality's (`app/accounting/`), and a calculation invented by this
-bridge would defeat the provenance checks the CFO relies on, which require an
-amount to come from the same engine the auditor reperforms. Until that inventory
-is published the scope carries no calculations and `calculate` fails closed, so
-specialists can still explain and cite evidence but cannot assert an amount.
+Amounts are never computed here. The accounting engine is Functionality's
+(`app/accounting/`); this module only forwards its results, because the CFO's
+provenance checks require an amount to come from the same engine the auditor
+reperforms. Payroll calculations are published from `accounting/payroll.py`.
+Domains without a published engine still carry no calculations, and `calculate`
+fails closed for them, so those specialists can cite evidence and explain a
+finding but cannot assert an amount.
 """
 
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from ..cfo.schemas import Calculation, Scope, Source, SourceSpan
-from ..ingestion import coverage
+from ..accounting.payroll import PayrollCalculation, calculations as payroll_calculations
+from ..cfo.schemas import Calculation, CalculationSpec, Scope, Source, SourceSpan
+from ..ingestion import coverage, financial_records
 
 # Intake roles map onto the three specialist domains; everything else is shared context.
 DOMAINS = {"invoice": "ap", "payroll": "py", "grants": "gr"}
@@ -36,6 +38,22 @@ async def _snapshot_view(workspace: str) -> dict:
         return await run_in_threadpool(coverage, workspace)
     except HTTPException as exc:
         raise _unavailable(exc) from None
+
+
+async def _engine_calculations(workspace: str, available: set[str]) -> list[PayrollCalculation]:
+    """Deterministic amounts for this snapshot, restricted to readable sources.
+
+    A calculation derived from a superseded source could not be reperformed by
+    the auditor through the same evidence, so it is withheld entirely rather
+    than published with a partial basis.
+    """
+    try:
+        inputs = await run_in_threadpool(financial_records, workspace)
+    except HTTPException as exc:
+        raise _unavailable(exc) from None
+    service_present = "service" in inputs["roles"]
+    return [c for c in payroll_calculations(inputs["records"], service_present)
+            if c.source_ids and set(c.source_ids).issubset(available)]
 
 
 def _usable(source: dict) -> bool:
@@ -65,12 +83,20 @@ class IntakeDataSource:
         gaps = [f"{c['label']}: missing {', '.join(c['missing'])}." for c in view["capabilities"] if c["missing"]]
         gaps += [f"Open evidence request ({r['role']}): {r['title']}."
                  for r in view["requests"] if r["status"] in {"open", "needs_review"}]
-        gaps.append("No deterministic calculation inventory is published for this workspace; "
-                    "amounts cannot be confirmed in this run.")
+        engine = await _engine_calculations(workspace, {s.id for s in sources})
+        if engine:
+            gaps.append("Deterministic amounts are published for payroll only; AP and grant amounts "
+                        "cannot be confirmed in this run.")
+        else:
+            gaps.append("No deterministic calculation inventory is published for this workspace; "
+                        "amounts cannot be confirmed in this run.")
         return Scope(
             workspace=workspace, snapshot_id=snapshot["id"], institution=config["name"],
             period=f"{config['start']} to {config['end']}", accounting_profile=config["profile"],
-            sources=sources, calculations=[], gaps=gaps,
+            sources=sources,
+            calculations=[CalculationSpec(id=c.id, description=c.description, source_ids=list(c.source_ids))
+                          for c in engine],
+            gaps=gaps,
         )
 
     async def read_source(self, scope: Scope, source_id: str) -> SourceSpan:
@@ -93,7 +119,20 @@ class IntakeDataSource:
         return SourceSpan(id=source_id, snapshot_id=scope.snapshot_id, text=text, locator=locator)
 
     async def calculate(self, scope: Scope, calculation_id: str) -> Calculation:
-        raise ValueError(
-            "No deterministic calculation is published for this workspace. Amounts must come from the "
-            "accounting engine, not from an agent or this bridge."
+        view = await _snapshot_view(scope.workspace)
+        # An amount is only reperformable against the snapshot it was planned on.
+        if view["snapshot"] is None or view["snapshot"]["id"] != scope.snapshot_id:
+            raise ValueError("The snapshot changed since this run started; rerun against the current snapshot.")
+        available = {s["id"] for s in view["sources"] if _usable(s)}
+        engine = await _engine_calculations(scope.workspace, available)
+        result = next((c for c in engine if c.id == calculation_id), None)
+        if result is None:
+            raise ValueError(
+                "No deterministic calculation is published for this identifier. Amounts must come from the "
+                "accounting engine, not from an agent or this bridge."
+            )
+        return Calculation(
+            id=result.id, snapshot_id=scope.snapshot_id, source_ids=list(result.source_ids),
+            amount_cents=result.amount_cents, cash_delta_cents=result.cash_delta_cents,
+            category=result.category, description=f"{result.description} Basis: {result.basis}",
         )

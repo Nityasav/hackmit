@@ -123,16 +123,16 @@ intake snapshot, so a CFO run can read real uploaded records:
 | --- | --- | --- |
 | `snapshot(workspace)` | Implemented | `ingestion.coverage`: institution, period, profile, active committed sources, capability gaps and open evidence requests |
 | `read_source(scope, source_id)` | Implemented | `ingestion.source_view`, bounded to 400 lines / 20,000 characters, refused unless the snapshot still matches |
-| `calculate(scope, calculation_id)` | **Fails closed** | Nothing yet: the scope publishes an empty calculation inventory |
+| `calculate(scope, calculation_id)` | Payroll only | `accounting/payroll.py`: gross-to-net, total expense, allocation totals, ceiling excess, award-window and service-support tests, ledger tie. Other domains still fail closed |
 
 The bridge reads only. It never stages, commits, mutates records or publishes
 snapshots. Intake roles map to specialist domains as `invoice → ap`,
 `payroll → py`, `grants → gr`, and everything else to `shared`.
 
-Until the accounting engine publishes a calculation inventory, specialists can
-cite evidence and explain a finding but cannot assert an amount, and the scope
-carries that limitation as an explicit gap. To close it, expose deterministic
-calculations bound to the snapshot and fill in `calculate`:
+Payroll amounts are published. AP and grant specialists can still only cite
+evidence and explain a finding, and the scope carries that limitation as an
+explicit gap. To close it for another domain, add deterministic calculations
+bound to the snapshot in `app/accounting/` and publish them the same way:
 
 ```python
 async def calculate(scope, calculation_id) -> Calculation:
@@ -154,8 +154,10 @@ automatic resume across changed snapshots is intentionally not implemented.
 
 ## Connect the adapters
 
-`app/integrations/cfo_factory.py` already registers the intake data adapter.
-Add the agents to the same call when they exist:
+`app/integrations/cfo_factory.py` already registers the intake data adapter and
+the Payroll & Budget agent (`py`, see `app/agents/README.md`), which it omits
+when no specialist model is configured. Add the remaining agents to the same
+call when they exist:
 
 ```python
 return Adapters(

@@ -50,10 +50,10 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 | Dashboard | Eight tabs, two fixed workspaces, fixture-backed display and interactions | `web/src/app/`, `web/src/lib/data.tsx` |
 | API | Health, bundle, approval-state mutation, reset; other demo actions 501 | `api/app/main.py` |
 | Store | Legacy demos stay in memory; intake has SQLite originals, records, snapshots and events | `api/app/store.py`, `api/app/db.py` |
-| Accounting | Allocation split, journal checks, reclassification and cash delta helpers | `api/app/accounting/money.py` |
-| Tests | Intake, CFO triage, coordinator, review gates and accounting tests; current counts in latest checkpoint | `api/tests/` |
+| Accounting | Allocation split, journal checks, reclassification and cash delta helpers; deterministic payroll tie-out and fund-allocation calculations | `api/app/accounting/money.py`, `api/app/accounting/payroll.py` |
+| Tests | Intake, CFO triage, coordinator, review gates, accounting, payroll calculation and payroll-agent boundary tests; current counts in latest checkpoint | `api/tests/` |
 | Documents/import | Dynamic workspaces, CSV/text intake, mappings, validation, original evidence, coverage and evidence requests implemented | `api/app/ingestion.py`, `web/src/components/SourcesPanel.tsx` |
-| Agents | Bounded OpenAI CFO triage with scoped tools, source citations, run persistence and dashboard projection | `api/app/agents/cfo.py` |
+| Agents | Three families not yet consolidated: direct-run CFO/Grants/Auditor, the orchestrated AP dispatch loop, and the ports-based Payroll & Budget specialist | `api/app/agents/` |
 | Workflows | README and package marker only; real scenario workflows unimplemented | `api/app/workflows/` |
 | Shared data | TypeScript/Pydantic mirrors and two demo JSON bundles | `contracts/`, `api/app/models.py`, `web/src/lib/types.ts` |
 | Reports/learning | Fixture presentation, not real recomputation or measured learning | Dashboard data path and fixture contract |
@@ -93,12 +93,14 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 | Source functions in `api/app/ingestion.py` | Implemented | Immutable originals in SQLite, metadata, scoped spans and downloads |
 | Coverage functions in `api/app/ingestion.py` | Implemented | Input readiness and review/unsupported gates |
 | `api/app/store.py` / `ingestion.bundle` | Existing / implemented | Separate legacy demos and persisted empty intake bundles |
-| `api/app/accounting/` | Helpers exist; expand | Ledger, schedules, exact calculations, lineage, invariants |
+| `api/app/accounting/` | Helpers and payroll calculations exist; expand | Ledger, schedules, AP/grant calculations, lineage, invariants |
 | `api/app/context/` | PROPOSED | Versioned nodes/edges, temporal retrieval and dependency invalidation |
 | `api/app/agents/cfo.py` | Implemented | First OpenAI role, pinned evidence tools, schema validation, run limits and telemetry |
 | `api/app/agents/grants.py` | Implemented | Grants & Compliance prompt and deterministic supplied-payroll award checks using shared runtime |
 | `api/app/agents/auditor.py` | Implemented | Pinned preparer findings, fresh-source review, original CSV reperformance and exact-target verdicts |
-| `api/app/cfo/`, `api/app/integrations/` | Merged from main | Separate coordinator/harness and intake bridge; live specialist/auditor adapters remain pending |
+| `api/app/agents/payroll.py` | Implemented | Payroll & Budget specialist on `app/cfo/ports.py`; engine-only amounts, claim validation before the coordinator sees them |
+| `api/app/cfo/`, `api/app/integrations/` | Merged from main | Coordinator/harness and intake bridge; payroll specialist and payroll calculations registered, AP/Grants/Auditor adapters still pending |
+| **Agent consolidation** | OPEN | Three independently built families share this package; pick one runtime before the next milestone |
 | `api/app/workflows/` | Placeholder | Close/payroll/AP/grants/audit-prep stages, evidence resumption and scenarios |
 | `api/app/review/` | PROPOSED | Versioned human decisions, idempotent adjustment application |
 | `api/app/memory/` | PROPOSED | Playbook proposals, applicability, replay-gate results, activation/retirement |

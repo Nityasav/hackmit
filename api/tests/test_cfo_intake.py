@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from app.agents.payroll import PayrollBudgetSpecialist
 from app.cfo.api import CFORuntime
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import RunRequest
@@ -56,9 +57,14 @@ def test_snapshot_maps_committed_sources_domains_and_gaps(client):
     # Document evidence is a first-class source, not just ledger CSVs.
     assert domains["award-terms.md"] == "shared"
     assert any("missing service" in gap for gap in scope.gaps)
-    # No amount may be asserted until the accounting engine publishes calculations.
-    assert scope.calculations == []
-    assert any("no deterministic calculation inventory" in gap.lower() for gap in scope.gaps)
+    # Payroll amounts come from the accounting engine; other domains still have none.
+    published = {c.id for c in scope.calculations}
+    assert "payroll-gross-to-net" in published and "payroll-award-ceiling-excess" in published
+    assert all(c.id.startswith("payroll-") for c in scope.calculations)
+    assert any("payroll only" in gap for gap in scope.gaps)
+    # Each published calculation names sources the specialist can actually read.
+    available = {s.id for s in scope.sources}
+    assert all(set(c.source_ids) <= available and c.source_ids for c in scope.calculations)
 
 
 def test_read_source_returns_original_text_bound_to_the_snapshot(client):
@@ -101,12 +107,52 @@ def test_new_evidence_supersedes_the_snapshot_and_blocks_stale_reads(client):
         asyncio.run(data.read_source(scope, source_id))
 
 
-def test_calculate_fails_closed_until_the_engine_publishes_amounts(client):
+def test_calculate_fails_closed_for_identifiers_the_engine_does_not_publish(client):
     ws = commit_pack(client)
     data = IntakeDataSource()
     scope = asyncio.run(data.snapshot(ws))
+    # An AP or grant amount has no engine behind it yet, and is refused rather than guessed.
     with pytest.raises(ValueError, match="No deterministic calculation"):
-        asyncio.run(data.calculate(scope, "payroll-allocation"))
+        asyncio.run(data.calculate(scope, "invoice-duplicate-exposure"))
+
+
+def test_published_payroll_amounts_are_bound_to_their_snapshot_and_sources(client):
+    ws = commit_pack(client)
+    data = IntakeDataSource()
+    scope = asyncio.run(data.snapshot(ws))
+    result = asyncio.run(data.calculate(scope, "payroll-unsupported-by-service-evidence"))
+    assert result.snapshot_id == scope.snapshot_id
+    # The fixture charges the whole salary to the award with no service record committed.
+    assert result.amount_cents == 1_000_000
+    assert result.category == "reclassification" and result.cash_delta_cents == 0
+    assert set(result.source_ids) <= {s.id for s in scope.sources}
+    spec = next(c for c in scope.calculations if c.id == result.id)
+    assert set(result.source_ids) == set(spec.source_ids)
+
+
+def test_committing_service_evidence_changes_the_amount_the_engine_publishes(client):
+    ws = commit_pack(client, later=True)
+    data = IntakeDataSource()
+    scope = asyncio.run(data.snapshot(ws))
+    result = asyncio.run(data.calculate(scope, "payroll-unsupported-by-service-evidence"))
+    # A service record exists, so the engine no longer asserts the whole allocation is unsupported.
+    assert result.amount_cents == 0 and result.category == "none"
+    # It also refuses to read the split out of the document's prose.
+    assert "does not judge" in result.description
+
+
+def test_amounts_from_a_superseded_snapshot_are_refused(client):
+    ws = commit_pack(client)
+    data = IntakeDataSource()
+    scope = asyncio.run(data.snapshot(ws))
+    later = next(f for f in SAMPLE["files"] if f.get("later"))
+    batch = client.post(f"/api/workspaces/{ws}/imports",
+                        files=[("files", (later["name"], later["content"].encode(), "text/plain"))],
+                        data={"metadata": json.dumps([{"role": later["role"]}])}).json()
+    client.post(f"/api/workspaces/{ws}/imports/{batch['id']}/commit",
+                json={"expected_version": batch["version"], "idempotency_key": batch["id"]})
+    with pytest.raises(ValueError, match="snapshot changed"):
+        asyncio.run(data.calculate(scope, "payroll-unsupported-by-service-evidence"))
 
 
 def test_workspace_without_a_committed_snapshot_is_refused(client):
@@ -118,10 +164,30 @@ def test_workspace_without_a_committed_snapshot_is_refused(client):
         asyncio.run(IntakeDataSource().snapshot("ws-nonexistent"))
 
 
-def test_factory_registers_records_but_live_runs_still_name_the_missing_agents(tmp_path):
+def unconfigure_specialist_model(monkeypatch):
+    for name in ["SPECIALIST_PROVIDER", "SPECIALIST_MODEL", "CFO_PROVIDER", "CFO_MODEL", "OPENAI_API_KEY"]:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_factory_omits_the_payroll_agent_when_no_specialist_model_is_configured(tmp_path, monkeypatch):
+    unconfigure_specialist_model(monkeypatch)
     adapters = create_adapters()
     assert isinstance(adapters.data, IntakeDataSource)
     assert adapters.specialists == {} and adapters.auditor is None
+    runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"), adapters)
+    with pytest.raises(HTTPException) as error:
+        runtime.start(RunRequest(workspace="ws-abc123", mode="live"))
+    assert error.value.status_code == 503
+    assert "agents are not" in error.value.detail
+
+
+def test_factory_registers_the_payroll_agent_but_live_runs_still_need_the_others(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPECIALIST_PROVIDER", "openai")
+    monkeypatch.setenv("SPECIALIST_MODEL", "test-model-id")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    adapters = create_adapters()
+    assert isinstance(adapters.specialists["py"], PayrollBudgetSpecialist)
+    # AP, grants and the independent auditor are still missing, so a live run must not start.
     runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"), adapters)
     with pytest.raises(HTTPException) as error:
         runtime.start(RunRequest(workspace="ws-abc123", mode="live"))

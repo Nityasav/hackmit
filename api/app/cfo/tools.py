@@ -25,6 +25,19 @@ class EvidenceTools:
         self.reads: set[str] = set()
         self.calculations: dict[str, Calculation] = {}
 
+    @property
+    def remaining(self) -> int:
+        """Evidence calls this actor may still make on this task.
+
+        Exposed so an adapter can plan within its allowance instead of
+        discovering the limit by hitting it. It is advisory only: `_charge`
+        remains the enforcement point, and the budget is shared across a task's
+        review attempts, so an adapter that spends it all leaves none for a retry.
+        """
+        limits = self._run.request.limits
+        return max(0, min(limits.tool_calls_per_agent_task - self._task.actor_tool_calls.get(self._actor, 0),
+                          limits.max_tool_calls - self._run.tool_calls))
+
     def _charge(self, operation: str, reference: str) -> None:
         limits = self._run.request.limits
         used = self._task.actor_tool_calls.get(self._actor, 0)
