@@ -98,11 +98,27 @@ class CFOEngine:
                     if task.status != "queued":
                         continue
                     dependencies = [states[d] for d in task.spec.depends_on]
-                    if any(d.status in {"failed", "needs_evidence", "blocked"} for d in dependencies):
+                    # Block only where the dependency produced nothing to build on.
+                    #
+                    # `needs_evidence` used to block too, which conflated two
+                    # different outcomes under one label: the task DID complete,
+                    # returned reviewed claims, and separately asked for evidence
+                    # it could not find. Treating that as a failure meant any
+                    # workspace whose books have gaps — which is every workspace
+                    # worth investigating — could never finish a dependent plan.
+                    # A real run planned three pairs and blocked all three second
+                    # stages, reporting `partial` while holding 11 accepted claims.
+                    #
+                    # `_investigate` already passes a dependency's `result` down,
+                    # and that result exists here, so the downstream task can run
+                    # on it and carry the gaps forward. Nothing is loosened by
+                    # this: the auditor still reviews every claim independently,
+                    # and the upstream evidence requests stay in `unresolved`.
+                    if any(d.status in {"failed", "blocked"} for d in dependencies):
                         task.status = "blocked"
                         run.unresolved.append(f"{task.spec.id}: dependency did not complete successfully.")
                         emit("cfo", "task.blocked", "Upstream work is unresolved.", task.spec.id)
-                    elif all(d.status == "done" for d in dependencies):
+                    elif all(d.status in {"done", "needs_evidence"} for d in dependencies):
                         ready.append(task)
                 if not ready:
                     break
