@@ -103,6 +103,7 @@ export interface EvidenceNode {
 }
 
 export type FindingStatus =
+  | "hypothesized"
   | "substantiated"
   | "cleared"
   | "explained"
@@ -248,4 +249,26 @@ export interface Coverage {
 export interface SourceDetail {
   id: string; name: string; sha256: string; committed: boolean; options: SourceOptions;
   line_count: number; lines: { number: number; text: string }[];
+}
+export interface AgentCitation { source_id: string; line: number; quote: string }
+export interface AgentRun {
+  id: string; workspace_id: string; agent: "cfo" | "grants_compliance" | "internal_auditor"; snapshot_id: string;
+  current_snapshot: boolean;
+  review_targets_current?: boolean | null;
+  status: "running" | "completed" | "failed"; model: string; focus: string;
+  created_at: string; completed_at: string | null; error: string | null;
+  result: {
+    analysis?: {
+      executive_briefing: string; scope_assessed: string; limitations: string[];
+      findings: { title: string; status: "hypothesized" | "needs_evidence" | "cleared";
+        summary: string; citations: AgentCitation[]; limitations: string[] }[];
+      evidence_requests: { title: string; role: SourceRole; reason: string }[];
+      next_tasks: { specialist: string; title: string; objective: string }[];
+      reviews?: { finding_id: string; verdict: "accept" | "reject" | "needs_evidence";
+        rationale: string; citations: AgentCitation[]; required_action: string }[];
+    };
+    review_scope?: { candidate_count: number; reviewed_count: number; unreviewed_finding_ids: string[] };
+    tool_calls?: { tool: string; input_hash: string; output_ref: string; latency_ms: number; status: string }[];
+    usage?: { input_tokens: number; output_tokens: number; total_tokens: number };
+  };
 }

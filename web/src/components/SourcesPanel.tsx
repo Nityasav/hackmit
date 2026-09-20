@@ -2,17 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
-import type { Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
-import sample from "../fixtures/intake.json";
+import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
+import sample from "../../../contracts/fixtures/intake.json";
 
 const ROLES: Record<SourceRole, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
   payroll: "Payroll", grants: "Grant register", budget: "Budget", invoice: "Invoices",
   policy: "Award terms / policy", service: "Service evidence", document: "Other document",
 };
-const input = "w-full rounded-lg border border-slate-300 bg-surface px-2.5 py-2 text-xs";
+const AGENTS = {
+  cfo: { label: "CFO Agent", action: "Run CFO triage", focus: "Perform an initial risk triage of the committed snapshot." },
+  grants_compliance: { label: "Grants & Compliance agent", action: "Run Grants & Compliance", focus: "Review supplied grant terms, award periods, payroll charges and supporting evidence. Identify bounded risks and missing evidence." },
+  internal_auditor: { label: "Internal Auditor agent", action: "Run Internal Auditor", focus: "Independently review the latest preparer findings against original source lines and reperform supporting calculations. Prioritize unsupported conclusions and allocation risks." },
+};
+const input = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs";
 const button = "rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40";
-const primary = "rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-dim disabled:opacity-40";
+const primary = "rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-40";
 const defaults = (role: SourceRole = "document"): SourceOptions => ({
   role, source_system: "manual", source_version: 1, external_id: "", applies_to: "",
   mapping: {}, amount_unit: "major", excluded: false, exclusion_reason: "",
@@ -25,7 +30,7 @@ function download(name: string, content: string) {
 function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
-  return <dialog ref={ref} onCancel={close} className="m-auto max-h-[85vh] w-[min(920px,95vw)] overflow-auto rounded-xl border border-slate-200 bg-surface p-5 shadow-xl backdrop:bg-slate-900/30">
+  return <dialog ref={ref} onCancel={close} className="m-auto max-h-[85vh] w-[min(920px,95vw)] overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/30">
     <div className="mb-4 flex items-center justify-between gap-4"><h2 className="text-base font-semibold">{title}</h2>
       <button type="button" className={button} onClick={close}>Close</button></div>{children}
   </dialog>;
@@ -41,23 +46,31 @@ export function SourcesPanel() {
   const [batch, setBatch] = useState<ImportBatch | null>(null);
   const [draft, setDraft] = useState<Record<string, SourceOptions>>({});
   const [source, setSource] = useState<SourceDetail | null>(null);
+  const [allAgentRuns, setAgentRuns] = useState<AgentRun[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentRun["agent"]>("cfo");
+  const agentRuns = allAgentRuns.filter((run) => run.workspace_id === ws && run.agent === selectedAgent);
+  const agentRunning = allAgentRuns.some((run) => run.workspace_id === ws && run.status === "running");
+  const snapshot = coverage?.workspace.id === ws ? coverage.snapshot : null;
+  const [agentFocus, setAgentFocus] = useState("Perform an initial risk triage of the committed snapshot.");
+  const [agentBusy, setAgentBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const base = `/api/workspaces/${encodeURIComponent(ws)}`;
   const refresh = useCallback(async () => {
-    const [cov, imports] = await Promise.all([
+    const [cov, imports, runs] = await Promise.all([
       intakeApi<Coverage>(base + "/coverage"),
       intakeApi<typeof history>(base + "/imports"),
+      intakeApi<AgentRun[]>(base + "/agent-runs"),
     ]);
-    setCoverage(cov); setHistory(imports);
+    setCoverage(cov); setHistory(imports); setAgentRuns(runs);
   }, [base]);
   useEffect(() => {
     if (!isIntake) return;
     let mounted = true;
-    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports")])
-      .then(([c, h]) => { if (mounted) { setCoverage(c); setHistory(h); } })
+    const load = () => Promise.all([intakeApi<Coverage>(base + "/coverage"), intakeApi<typeof history>(base + "/imports"), intakeApi<AgentRun[]>(base + "/agent-runs")])
+      .then(([c, h, r]) => { if (mounted) { setCoverage(c); setHistory(h); setAgentRuns(r); } })
       .catch(() => { /* The shared API status shows outages; retry without discarding the last snapshot. */ });
     void load();
     const interval = setInterval(load, 10000);
@@ -78,7 +91,7 @@ export function SourcesPanel() {
   }
   const draftChanged = batch && batch.files.some((f) => JSON.stringify(f.options) !== JSON.stringify(draft[f.id]));
 
-  return <section className="mb-4" aria-label="Sources and coverage">
+  return <section className="mb-4 rounded-xl border border-teal-200 bg-white p-4" aria-label="Sources and coverage">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-base font-semibold">Sources & coverage</h2>
         <p className="mt-1 text-xs text-slate-500">Bring the records. See what is supported, what is missing, and where each number came from.</p></div>
@@ -86,7 +99,7 @@ export function SourcesPanel() {
     </div>
     {!isIntake && <p className="mt-3 text-xs text-slate-600">This workspace is a fixed demo. Create an institution to upload your own synthetic records or public documents. The local API must be running.</p>}
     {(error || apiError) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">{error || apiError}. Check that the API is running on {API_URL}.</p>}
-    {message && <p role="status" className="mt-3 rounded-lg bg-surface-2 p-3 text-ink">{message}</p>}
+    {message && <p role="status" className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-800">{message}</p>}
 
     {isIntake && <>
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -97,12 +110,83 @@ export function SourcesPanel() {
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {coverage?.capabilities.map((c) => <div key={c.id} className="rounded-lg border border-slate-200 p-3">
           <div className="font-semibold">{c.label}</div>
-          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[12px] ${c.status === "ready_for_scope" ? "bg-surface-2 text-ink" : "bg-surface-2 text-ink-dim"}`}>{c.status.replaceAll("_", " ")}</span>
+          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] ${c.status === "ready_for_scope" ? "bg-teal-50 text-teal-800" : "bg-amber-50 text-amber-800"}`}>{c.status.replaceAll("_", " ")}</span>
           {c.missing.length > 0 && <p className="mt-1 text-xs">Missing: {c.missing.map((r) => ROLES[r as SourceRole] || r).join(", ")}</p>}
-          <p className="mt-1 text-[13px] text-slate-500">{c.note}</p>
+          <p className="mt-1 text-[11px] text-slate-500">{c.note}</p>
         </div>)}
       </div>
-      <p className="mt-2 text-[13px] text-slate-500">{coverage?.note} Sources are available for review; no agent investigation has run.</p>
+      <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
+
+      <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
+            <p className="mt-1 max-w-3xl text-xs text-slate-600">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>
+          {agentRuns[0] && <span className="text-[11px] text-slate-500">Latest: {agentRuns[0].status} · {agentRuns[0].model}{agentRuns[0].current_snapshot ? "" : " · stale snapshot"}</span>}
+        </div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <select aria-label="Investigation agent" className={input} disabled={agentBusy || agentRunning} value={selectedAgent} onChange={(e) => {
+            const agent = e.target.value as AgentRun["agent"];
+            setSelectedAgent(agent); setAgentFocus(AGENTS[agent].focus); setError(""); setMessage("");
+          }}>{Object.entries(AGENTS).map(([id, agent]) => <option key={id} value={id}>{agent.label}</option>)}</select>
+          <input aria-label="Agent focus" className={input} value={agentFocus} maxLength={500} onChange={(e) => setAgentFocus(e.target.value)} />
+          <button disabled={busy || agentBusy || agentRunning || !snapshot || !agentFocus.trim()} className={primary + " whitespace-nowrap"} onClick={async () => {
+            setAgentBusy(true); setError(""); setMessage("");
+            try {
+              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: JSON.stringify({
+                agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
+              }) });
+              setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
+              await refreshBundle();
+              setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
+            } catch (e) { setError(e instanceof Error ? e.message : "Agent request failed"); }
+            finally { setAgentBusy(false); void refresh().catch(() => {}); }
+          }}>{agentBusy || agentRunning ? "Agent working…" : AGENTS[selectedAgent].action}</button>
+        </div>
+        {!snapshot && <p className="mt-2 text-xs text-amber-700">Commit at least one valid source snapshot before running the agent.</p>}
+        {selectedAgent === "grants_compliance" && <p className="mt-2 text-xs text-slate-500">Checks supplied award terms and payroll service periods. Payroll totals are not complete grant expenditure. Findings remain unreviewed; no compliance certification is issued.</p>}
+        {selectedAgent === "internal_auditor" && <p className="mt-2 text-xs text-slate-500">Run CFO or Grants first. Reviews up to four findings per run using fresh source reads and calculation checks. Accept means the limited claim is supported—not approval of a transaction or an audit opinion.</p>}
+        {agentRuns[0]?.review_targets_current === false && <p className="mt-2 text-xs text-amber-700">A preparer reran or the snapshot changed. These historical verdicts do not cover all current findings; rerun the Auditor.</p>}
+        {agentRuns[0]?.error && <p className="mt-3 rounded bg-red-50 p-2 text-xs text-red-800">{agentRuns[0].error}</p>}
+        {agentRuns[0]?.result.analysis && <div className="mt-4 border-t border-violet-100 pt-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <span>snapshot {agentRuns[0].snapshot_id}</span><span>{agentRuns[0].result.tool_calls?.length || 0} logged tool calls</span>
+            <span>{agentRuns[0].result.usage?.total_tokens || 0} tokens</span>
+          </div>
+          <p className="mt-2 text-sm"><b>Briefing:</b> {agentRuns[0].result.analysis.executive_briefing}</p>
+          <p className="mt-1 text-xs text-slate-500">Scope: {agentRuns[0].result.analysis.scope_assessed}</p>
+          {agentRuns[0].result.review_scope && <p className="mt-2 text-xs">Reviewed {agentRuns[0].result.review_scope.reviewed_count} of {agentRuns[0].result.review_scope.candidate_count} candidate findings in this run. Remaining findings are unreviewed.</p>}
+          {agentRuns[0].result.analysis.reviews?.map((review) => <div key={review.finding_id} className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <b>Auditor verdict: {review.verdict.replaceAll("_", " ")}</b>
+            <p className="break-all font-mono text-[10px] text-slate-500">{review.finding_id}</p>
+            <p className="mt-1 text-xs">{review.rationale}</p>
+            <p className="mt-1 text-xs">Required action: {review.required_action || "No further action proposed within this limited review."}</p>
+            <div className="mt-2 flex flex-wrap gap-2">{review.citations.map((citation, index) => <button key={index} className="text-xs text-teal-700 underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
+              Source line {citation.line}: “{citation.quote}”
+            </button>)}</div>
+          </div>)}
+          {agentRuns[0].result.analysis.findings.map((finding, index) => <div key={index} className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2"><b>{finding.title}</b><span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">{finding.status === "cleared" ? "proposed clearance · unreviewed" : finding.status.replaceAll("_", " ")}</span></div>
+            <p className="mt-1 text-xs">{finding.summary}</p>
+            <div className="mt-2 flex flex-wrap gap-2">{finding.citations.map((citation) => <button key={`${citation.source_id}:${citation.line}`} className="text-xs text-teal-700 underline" onClick={() => act(() => viewSource(citation.source_id, citation.line))}>
+              Source line {citation.line}: “{citation.quote}”
+            </button>)}</div>
+            {finding.limitations.length > 0 && <p className="mt-2 text-[11px] text-slate-500">Limits: {finding.limitations.join("; ")}</p>}
+          </div>)}
+          {agentRuns[0].result.analysis.next_tasks.length > 0 && <div className="mt-3"><b className="text-xs">Proposed specialist work</b><ul className="mt-1 list-disc pl-5 text-xs">
+            {agentRuns[0].result.analysis.next_tasks.map((task, index) => <li key={index}><b>{task.title}</b> · {task.objective}</li>)}
+          </ul></div>}
+          {agentRuns[0].result.analysis.evidence_requests.map((request, index) => <div key={index} className="mt-3 rounded border border-amber-200 bg-white p-3 text-xs">
+            <b>Suggested evidence: {request.title}</b><p className="my-1">{request.reason}</p>
+            <button className={button} disabled={busy || !agentRuns[0].current_snapshot || Boolean(coverage?.requests.some((r) => r.task_id === agentRuns[0].id && r.title === request.title))}
+              onClick={() => act(async () => {
+                setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: JSON.stringify({
+                  title: request.title, role: request.role, task_id: agentRuns[0].id,
+                }) }));
+              })}>Add evidence request</button>
+          </div>)}
+          {agentRuns[0].result.analysis.limitations.length > 0 && <p className="mt-3 text-xs text-slate-500"><b>Run limitations:</b> {agentRuns[0].result.analysis.limitations.join("; ")}</p>}
+        </div>}
+      </div>
 
       <div className="mt-5 border-t border-slate-100 pt-4">
         <h3 className="font-semibold">1. Add records</h3>
@@ -126,7 +210,7 @@ export function SourcesPanel() {
           <select aria-label={`Role for ${f.file.name}`} className={input} value={f.options.role} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, role: e.target.value as SourceRole } } : x))}>
             {Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}
           </select>
-          <label className="text-[12px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
+          <label className="text-[10px]">Version<input aria-label={`Version for ${f.file.name}`} className={input} type="number" min={1} value={f.options.source_version} onChange={(e) => setFiles((all) => all.map((x, n) => n === i ? { ...x, options: { ...x.options, source_version: Number(e.target.value) } } : x))} /></label>
         </div>)}
         <button disabled={busy || !files.length} className={primary + " mt-3"} onClick={() => act(async () => {
           if (files.length > 20 || files.some((f) => f.file.size > 10 * 1024 * 1024) || files.reduce((n, f) => n + f.file.size, 0) > 50 * 1024 * 1024) throw new Error("Upload exceeds file or batch limits");
@@ -149,7 +233,7 @@ export function SourcesPanel() {
         <h3 className="font-semibold">2. Review import · {batch.status.replaceAll("_", " ")}</h3>
         <p className="my-2 text-xs">{batch.counts.parsed} source rows/lines · {batch.counts.valid_records} valid records · {batch.counts.new_records} new · {batch.counts.duplicate_records} duplicates · {batch.counts.issues} issues</p>
         <p className="text-xs">Validated debit total: {(batch.totals.debit_cents / 100).toFixed(2)} · credit: {(batch.totals.credit_cents / 100).toFixed(2)} {coverage?.workspace.currency}</p>
-        <p className="mt-1 text-[13px] text-slate-500">Totals combine opening and activity files for import control only; they are not a financial statement. {batch.coverage_note}</p>
+        <p className="mt-1 text-[11px] text-slate-500">Totals combine opening and activity files for import control only; they are not a financial statement. {batch.coverage_note}</p>
         {batch.files.map((f) => <details key={f.id} className="mt-3 rounded-lg bg-slate-50 p-3">
           <summary className="cursor-pointer font-semibold">{f.name} · {f.row_count} rows/lines {f.duplicate_of ? "· identical bytes already uploaded" : ""}</summary>
           <button className={button + " mt-2"} onClick={() => act(() => viewSource(f.id))}>View original</button>
@@ -171,9 +255,9 @@ export function SourcesPanel() {
             <label className="mt-3 flex items-center gap-2 text-xs"><input type="checkbox" checked={draft[f.id].excluded} onChange={(e) => edit(f.id, { excluded: e.target.checked })} />Exclude this file from the import</label>
             {draft[f.id].excluded && <input aria-label="Exclusion reason" className={input + " mt-1"} placeholder="Reason required" value={draft[f.id].exclusion_reason} onChange={(e) => edit(f.id, { exclusion_reason: e.target.value })} />}
           </>}
-          {f.preview.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-[13px]">
+          {f.preview.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-[11px]">
             <thead><tr><th className="p-1">Source line</th><th className="p-1">Normalized record (amounts in cents)</th></tr></thead>
-            <tbody>{f.preview.map((row, i) => <tr key={i}><td className="p-1 align-top"><button className="text-ink underline" onClick={() => act(() => viewSource(f.id, row.locator))}>{row.locator}</button></td><td className="p-1"><pre className="max-w-[650px] whitespace-pre-wrap break-all">{JSON.stringify(row.payload, null, 2)}</pre></td></tr>)}</tbody>
+            <tbody>{f.preview.map((row, i) => <tr key={i}><td className="p-1 align-top"><button className="text-teal-700 underline" onClick={() => act(() => viewSource(f.id, row.locator))}>{row.locator}</button></td><td className="p-1"><pre className="max-w-[650px] whitespace-pre-wrap break-all">{JSON.stringify(row.payload, null, 2)}</pre></td></tr>)}</tbody>
           </table></div>}
         </details>)}
         {batch.issues.length > 0 && <ul className="mt-3 space-y-1" aria-label="Validation issues">{batch.issues.map((i, n) => <li key={n} className="rounded bg-red-50 p-2 text-xs text-red-800">
@@ -194,8 +278,8 @@ export function SourcesPanel() {
             await Promise.all([refresh(), refreshBundle()]);
             setMessage("Records committed. Originals and the snapshot are saved locally. No financial correction or agent investigation was performed.");
           })}>Confirm & commit records</button>
-          <span className="self-center text-[13px] text-slate-500">Local reviewer · commits validated records, not accounting adjustments</span>
-        </div> : <p className="mt-3 font-mono text-xs text-ink">Saved snapshot: {batch.snapshot_id}</p>}
+          <span className="self-center text-[11px] text-slate-500">Local reviewer · commits validated records, not accounting adjustments</span>
+        </div> : <p className="mt-3 font-mono text-xs text-teal-700">Saved snapshot: {batch.snapshot_id}</p>}
       </div>}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -206,7 +290,7 @@ export function SourcesPanel() {
           </button>)}
         </div>
         <div><h3 className="font-semibold">Missing evidence requests</h3>
-          <p className="my-2 text-[13px] text-slate-500">Track evidence for later review. Attaching a document does not mean an auditor verified it.</p>
+          <p className="my-2 text-[11px] text-slate-500">Track evidence for later review. Attaching a document does not mean an auditor verified it.</p>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
             act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: JSON.stringify({ title: d.get("title"), role: d.get("role") }) })); form.reset(); }); }}>
             <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
@@ -223,7 +307,7 @@ export function SourcesPanel() {
             }}><option value="">Attach a committed {ROLES[r.role].toLowerCase()} source…</option>
               {coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            {r.source_id && <button className="mt-1 text-xs text-ink underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
+            {r.source_id && <button className="mt-1 text-xs text-teal-700 underline" onClick={() => act(() => viewSource(r.source_id!))}>View attached evidence</button>}
           </div>)}
         </div>
       </div>
@@ -247,9 +331,9 @@ export function SourcesPanel() {
       </form>
     </Modal>}
     {source && <Modal title={source.name} close={() => setSource(null)}>
-      <p className="break-all font-mono text-[12px] text-slate-400">SHA-256 {source.sha256}</p>
+      <p className="break-all font-mono text-[10px] text-slate-400">SHA-256 {source.sha256}</p>
       <p className="my-2 text-xs">{source.committed ? "Committed original" : "Staged original — not authoritative"} · {source.line_count} lines · version {source.options.source_version}</p>
-      <a className="text-xs text-ink underline" href={API_URL + base + "/sources/" + source.id + "/download"}>Download unchanged original</a>
+      <a className="text-xs text-teal-700 underline" href={API_URL + base + "/sources/" + source.id + "/download"}>Download unchanged original</a>
       <div className="my-3 max-h-[50vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-3">
         {source.lines.map((l) => <div key={l.number} className="flex gap-3 font-mono text-xs"><span className="w-10 flex-none select-none text-right text-slate-400">{l.number}</span><pre className="whitespace-pre-wrap break-all">{l.text || " "}</pre></div>)}
       </div>

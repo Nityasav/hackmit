@@ -1,6 +1,6 @@
 # SchoolTrace — project map, implementation tracker and handoff
 
-Status: INTAKE IMPLEMENTED — agent integration is the next milestone.
+Status: INTAKE + OPENAI CFO, GRANTS AND INTERNAL AUDITOR IMPLEMENTED — automatic orchestration and local-model training remain future work.
 Updated: 2026-09-19.
 Canonical location: `PROJECT_TRACKER.md` at repository root.
 Repository: `/Users/max/Desktop/Projects/hackmit`.
@@ -50,10 +50,10 @@ Baseline inspected at `bc066ca`; updated below for the intake implementation. Re
 | Dashboard | Eight tabs, two fixed workspaces, fixture-backed display and interactions | `web/src/app/`, `web/src/lib/data.tsx` |
 | API | Health, bundle, approval-state mutation, reset; other demo actions 501 | `api/app/main.py` |
 | Store | Legacy demos stay in memory; intake has SQLite originals, records, snapshots and events | `api/app/store.py`, `api/app/db.py` |
-| Accounting | Allocation split, journal checks, reclassification and cash delta helpers | `api/app/accounting/money.py` |
-| Tests | 49 backend checks including intake API, revision, atomicity, scope and original accounting tests | `api/tests/` |
+| Accounting | Allocation split, journal checks, reclassification and cash delta helpers; deterministic payroll tie-out and fund-allocation calculations | `api/app/accounting/money.py`, `api/app/accounting/payroll.py` |
+| Tests | Intake, CFO triage, coordinator, review gates, accounting, payroll calculation and payroll-agent boundary tests; current counts in latest checkpoint | `api/tests/` |
 | Documents/import | Dynamic workspaces, CSV/text intake, mappings, validation, original evidence, coverage and evidence requests implemented | `api/app/ingestion.py`, `web/src/components/SourcesPanel.tsx` |
-| Agents | README and package marker only; adapter/tool gateway/orchestrator unimplemented | `api/app/agents/` |
+| Agents | Three families not yet consolidated: direct-run CFO/Grants/Auditor, the orchestrated AP dispatch loop, and the ports-based Payroll & Budget specialist | `api/app/agents/` |
 | Workflows | README and package marker only; real scenario workflows unimplemented | `api/app/workflows/` |
 | Shared data | TypeScript/Pydantic mirrors and two demo JSON bundles | `contracts/`, `api/app/models.py`, `web/src/lib/types.ts` |
 | Reports/learning | Fixture presentation, not real recomputation or measured learning | Dashboard data path and fixture contract |
@@ -88,14 +88,19 @@ Every entry marked PROPOSED is a future responsibility, not a request to create 
 | `web/src/lib/data.tsx` | Extended | Shared typed API helper; no extra source-client module |
 | `api/app/main.py` | Existing; extend | API composition and integration |
 | `api/app/models.py` | Existing; extend | Shared models and contract validation |
-| `api/app/db.py` | Implemented | SQLite connection, transactions and version-1 schema; no migration folder |
+| `api/app/db.py` | Implemented | SQLite connection, transactions and additive version-2 schema; no migration folder |
 | `api/app/ingestion.py` | Implemented | Parsers, mapping, validation, atomic commit and saved previews |
 | Source functions in `api/app/ingestion.py` | Implemented | Immutable originals in SQLite, metadata, scoped spans and downloads |
 | Coverage functions in `api/app/ingestion.py` | Implemented | Input readiness and review/unsupported gates |
 | `api/app/store.py` / `ingestion.bundle` | Existing / implemented | Separate legacy demos and persisted empty intake bundles |
-| `api/app/accounting/` | Helpers exist; expand | Ledger, schedules, exact calculations, lineage, invariants |
+| `api/app/accounting/` | Helpers and payroll calculations exist; expand | Ledger, schedules, AP/grant calculations, lineage, invariants |
 | `api/app/context/` | PROPOSED | Versioned nodes/edges, temporal retrieval and dependency invalidation |
-| `api/app/agents/` | Placeholder | Provider/replay adapters, role prompts, tools, orchestration and decisions |
+| `api/app/agents/cfo.py` | Implemented | First OpenAI role, pinned evidence tools, schema validation, run limits and telemetry |
+| `api/app/agents/grants.py` | Implemented | Grants & Compliance prompt and deterministic supplied-payroll award checks using shared runtime |
+| `api/app/agents/auditor.py` | Implemented | Pinned preparer findings, fresh-source review, original CSV reperformance and exact-target verdicts |
+| `api/app/agents/payroll.py` | Implemented | Payroll & Budget specialist on `app/cfo/ports.py`; engine-only amounts, claim validation before the coordinator sees them |
+| `api/app/cfo/`, `api/app/integrations/` | Merged from main | Coordinator/harness and intake bridge; payroll specialist and payroll calculations registered, AP/Grants/Auditor adapters still pending |
+| **Agent consolidation** | OPEN | Three independently built families share this package; pick one runtime before the next milestone |
 | `api/app/workflows/` | Placeholder | Close/payroll/AP/grants/audit-prep stages, evidence resumption and scenarios |
 | `api/app/review/` | PROPOSED | Versioned human decisions, idempotent adjustment application |
 | `api/app/memory/` | PROPOSED | Playbook proposals, applicability, replay-gate results, activation/retirement |
@@ -123,7 +128,7 @@ A task becomes VERIFIED only with concrete implementation and verification evide
 | ACC-02 | Payroll/award/budget schedules and calculation lineage | PROPOSED | ACC-01, supporting inputs | Same snapshot totals tie; gaps visible |
 | CTX-01 | Typed evidence edges and temporal retrieval | PROPOSED | ING-04 | Findings link to originals with provenance |
 | CTX-02 | Transitive invalidation and projection version checks | PROPOSED | CTX-01, ACC-02 | Stale outputs cannot appear current |
-| AGT-01 | Model adapter, structured roles, bounded tools and telemetry | PROPOSED | ING contracts; ACC-01/CTX-01 for real tools | Real provider call emits validated decision/tool events |
+| AGT-01 | Model adapter, structured roles, bounded tools and telemetry | EXISTING_PARTIAL | Intake | First CFO role verified with live OpenAI call; other roles and orchestration pending |
 | AGT-02 | CFO → specialists → independent Auditor workflow | PROPOSED | AGT-01, ING-06 | At least three distinct investigations; unsupported claim revised/rejected |
 | WF-01 | Evidence requests, resumable jobs and human queue | PROPOSED | ING-06, AGT-01 | Missing input blocks then resumes only affected work |
 | REV-01 | Current-version, distinct-human, idempotent adjustments | PROPOSED | ACC-02, CTX-02, WF-01 | Approve once; coherent new snapshot; baseline preserved |
@@ -261,3 +266,78 @@ After a meaningful slice or before a context handoff:
 - Not implemented: PDF/OCR/XLSX, private institutional access, complete management reports, agent orchestration, scenario recomputation, memory or measured evaluation.
 - Next implementation milestone: accounting/query tools plus one real specialist and independent auditor consuming these source/snapshot IDs.
 - Handoff: no secrets or private real records were added; do not mistake input readiness for a completed audit.
+
+### CFO triage implementation and review checkpoint — 2026-09-19
+
+- User approved: update hybrid-model/learning spec, work on `max`, build first OpenAI agent; training later.
+- Spec now separates run state, reviewed institutional memory and offline versioned model adapters.
+- LangGraph is the selected future orchestrator; this first role uses a bounded synchronous loop.
+- Local extraction target: benchmark NuExtract3 4B, constrained schema, Pydantic, offline LoRA; none downloaded/trained yet.
+- First agent: `api/app/agents/cfo.py`; no new service or folder hierarchy. API routes and existing source panel expose runs.
+- Review fixes: historical snapshot reads, full-ledger totals beyond 100 rows, record pagination, exact citation validation,
+  server-side argument checks, actual tool-call/time/token limits, retained tool outputs on failure, sanitized provider errors,
+  idempotent request IDs, stale-start rejection, abandoned-run recovery and honest unreviewed finding statuses.
+- Config: backend auto-loads ignored `api/.env`; the user provided a key and authorized local persistence. No key in tracked files.
+- Tests before main integration: 58 backend checks; production Next.js build/TypeScript and changed-file lint passed.
+- Live provider check: isolated synthetic September pack; gpt-5.4-mini completed 8 tool calls, 15,999 tokens,
+  cited missing service evidence. The temporary test database was discarded after verification.
+- Browser review caught cents/dollars confusion and unread evidence described as absent. Added bounded source previews,
+  explicit units and a supplemental currency-prefixed amount guard (not semantic validation of all monetary prose).
+- Corrected live run: 8 tool calls, 37,175 tokens; identified the synthetic payroll/service allocation conflict,
+  used the correct 10,000.00 charge and 50,000.00 ceiling, and preserved unreviewed statuses. Original citation opens in UI.
+- Deferred: independent auditor, specialist execution, durable LangGraph scheduling/resumption, automatic evidence continuation,
+  full financial reports, local extraction model, training, playbooks and measured learning.
+- Keep pre-existing prototype HTML and Bun lockfile edits untouched. User authorized pushing `max` and merging into `main`.
+- Main integration: incorporated `f3d8314`, preserving the separately merged coordinator/harness. Resolved `main.py`
+  by keeping both routers, dotenv loading and coordinator shutdown; regenerated the merged uv lock.
+- Combined tree: 92 backend tests (including cross-route coexistence), production build/TypeScript,
+  changed-file lint and `uv lock --check` passed. Live provider and original-citation browser checks passed.
+- Next integration task: implement real specialists and auditor behind coordinator ports, then explicitly unify
+  triage/task dispatch and run history. Do not describe scripted coordinator results as live independent review.
+
+### Grants & Compliance implementation checkpoint — 2026-09-19
+
+- User requested the next live agent; implemented locally on `max`, after the prior CFO merge `d1d0f18`.
+- New module: `api/app/agents/grants.py`. Reuses the existing bounded OpenAI loop, snapshot tools,
+  citation validator and run persistence; no new service, dependencies or directory hierarchy.
+- Added allowlisted request agent (`cfo` default / `grants_compliance`); role-aware idempotency,
+  one active snapshot agent per workspace, history capped per role, and optional `GRANTS_MODEL`.
+- `check_grant` computes full pinned payroll-subset totals, inclusive service windows and ceiling
+  comparisons; missing/ambiguous awards stay unknown. Ledger/payroll are never added together.
+- UI: existing SourcesPanel selector, exact role names, separate results, source-citation modal and
+  evidence requests. Findings/Reasoning preserve both roles; CFO briefing is not overwritten by Grants.
+- Verified: 105 backend tests, production build/TypeScript, changed-file lint, whitespace checks.
+- Real synthetic-data OpenAI run: 7 tool calls / 35,509 tokens; caught full-cost grant charging versus
+  60/40 service evidence, requested allocation terms, and did not invent an adjustment. Validation
+  rejected two intermediate submissions before accepting corrected output. Citation opens original;
+  switching roles retains CFO's earlier result. No private institutional records used.
+- Known limits: supplied payroll only, not lifetime grant spend or legal eligibility certification;
+  citations verify text/location, not inference. Independent Auditor and automatic coordinator dispatch
+  remain pending; neither local extraction nor training was added.
+- Updated spec §8.2, API/shared contracts and READMEs. This new Grants work is uncommitted/unpushed.
+  Pre-existing prototype HTML and Bun lockfile edits remain unchanged; the API key is still ignored.
+
+### Internal Auditor implementation checkpoint — 2026-09-19
+
+- User authorized building the Internal Auditor and pushing to main; includes the pending Grants slice.
+- Added `agents/auditor.py`, sharing the bounded API loop but with its own prompt, schema and tool state.
+- Pins current-snapshot preparer run/finding IDs; no self-review, foreign targets or uncited acceptance.
+- Accept/reject requires explicit fresh reads of all target citations. Accept also requires supporting
+  calculations inferred from cited financial record roles and preparer tool history. Original CSV bytes
+  are reparsed and reconciled with pinned records before arithmetic; mismatches block acceptance.
+- Four verdicts per run; unreviewed IDs/counts are explicit. Further runs prioritize unreviewed targets.
+  Latest per-finding verdicts from the last 20 completed audits are preserved. Preparer reruns never
+  inherit old verdicts; same-snapshot target staleness is exposed in the UI.
+- UI selector, exact-target verdict cards/citations, dashboard annotations and optional AUDITOR_MODEL.
+  Candidate statuses and human approval stay separate; no blanket verified flag or financial mutation.
+- Live synthetic test: first attempt correctly refused un-retrieved citations then hit its budget.
+  Improved exact missing-line feedback and removed preview text from Auditor context. Corrected run
+  completed 9 tool calls / 36,369 tokens, reviewed 4 of 6 findings: two bounded acceptances and two
+  needs-evidence verdicts, with fresh reads and independent grant/ledger reperformance.
+- Verification: 114 backend tests, production build/TypeScript, changed-file lint, whitespace checks,
+  real provider run and browser source-citation check passed. Ready to push combined Grants/Auditor
+  changes from `max` to `main`; no upstream divergence at the final fetch. No private institutional
+  records used; local API key remains ignored and pre-existing prototype/Bun edits remain untouched.
+- Limitations: shared parsing/math implementation is not algorithmic independence; semantic model
+  mistakes remain possible. No audit opinion, compliance certification, automatic coordinator adapter
+  or local-model training. AP and Payroll specialists remain unimplemented.

@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import sandboxFixture from "../fixtures/sandbox.json";
-import mitFixture from "../fixtures/mit.json";
+import sandboxFixture from "../../../contracts/fixtures/sandbox.json";
+import mitFixture from "../../../contracts/fixtures/mit.json";
 import type { ApprovalStatus, Bundle, IntakeWorkspace } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

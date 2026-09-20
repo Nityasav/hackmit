@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app import db, ingestion
 
-SAMPLE = json.loads((Path(__file__).resolve().parents[2] / "web/src/fixtures/intake.json").read_text())
+SAMPLE = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text())
 HEADERS = {"X-SchoolTrace-Reviewer": "local-reviewer"}
 
 

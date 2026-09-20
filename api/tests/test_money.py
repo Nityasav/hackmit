@@ -51,3 +51,30 @@ def test_unbalanced_journal_is_rejected():
 def test_money_formatting():
     assert money(400_000) == "$4,000.00"
     assert money(-1) == "−$0.01"
+
+
+def test_zero_sided_journal_line_is_rejected():
+    from app.accounting.money import JournalLine
+
+    with pytest.raises(InvariantError):
+        assert_balanced([JournalLine("Cash", "General")])
+
+
+def test_money_formatting_does_not_lose_cents_to_float():
+    assert money(9_007_199_254_740_993) == "$90,071,992,547,409.93"
+
+
+def test_seeded_allocation_reference_invariants():
+    import random
+    from fractions import Fraction
+
+    rng = random.Random(20260919)
+    for _ in range(1000):
+        total = rng.randrange(-9_000_000_000_000, 9_000_000_000_000)
+        weights = [rng.randrange(1, 1000) for _ in range(rng.randrange(1, 20))]
+        parts = split_amount(total, weights)
+        assert sum(parts) == total
+        for part, weight in zip(parts, weights):
+            exact = Fraction(total * weight, sum(weights))
+            assert abs(Fraction(part) - exact) < 1
+            assert part == 0 or (part > 0) == (total > 0)
