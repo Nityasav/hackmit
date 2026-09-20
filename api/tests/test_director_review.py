@@ -14,6 +14,7 @@ from app import db, ingestion, security
 from app.accounting.review import checks
 from app.cfo.api import runtime
 from app.cfo.schemas import AcceptedClaim, Claim, Review, Run, RunRequest, Scope
+from tests.conftest import TRANSACTION_FILES, sample_files, withheld_service_record
 
 HEADERS = {"X-SchoolTrace-Reviewer": "local-reviewer"}
 
@@ -29,10 +30,34 @@ def client(tmp_path, monkeypatch):
         yield client
 
 
+def import_files(client, ws, files):
+    """Stage and commit source files through the real intake endpoints."""
+    staged = client.post(f"/api/workspaces/{ws}/imports",
+        files=[("files", (f["name"], f["content"].encode(), "text/plain")) for f in files],
+        data={"metadata": json.dumps([{"role": f["role"]} for f in files])})
+    assert staged.status_code == 201, staged.text
+    batch = staged.json()
+    committed = client.post(f"/api/workspaces/{ws}/imports/{batch['id']}/commit",
+        json={"expected_version": batch["version"], "idempotency_key": batch["id"] + ":" + str(batch["version"])})
+    assert committed.status_code == 200, committed.text
+    return committed.json()
+
+
 def start(client):
-    response = client.post("/api/review-demo")
-    assert response.status_code == 201, response.text
-    return response.json()["workspace"]
+    """A workspace whose every number came from files uploaded here."""
+    created = client.post("/api/workspaces", json={
+        "name": "Fictional school district", "start": "2026-09-01", "end": "2026-09-30",
+        "scope": "September close: invoice register, budget variance, payroll and grant support."})
+    assert created.status_code == 201, created.text
+    ws = created.json()["id"]
+    import_files(client, ws, sample_files() + TRANSACTION_FILES)
+    assert client.post(f"/api/workspaces/{ws}/review/scans").status_code == 201
+    return ws
+
+
+def add_service_evidence(client, ws):
+    """Commit the withheld service record, which supersedes the snapshot."""
+    return import_files(client, ws, [withheld_service_record()])
 
 
 def view(client, ws):
@@ -85,7 +110,7 @@ def test_empty_records_are_gaps_not_clean_audit():
     assert all(f["status"] == "gap" for f in checks([], {}))
 
 
-def test_complete_demo_import_scan_evidence_rescan(client):
+def test_complete_import_scan_evidence_rescan(client):
     ws = start(client)
     before = view(client, ws)
     duplicate = next(f for f in before["findings"] if f["id"].startswith("ap-duplicate-"))
@@ -96,8 +121,7 @@ def test_complete_demo_import_scan_evidence_rescan(client):
         result = client.get(f"/api/workspaces/{ws}/sources/{evidence['source_id']}/spans/{evidence['line']}")
         assert result.status_code == 200 and "VENDOR-1" in result.json()["lines"][0]["text"]
     assert before["live"] is None  # Offline checks never masquerade as model activity.
-    response = client.post(f"/api/workspaces/{ws}/review/demo-evidence")
-    assert response.status_code == 200, response.text
+    add_service_evidence(client, ws)
     stale = view(client, ws)
     assert all(f["stale"] for f in stale["findings"])
     assert client.post(f"/api/workspaces/{ws}/review/scans").status_code == 201
@@ -106,7 +130,6 @@ def test_complete_demo_import_scan_evidence_rescan(client):
     support = next(f for f in after["findings"] if f["id"] == "payroll-unsupported-by-service-evidence")
     assert support["amount_cents"] is None and support["status"] == "gap"
     assert "does not judge" in support["explanation"]
-    assert client.post(f"/api/workspaces/{ws}/review/demo-evidence").json() == {"already_added": True}
     report = client.get(f"/api/workspaces/{ws}/review/report")
     assert report.status_code == 200 and "attachment" in report.headers["content-disposition"]
     assert "USD 1,200.00" in report.text and "Not established" in report.text
@@ -125,7 +148,7 @@ def test_human_followup_versioning_decisions_and_staleness(client):
     assert client.post(route, json=body).status_code == 200
     assert client.post(route, json=body).status_code == 409
     assert client.post(route, json=body | {"expected_version": 1, "status": "approved_proposal"}).status_code == 200
-    assert client.post(f"/api/workspaces/{ws}/review/demo-evidence").status_code == 200
+    add_service_evidence(client, ws)
     assert client.post(route, json=body | {"expected_version": 2}).status_code == 409
     client.post(f"/api/workspaces/{ws}/review/scans")
     after = view(client, ws)
@@ -193,7 +216,7 @@ def test_live_accepted_claim_projects_and_marks_stale(client):
     repo.save(run)
     projected = next(f for f in view(client, ws)["findings"] if f["origin"] == "live_agent")
     assert projected["review"] == "Independent evidence read" and not projected["stale"]
-    client.post(f"/api/workspaces/{ws}/review/demo-evidence")
+    add_service_evidence(client, ws)
     assert view(client, ws)["live_stale"]
     run.status = "running"; repo.save(run)
     assert not any(f["origin"] == "live_agent" for f in view(client, ws)["findings"])
@@ -208,13 +231,14 @@ def test_delete_workspace_removes_source_reviews_and_runs(client):
     assert client.get(f"/api/workspaces/{ws}/review").status_code == 404
     with pytest.raises(KeyError): app.state.cfo_runtime.repository.get("CFO-delete")
     with db.connect() as c:
-        for table in ("sources", "snapshots", "review_scans", "events", "demo_sessions"):
+        for table in ("sources", "snapshots", "review_scans", "events"):
             assert c.execute(f"SELECT count(*) FROM {table} WHERE ws=?", (ws,)).fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("origin", ["https://evil.example", "null", "http://localhost:9000"])
 def test_untrusted_browser_origins_denied(client, origin):
-    assert client.post("/api/review-demo", headers={"Origin": origin}).status_code == 403
+    body = {"name": "Blocked", "start": "2026-09-01", "end": "2026-09-30", "scope": "Should never be created"}
+    assert client.post("/api/workspaces", headers={"Origin": origin}, json=body).status_code == 403
 
 
 def test_dns_rebinding_host_denied(client):
@@ -250,7 +274,8 @@ def test_analyst_cannot_approve_or_delete(client, monkeypatch):
     assert client.post(route, json=action_body(v)).status_code == 200
     assert client.post(route, json=action_body(v) | {"expected_version": 1, "status": "approved_proposal"}).status_code == 403
     assert client.request("DELETE", f"/api/workspaces/{ws}", json={"confirmation": ws}).status_code == 403
-    assert client.post("/api/review-demo").status_code == 403
+    assert client.post("/api/workspaces", json={"name": "New", "start": "2026-09-01", "end": "2026-09-30",
+                                                "scope": "Analysts cannot create workspaces"}).status_code == 403
 
 
 def test_auth_config_errors_fail_closed(client, monkeypatch):

@@ -5,7 +5,6 @@ refuse. They do not exercise specialist reasoning, which is a separate track.
 """
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -18,8 +17,9 @@ from app.cfo.schemas import RunRequest
 from app.integrations.cfo_factory import create_adapters
 from app.integrations.cfo_intake import IntakeDataSource
 from app.main import app
+from tests.conftest import SAMPLE_FILES
 
-SAMPLE = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text(encoding="utf-8"))
+SAMPLE = {"files": SAMPLE_FILES}
 HEADERS = {"X-SchoolTrace-Reviewer": "local-reviewer"}
 
 
@@ -191,9 +191,11 @@ def test_factory_registers_all_snapshot_agents(tmp_path, monkeypatch):
     assert isinstance(adapters.auditor, SnapshotAuditor)
 
 
-def test_intake_workspace_ids_are_accepted_but_never_served_by_the_scripted_harness(tmp_path):
+def test_intake_workspace_ids_are_accepted_but_need_a_registered_data_adapter(tmp_path):
     assert RunRequest(workspace="ws-0123456789abcdef").workspace == "ws-0123456789abcdef"
     runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"))
     with pytest.raises(HTTPException) as error:
-        runtime.start(RunRequest(workspace="ws-0123456789abcdef", mode="scripted"))
-    assert error.value.status_code == 422
+        runtime.start(RunRequest(workspace="ws-0123456789abcdef"))
+    # No adapters registered: the run refuses to start rather than answering from a fixture.
+    assert error.value.status_code == 503
+    assert "adapters are not registered" in error.value.detail

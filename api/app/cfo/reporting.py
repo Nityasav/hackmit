@@ -47,8 +47,7 @@ def render(run: Run, narrative: Narrative | None = None) -> None:
             run.briefing += f" {claim.id} — {amount}."
         if claim.id in explanations:
             prose = explanations[claim.id]
-            authorship = "scripted" if run.request.mode == "scripted" else "model-authored"
-            lines += [f"CFO commentary ({authorship}): {prose.explanation}",
+            lines += [f"CFO commentary: {prose.explanation}",
                       f"Proposed next step: {prose.proposed_next_step}"]
             run.briefing += f" {claim.id}: {prose.explanation}"
         lines += [f"Proposed owner: {item.role}; proposed action: {claim.proposed_action}",
@@ -63,6 +62,4 @@ def render(run: Run, narrative: Narrative | None = None) -> None:
               "- Citations and calculation provenance are checked in code; semantic claim accuracy still depends on the reviewer.",
               f"- CFO model calls: {run.model_calls}; observed evidence tool calls: {run.tool_calls}.",
               f"- CFO tokens: {run.cfo_input_tokens} input, {run.cfo_output_tokens} output. Specialist model tokens are tracked by specialist adapters."]
-    if run.request.mode != "live":
-        lines += ["- Data, specialists, and auditor are scripted integration examples, not a live financial investigation."]
     run.report_markdown = "\n".join(lines) + "\n"

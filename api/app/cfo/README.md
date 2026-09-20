@@ -8,30 +8,25 @@ The implementation uses explicit Python orchestration with typed ports. No agent
 framework dependency is required. Research and presentation wording live in
 [`docs/research/cfo-coordination.md`](../../../docs/research/cfo-coordination.md).
 
-## Try it without a key
+## Run it
 
 From `api/`:
 
 ```powershell
 uv sync --extra cfo
-uv run python -m app.cfo --award-share 60
-uv run python -m app.cfo --award-share 80
-uv run python -m app.cfo --missing-service
 uv run uvicorn app.main:app --port 8000
 ```
 
-These are explicitly **scripted** collaborator examples. They exercise the real
-coordinator and integer-cent calculation engine; they are not real AI investigations.
+A run needs a configured model and registered adapters. Without them the API
+answers 503 and names what is missing; it never substitutes fixture output.
 
-Set `NEXT_PUBLIC_CFO_API_URL=http://127.0.0.1:8000` in `web/.env.local` and open
-`http://localhost:3000/cfo`. The existing eight dashboard tabs remain independent:
-this feature does not overwrite their fixtures or require a bundle-schema change.
+Set `NEXT_PUBLIC_CFO_API_URL=http://127.0.0.1:8000` in `web/.env.local`.
 
 ## API
 
-- `POST /api/cfo/runs`: `{ "workspace": "sandbox", "objective": "Review payroll allocation", "mode": "scripted" }` → 202 with run ID.
-  `workspace` is `sandbox`, `mit`, or an intake workspace ID (`ws-...`). Intake IDs
-  require `mode: "live"`; the scripted harness answers for `sandbox` only.
+- `POST /api/cfo/runs`: `{ "workspace": "ws-...", "objective": "Review payroll allocation" }` → 202 with run ID.
+  `workspace` is a committed intake workspace ID that the registered data adapter
+  can resolve. `mode` is `live`; there is no other mode.
 - `GET /api/cfo/runs/{id}`: plan, task states, accepted claims, unresolved items, activity records, briefing, report.
 - `GET /api/cfo/runs/{id}/report`: Markdown report, or 409 until published.
 - `GET /api/cfo/workspaces/{workspace}/latest`: latest saved run.
@@ -39,17 +34,6 @@ this feature does not overwrite their fixtures or require a bundle-schema change
 Poll the run endpoint while its status is queued/planning/running. A second concurrent
 run for the same workspace returns 409. Missing configuration returns 503; it never
 silently switches a requested live run to fixtures.
-
-Modes:
-
-| Mode | CFO | Data / specialists / auditor |
-| --- | --- | --- |
-| `scripted` | Fixed integration harness | Scripted examples |
-| `model_preview` | Real configured model | Scripted examples |
-| `live` | Real configured model | Registered integration adapters |
-
-`model_preview` lets you test the actual CFO planner and writer before Linda and Maxim
-finish. It is not an evaluation of specialist reasoning or a live financial review.
 
 ## Model configuration
 
@@ -168,12 +152,11 @@ return Adapters(
 ```
 
 Without credentials, a live run stops with a 503 that
-names the missing agents; it never falls back to the scripted harness. This is trusted server configuration, not user input. The factory is
+names the missing agents; it never falls back to fixture output. This is trusted server configuration, not user input. The factory is
 synchronous and runs once per server process. Alternatively, set
 `app.state.cfo_runtime = CFORuntime(repository, adapters)` in your application startup.
 
-On `/cfo`, choose **Five-agent workflow · uploaded records**, or POST a run with
-`mode: "live"`, `workflow: "five_agent"` and a committed intake workspace ID.
+POST a run with `workflow: "five_agent"` and a committed intake workspace ID.
 All three specialist roles must be assigned, with automatic independent Auditor
 review and a CFO report. Missing roles are added within the existing task budget;
 exceeding that budget fails closed. No claims means no review verdict is invented.

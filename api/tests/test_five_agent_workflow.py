@@ -7,11 +7,11 @@ import pytest
 from app.agents.model import StructuredSpecialistModel
 from app.agents.payroll import DraftClaim, DraftFindings, EvidenceSelection
 from app.agents.team import SnapshotAuditor, SnapshotSpecialist
-from app.cfo.demo import DemoData, ScriptedCFO
 from app.cfo.engine import CFOEngine
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import Claim, Limits, Review, Run, RunRequest, TaskSpec, TaskState
 from app.cfo.tools import EvidenceTools
+from tests.conftest import FixtureData, StubPlanner
 
 
 class FakeModel:
@@ -51,8 +51,8 @@ def models(monkeypatch):
 
 
 def test_all_five_roles_connected_and_clients_closed(tmp_path, models):
-    engine = CFOEngine(DemoData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
-                       SnapshotAuditor(), ScriptedCFO(), RunRepository(tmp_path / "runs.db"))
+    engine = CFOEngine(FixtureData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
+                       SnapshotAuditor(), StubPlanner(), RunRepository(tmp_path / "runs.db"))
     run = asyncio.run(engine.execute(engine.create(RunRequest(workflow="five_agent"))))
     assert run.status == "completed", run.unresolved
     assert {t.spec.role for t in run.tasks} == {"ap", "py", "gr"}
@@ -68,8 +68,8 @@ def test_all_five_roles_connected_and_clients_closed(tmp_path, models):
 
 def test_auditor_rejection_never_enters_report(tmp_path, models):
     models.verdict = "needs_evidence"
-    engine = CFOEngine(DemoData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
-                       SnapshotAuditor(), ScriptedCFO(), RunRepository(tmp_path / "runs.db"))
+    engine = CFOEngine(FixtureData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
+                       SnapshotAuditor(), StubPlanner(), RunRepository(tmp_path / "runs.db"))
     run = asyncio.run(engine.execute(engine.create(RunRequest(workflow="five_agent"))))
     assert run.status in {"partial", "needs_evidence"}
     assert not run.accepted and run.unresolved
@@ -77,8 +77,8 @@ def test_auditor_rejection_never_enters_report(tmp_path, models):
 
 
 def test_coverage_cannot_exceed_task_budget(tmp_path, models):
-    engine = CFOEngine(DemoData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
-                       SnapshotAuditor(), ScriptedCFO(), RunRepository(tmp_path / "runs.db"))
+    engine = CFOEngine(FixtureData(), {r: SnapshotSpecialist(r) for r in ("ap", "py", "gr")},
+                       SnapshotAuditor(), StubPlanner(), RunRepository(tmp_path / "runs.db"))
     run = asyncio.run(engine.execute(engine.create(RunRequest(workflow="five_agent", limits=Limits(max_tasks=2)))))
     assert run.status == "failed" and not run.accepted
     assert not models.instances
@@ -86,7 +86,7 @@ def test_coverage_cannot_exceed_task_budget(tmp_path, models):
 
 def test_auditor_reperforms_engine_calculation(models):
     async def exercise():
-        data = DemoData()
+        data = FixtureData()
         scope = await data.snapshot("sandbox")
         run = Run(id="review", request=RunRequest())
         task = TaskState(spec=TaskSpec(id="allocation", role="py", objective="Check", success_criteria="Evidence",
@@ -108,7 +108,7 @@ def test_model_client_closed_after_provider_failure(monkeypatch):
     model.generate = fail
     monkeypatch.setattr(StructuredSpecialistModel, "from_env", lambda **kwargs: model)
     async def exercise():
-        data = DemoData()
+        data = FixtureData()
         scope = await data.snapshot("sandbox")
         task = TaskSpec(id="task", role="ap", objective="Check", success_criteria="Evidence", source_ids=["award"])
         run = Run(id="failure", request=RunRequest())
@@ -120,7 +120,7 @@ def test_model_client_closed_after_provider_failure(monkeypatch):
 
 
 def test_truncated_original_is_not_accepted(models):
-    class TruncatedData(DemoData):
+    class TruncatedData(FixtureData):
         async def read_source(self, scope, source_id):
             span = await super().read_source(scope, source_id)
             span.text += "[Truncated for review; request a narrower excerpt for the remainder.]"
@@ -144,7 +144,7 @@ def test_api_default_factory_runs_committed_workspace(tmp_path, monkeypatch, mod
     from app.cfo.schemas import Plan
     from tests.test_cfo_intake import commit_pack, HEADERS
 
-    class Planner(ScriptedCFO):
+    class Planner(StubPlanner):
         async def plan(self, objective, scope):
             return Plan(rationale="Independent scoped tasks", tasks=[TaskSpec(
                 id=role, role=role, objective="Review source evidence", success_criteria="Cited observations",

@@ -10,7 +10,9 @@ export interface Workspace {
   name: string;
   kind: "synthetic" | "public";
   period: string;
-  mode: "live" | "recorded" | "scripted" | "not_started";
+  /** Narrower than api/app/models.py: the web app only ever receives a
+   *  bundle built by ingestion.bundle(), which emits these two. */
+  mode: "live" | "not_started";
   snapshot_id: string;
   disabled_tabs: TabId[];
   model: string;
@@ -119,7 +121,9 @@ export interface Bundle {
   decisions: Decision[];
 }
 
-export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice" | "service" | "policy" | "document";
+export type SourceRole = "chart" | "opening" | "ledger" | "payroll" | "grants" | "budget" | "invoice"
+  | "fees" | "collections" | "deposits" | "sponsorships"
+  | "service" | "policy" | "document";
 export interface IntakeWorkspace {
   id: string; name: string; kind: "synthetic" | "public";
   entity_type: "school" | "district" | "board" | "university";

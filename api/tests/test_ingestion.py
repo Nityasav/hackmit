@@ -1,14 +1,14 @@
 """Integration checks for intake boundaries and persisted financial state."""
 import json
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app import db, ingestion
+from tests.conftest import SAMPLE_FILES
 
-SAMPLE = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text())
+SAMPLE = {"files": SAMPLE_FILES}
 HEADERS = {"X-SchoolTrace-Reviewer": "local-reviewer"}
 
 

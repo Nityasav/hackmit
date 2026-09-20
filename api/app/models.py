@@ -29,6 +29,8 @@ class Workspace(BaseModel):
     name: str
     kind: Literal["synthetic", "public"]
     period: str
+    # Wider than the web contract on purpose: this model also validates the
+    # fixture bundles in contracts/fixtures, which declare "recorded".
     mode: Literal["live", "recorded", "scripted", "not_started"]
     snapshot_id: str
     disabled_tabs: list[TabId]

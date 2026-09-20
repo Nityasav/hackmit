@@ -76,9 +76,6 @@ CREATE TABLE IF NOT EXISTS review_actions (
     finding_id TEXT NOT NULL, version INTEGER NOT NULL, payload TEXT NOT NULL,
     PRIMARY KEY(ws, snapshot_id, finding_id)
 );
-CREATE TABLE IF NOT EXISTS demo_sessions (
-    ws TEXT PRIMARY KEY REFERENCES workspaces(id), evidence_added INTEGER NOT NULL DEFAULT 0
-);
 PRAGMA user_version = 2;
 """
 

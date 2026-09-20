@@ -6,8 +6,12 @@ import { Suspense, useState, useSyncExternalStore } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { markReturningVisitor, returningVisitorStore } from "@/lib/session-cookie";
 import { track } from "@/lib/activity";
+import { NAV } from "@/lib/tabs";
 
 type Mode = "signin" | "signup";
+
+/** Every page someone can be sent to after signing in. */
+const DESTINATIONS = new Set<string>([...NAV.map((item) => item.href), "/access"]);
 
 function AuthForm() {
   const supabase = getSupabaseClient();
@@ -18,10 +22,11 @@ function AuthForm() {
   );
   const router = useRouter();
   const params = useSearchParams();
-  // Only ever redirect within this site. A bare "/..." path is fine; anything
-  // absolute or protocol-relative ("//evil.com") would send the user off-site.
+  // Only ever land on a page that exists. A stale bookmark for a removed screen
+  // arrives here as ?next=, and following it blindly would sign someone in
+  // straight into a 404 — as would an absolute or protocol-relative URL.
   const requested = params.get("next");
-  const next = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+  const next = DESTINATIONS.has(requested ?? "") ? requested! : "/";
 
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -115,7 +120,7 @@ function AuthForm() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 autoComplete="name"
-                placeholder="Alex Rivera"
+                placeholder="Your name"
               />
             </label>
           )}

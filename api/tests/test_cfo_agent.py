@@ -1,7 +1,6 @@
 """Integration checks for the first live-agent boundary without making provider calls."""
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -10,9 +9,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.agents import cfo
 from app import db
+from tests.conftest import SAMPLE_FILES
 
 
-SAMPLE = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text())
+SAMPLE = {"files": SAMPLE_FILES}
 HEADERS = {"X-SchoolTrace-Reviewer": "local-reviewer"}
 
 
@@ -102,14 +102,17 @@ def test_agent_requires_committed_snapshot_and_server_key(client, monkeypatch):
 def test_merged_app_keeps_coordinator_and_snapshot_triage_routes(client, tmp_path, monkeypatch):
     from app.cfo.api import CFORuntime
     from app.cfo.repository import RunRepository
+    from app.cfo.schemas import Run, RunRequest
 
     runtime = CFORuntime(RunRepository(tmp_path / "coordinator.sqlite3"))
     monkeypatch.setattr(app.state, "cfo_runtime", runtime, raising=False)
     ws, _ = committed_workspace(client)
-    response = client.post("/api/cfo/runs", json={"workspace": "sandbox", "mode": "scripted"})
-    assert response.status_code == 202, response.text
-    run_id = response.json()["id"]
-    assert client.get(f"/api/cfo/runs/{run_id}").status_code == 200
+    # The coordinator route is mounted, and with no adapters registered it says so
+    # instead of starting a run that would have nothing real behind it.
+    refused = client.post("/api/cfo/runs", json={"workspace": ws})
+    assert refused.status_code == 503, refused.text
+    runtime.repository.save(Run(id="CFO-routing", request=RunRequest(workspace=ws)))
+    assert client.get("/api/cfo/runs/CFO-routing").status_code == 200
     assert client.get(f"/api/workspaces/{ws}/agent-runs").json() == []
     assert client.get(f"/api/workspaces/{ws}/bundle").status_code == 200
 

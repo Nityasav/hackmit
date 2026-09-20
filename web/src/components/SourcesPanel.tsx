@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { starterPackSchema, type StarterPack } from "@/lib/schemas";
 import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
 
-const ROLES: Record<SourceRole, string> = {
+// Keyed by string rather than SourceRole: the server owns the role list, and the
+// money-in roles are offered here as soon as it accepts them.
+const ROLES: Record<string, string> = {
   chart: "Chart of accounts", opening: "Opening trial balance", ledger: "General ledger",
   payroll: "Payroll", grants: "Grant register", budget: "Budget", invoice: "Invoices",
+  fees: "Student fees", collections: "Collections (money received)", deposits: "Bank deposits",
+  sponsorships: "Sponsorships & pledges",
   policy: "Award terms / policy", service: "Service evidence", document: "Other document",
 };
 const AGENTS = {
@@ -38,8 +43,6 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
   </dialog>;
 }
 
-interface StarterFile { name: string; role: string; content: string; later?: boolean }
-interface StarterPack { name: string; start: string; end: string; files: StarterFile[] }
 const EMPTY_PACK: StarterPack = { name: "", start: "", end: "", files: [] };
 
 export function SourcesPanel() {
@@ -79,7 +82,13 @@ export function SourcesPanel() {
     let mounted = true;
     void getSupabaseClient()
       .rpc("get_starter_pack")
-      .then(({ data }) => { if (mounted && data) setSample(data as StarterPack); });
+      // Parsed rather than cast: this comes back from the database untyped, and a
+      // drifted shape should fail here instead of rendering a half-built file list.
+      .then(({ data }) => {
+        if (!mounted || !data) return;
+        const parsed = starterPackSchema.safeParse(data);
+        if (parsed.success) setSample(parsed.data);
+      });
     return () => { mounted = false; };
   }, []);
 
@@ -114,7 +123,6 @@ export function SourcesPanel() {
         <p className="mt-1 text-xs text-slate-500">Bring the records. See what is supported, what is missing, and where each number came from.</p></div>
       <button className={button} onClick={() => setCreating(true)}>New institution</button>
     </div>
-    {!isIntake && <p className="mt-3 text-xs text-slate-600">This workspace is a fixed demo. Create an institution to upload your own synthetic records or public documents. The local API must be running.</p>}
     {(error || apiError) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">{error || apiError}. Check that the API is running on {API_URL}.</p>}
     {message && <p role="status" className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-800">{message}</p>}
 
@@ -135,7 +143,7 @@ export function SourcesPanel() {
       <p className="mt-2 text-[11px] text-slate-500">{coverage?.note} {agentRuns.length ? "The latest agent run remains a candidate triage, not an audit conclusion." : "Sources are available for review; no agent investigation has run."}</p>
 
       <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
-        <Link href="/cfo" className="mb-3 inline-block text-sm font-semibold text-teal-700 underline">Open five-agent workflow →</Link>
+        <Link href="/investigation" className="mb-3 inline-block text-sm font-semibold text-teal-700 underline">Open the investigation →</Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h3 className="font-semibold">{AGENTS[selectedAgent].label} <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-800">LIVE OPENAI</span></h3>
             <p className="mt-1 max-w-3xl text-xs text-slate-600">Reviews your committed records and returns cited observations and suggested next steps. Selected records and source excerpts are sent to OpenAI when you start a run.</p></div>

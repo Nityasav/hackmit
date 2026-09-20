@@ -4,18 +4,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.cfo.api import CFORuntime
-from app.cfo.demo import DemoData, ScriptedAuditor, ScriptedCFO, ScriptedSpecialist
+from app.cfo.api import Adapters, CFORuntime
 from app.cfo.engine import CFOEngine
 from app.cfo.model import StructuredCFOModel
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import FollowUp, Limits, Narrative, NarrativeItem, Plan, Review, RunRequest, TaskSpec
+from tests.conftest import FixtureData, StubAuditor, StubPlanner, StubSpecialist
 
 
 def execute(tmp_path, *, data=None, model=None, worker=None, auditor=None, limits=None):
     repo = RunRepository(tmp_path / "runs.sqlite3")
-    engine = CFOEngine(data or DemoData(), {r: worker or ScriptedSpecialist() for r in ["ap", "py", "gr"]},
-                       auditor or ScriptedAuditor(), model or ScriptedCFO(), repo)
+    engine = CFOEngine(data or FixtureData(), {r: worker or StubSpecialist() for r in ["ap", "py", "gr"]},
+                       auditor or StubAuditor(), model or StubPlanner(), repo)
     run = engine.create(RunRequest(limits=limits or Limits()))
     result = asyncio.run(engine.execute(run))
     assert repo.get(run.id) == result
@@ -24,7 +24,7 @@ def execute(tmp_path, *, data=None, model=None, worker=None, auditor=None, limit
 
 @pytest.mark.parametrize("share,cents", [(60, 400_000), (80, 200_000)])
 def test_calculations_are_data_driven_and_persisted(tmp_path, share, cents):
-    run = execute(tmp_path, data=DemoData(share))
+    run = execute(tmp_path, data=FixtureData(share))
     assert run.status == "completed"
     calc = next(a.calculation for a in run.accepted if a.calculation)
     assert calc.amount_cents == cents
@@ -35,14 +35,14 @@ def test_calculations_are_data_driven_and_persisted(tmp_path, share, cents):
 
 
 def test_missing_evidence_never_becomes_confirmed_error(tmp_path):
-    run = execute(tmp_path, data=DemoData(missing_service=True))
+    run = execute(tmp_path, data=FixtureData(missing_service=True))
     assert run.status == "needs_evidence"
     assert all(a.claim.id != "payroll-reclass" for a in run.accepted)
     assert "current payroll service record" in run.report_markdown
     assert "$4,000" not in run.report_markdown
 
 
-class BadPlan(ScriptedCFO):
+class BadPlan(StubPlanner):
     def __init__(self, case):
         self.case = case
 
@@ -79,7 +79,7 @@ def test_auditor_must_retrieve_sources_independently(tmp_path):
     assert run.tasks[1].status == "blocked"
 
 
-class SkipCalculation(ScriptedAuditor):
+class SkipCalculation(StubAuditor):
     async def review(self, claim, scope, tools):
         for source in claim.evidence_ids:
             await tools.read_source(source)
@@ -92,7 +92,7 @@ def test_auditor_must_reperform_calculation(tmp_path):
     assert not any(a.calculation for a in run.accepted)
 
 
-class RejectOnce(ScriptedAuditor):
+class RejectOnce(StubAuditor):
     def __init__(self):
         self.seen = set()
 
@@ -130,7 +130,7 @@ def test_tool_budget_stops_work_without_accepting_claims(tmp_path):
     assert run.status == "partial"
 
 
-class SlowWorker(ScriptedSpecialist):
+class SlowWorker(StubSpecialist):
     async def investigate(self, *args):
         await asyncio.sleep(0.1)
         return await super().investigate(*args)
@@ -143,7 +143,7 @@ def test_worker_timeout_is_visible_and_blocks_dependents(tmp_path):
     assert "TimeoutError" in run.report_markdown
 
 
-class ChangingData(DemoData):
+class ChangingData(FixtureData):
     def __init__(self, change_on):
         super().__init__()
         self.calls, self.change_on = 0, change_on
@@ -157,7 +157,7 @@ class ChangingData(DemoData):
         return scope
 
     async def read_source(self, scope, source_id):
-        return await DemoData().read_source(scope, source_id)
+        return await FixtureData().read_source(scope, source_id)
 
 
 @pytest.mark.parametrize("change_on", [2, 3])
@@ -168,7 +168,7 @@ def test_snapshot_change_before_or_during_synthesis_blocks_publication(tmp_path,
     assert "$4,000" not in run.report_markdown
 
 
-class InventedNarrative(ScriptedCFO):
+class InventedNarrative(StubPlanner):
     def __init__(self, unknown):
         self.unknown = unknown
 
@@ -192,20 +192,25 @@ def test_bad_narrative_falls_back_to_reviewed_report(tmp_path, unknown):
 
 def test_restart_marks_pending_run_interrupted(tmp_path):
     repo = RunRepository(tmp_path / "runs.sqlite3")
-    engine = CFOEngine(DemoData(), {}, ScriptedAuditor(), ScriptedCFO(), repo)
+    engine = CFOEngine(FixtureData(), {}, StubAuditor(), StubPlanner(), repo)
     run = engine.create(RunRequest())
     CFORuntime(repo)
     assert repo.get(run.id).status == "interrupted"
 
 
-def test_runtime_refuses_live_without_integrations_and_serializes_workspace(tmp_path):
+def test_runtime_refuses_runs_without_integrations_and_serializes_workspace(tmp_path, monkeypatch):
     from fastapi import HTTPException
 
+    monkeypatch.setattr(StructuredCFOModel, "from_env", lambda: StubPlanner())
+
     async def scenario():
-        runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"))
+        unconfigured = CFORuntime(RunRepository(tmp_path / "unconfigured.sqlite3"))
         with pytest.raises(HTTPException) as error:
-            runtime.start(RunRequest(mode="live"))
+            unconfigured.start(RunRequest())
         assert error.value.status_code == 503
+
+        adapters = Adapters(FixtureData(), {r: StubSpecialist() for r in ["ap", "py", "gr"]}, StubAuditor())
+        runtime = CFORuntime(RunRepository(tmp_path / "runs.sqlite3"), adapters)
         run = runtime.start(RunRequest())
         with pytest.raises(HTTPException) as error:
             runtime.start(RunRequest())
@@ -221,7 +226,7 @@ def test_openai_adapter_uses_structured_output_and_records_usage():
     plan = Plan(rationale="Bounded check.", tasks=[TaskSpec(id="one", role="gr", objective="Read terms.", source_ids=["award"], success_criteria="Cite clause.")])
     parse = AsyncMock(return_value=SimpleNamespace(output_parsed=plan, usage=SimpleNamespace(input_tokens=100, output_tokens=50)))
     model = StructuredCFOModel("openai", "test-model", SimpleNamespace(responses=SimpleNamespace(parse=parse)))
-    result = asyncio.run(model.plan("Check grant", asyncio.run(DemoData().snapshot("sandbox"))))
+    result = asyncio.run(model.plan("Check grant", asyncio.run(FixtureData().snapshot("sandbox"))))
     assert result == plan
     assert parse.call_args.kwargs["store"] is False
     assert parse.call_args.kwargs["max_output_tokens"] == 4096

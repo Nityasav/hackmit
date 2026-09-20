@@ -13,11 +13,11 @@ import pytest
 
 from app.agents.model import ModelBudgetExceeded, SpecialistRefusal, StructuredSpecialistModel
 from app.agents.payroll import DraftClaim, DraftFindings, EvidenceSelection, PayrollBudgetSpecialist
-from app.cfo.demo import DemoData, ScriptedAuditor, ScriptedCFO, ScriptedSpecialist
 from app.cfo.engine import CFOEngine
 from app.cfo.repository import RunRepository
 from app.cfo.schemas import Limits, Run, RunRequest, TaskSpec, TaskState
 from app.cfo.tools import EvidenceTools
+from tests.conftest import FixtureData, StubAuditor, StubPlanner, StubSpecialist
 
 ALL_SOURCES = ["payroll", "award", "service"]
 
@@ -68,7 +68,7 @@ def findings(*claims, summary="Reperformed the payroll allocation.", requests=()
 
 def run_task(model, *, sources=ALL_SOURCES, limits=None, feedback=None, data=None):
     """Drive one investigate() call through a real EvidenceTools gateway."""
-    data = data or DemoData()
+    data = data or FixtureData()
     request = RunRequest(limits=limits or Limits())
     run = Run(id="CFO-test", request=request)
     scope = asyncio.run(data.snapshot("sandbox"))
@@ -137,7 +137,7 @@ def test_substantiated_findings_require_a_deterministic_amount():
     assert any("needs a deterministic calculation" in r for r in result.evidence_requests)
 
 
-class CleanData(DemoData):
+class CleanData(FixtureData):
     """Same scope, but the engine finds no exception to substantiate."""
 
     async def calculate(self, scope, calculation_id):
@@ -173,7 +173,7 @@ def test_missing_service_evidence_becomes_a_request_not_a_finding():
     model = StubModel(selection(sources=["payroll", "award"], calculations=()),
                       findings(summary="No current service record is available.",
                                requests=["Provide the current payroll service record; a budget split is insufficient."]))
-    result, _, _ = run_task(model, sources=["payroll", "award"], data=DemoData(missing_service=True))
+    result, _, _ = run_task(model, sources=["payroll", "award"], data=FixtureData(missing_service=True))
     assert result.claims == []
     assert "service record" in result.evidence_requests[0]
 
@@ -247,9 +247,9 @@ def test_the_agent_runs_inside_the_real_coordinator_and_survives_independent_rev
     """End to end: planner delegates `py`, the agent works, the auditor reperforms."""
     model = StubModel(selection(), findings(claim()))
     repository = RunRepository(tmp_path / "runs.sqlite3")
-    engine = CFOEngine(DemoData(), {"ap": ScriptedSpecialist(), "gr": ScriptedSpecialist(),
+    engine = CFOEngine(FixtureData(), {"ap": StubSpecialist(), "gr": StubSpecialist(),
                                     "py": PayrollBudgetSpecialist(model)},
-                       ScriptedAuditor(), ScriptedCFO(), repository)
+                       StubAuditor(), StubPlanner(), repository)
     run = asyncio.run(engine.execute(engine.create(RunRequest())))
     assert run.status == "completed"
     payroll = next(a for a in run.accepted if a.role == "py")

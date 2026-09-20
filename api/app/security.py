@@ -84,7 +84,7 @@ async def guard(request):
     if write and user["role"] == "viewer":
         raise HTTPException(403, "This account is read-only.")
     path = request.url.path
-    if write and path in {"/api/workspaces", "/api/review-demo"} and user["role"] != "admin":
+    if write and path == "/api/workspaces" and user["role"] != "admin":
         raise HTTPException(403, "Only admins can create workspaces.")
     match = re.search(r"/workspaces/([^/]+)", path)
     if match:
@@ -112,8 +112,6 @@ async def guard(request):
         authorize_workspace(user, body.get("workspace", "sandbox"))
         if path.startswith("/api/approvals/") and user["role"] not in {"admin", "reviewer"}:
             raise HTTPException(403, "Reviewer role required.")
-    if path == "/api/demo/reset":
-        authorize_workspace(user, request.query_params.get("ws", "sandbox"))
 
 
 class Login(BaseModel):

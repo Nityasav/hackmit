@@ -1,9 +1,9 @@
 """Read-only CFO DataSource over committed intake snapshots.
 
 Bridges the intake layer (`app/ingestion.py`, owned by Functionality) to the CFO
-ports so the coordinator can investigate real uploaded records instead of the
-scripted harness. This adapter only reads: it never stages, commits, mutates
-records, publishes snapshots, or reaches evaluator truth.
+ports so the coordinator investigates real uploaded records. This adapter only
+reads: it never stages, commits, mutates records, publishes snapshots, or
+reaches evaluator truth.
 
 Amounts are never computed here. The accounting engine is Functionality's
 (`app/accounting/`); this module only forwards its results, because the CFO's
@@ -41,12 +41,18 @@ async def _snapshot_view(workspace: str) -> dict:
         raise _unavailable(exc) from None
 
 
-async def _engine_calculations(workspace: str, available: set[str]) -> list[PayrollCalculation]:
+async def _engine_calculations(workspace: str, available: set[str], config: dict) -> list[PayrollCalculation]:
     """Deterministic amounts for this snapshot, restricted to readable sources.
 
     A calculation derived from a superseded source could not be reperformed by
     the auditor through the same evidence, so it is withheld entirely rather
     than published with a partial basis.
+
+    `config` is the workspace record intake already holds, passed through so
+    date-bounded checks (pledge ageing reads its period end) run here exactly as
+    they do on the review path. Without it they stand themselves down, and this
+    caller consumes only amount-bearing AP and budget items, so the gap saying
+    they did not run would be filtered away unseen.
     """
     try:
         inputs = await run_in_threadpool(financial_records, workspace)
@@ -54,7 +60,7 @@ async def _engine_calculations(workspace: str, available: set[str]) -> list[Payr
         raise _unavailable(exc) from None
     service_present = "service" in inputs["roles"]
     engine = payroll_calculations(inputs["records"], service_present)
-    for item in checks(inputs["records"], {}):
+    for item in checks(inputs["records"], config):
         if item["amount_cents"] is not None and item["id"].startswith(("ap-duplicate-", "budget-")):
             engine.append(PayrollCalculation(id=item["id"], description=item["title"],
                 source_ids=tuple(sorted({e["source_id"] for e in item["evidence"]})),
@@ -90,7 +96,7 @@ class IntakeDataSource:
         gaps = [f"{c['label']}: missing {', '.join(c['missing'])}." for c in view["capabilities"] if c["missing"]]
         gaps += [f"Open evidence request ({r['role']}): {r['title']}."
                  for r in view["requests"] if r["status"] in {"open", "needs_review"}]
-        engine = await _engine_calculations(workspace, {s.id for s in sources})
+        engine = await _engine_calculations(workspace, {s.id for s in sources}, config)
         if any(c.id.startswith(("ap-duplicate-", "budget-")) for c in engine):
             gaps.append("Amount inventory includes payroll, exact-key invoice duplicate candidates and expense budget variance where supplied. No payment confirmation, full three-way matching, statutory accounts or full-population grant compliance is implied.")
         elif engine:
@@ -133,7 +139,7 @@ class IntakeDataSource:
         if view["snapshot"] is None or view["snapshot"]["id"] != scope.snapshot_id:
             raise ValueError("The snapshot changed since this run started; rerun against the current snapshot.")
         available = {s["id"] for s in view["sources"] if _usable(s)}
-        engine = await _engine_calculations(scope.workspace, available)
+        engine = await _engine_calculations(scope.workspace, available, view["workspace"])
         result = next((c for c in engine if c.id == calculation_id), None)
         if result is None:
             raise ValueError(

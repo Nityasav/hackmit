@@ -1,4 +1,4 @@
-"""Independent CFO API. Live integration is injected, never inferred from fixtures."""
+"""Independent CFO API. A run is live or it does not start; there is no fixture path."""
 
 import asyncio
 import importlib
@@ -10,7 +10,6 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from .demo import DemoData, ScriptedAuditor, ScriptedCFO, ScriptedSpecialist
 from .engine import CFOEngine
 from .model import StructuredCFOModel
 from .ports import Auditor, DataSource, Specialist
@@ -45,27 +44,20 @@ class CFORuntime:
             raise HTTPException(409, "A CFO run is already active for this workspace.")
         if len(self.pending) >= 2:
             raise HTTPException(429, "Two investigations are already running. Wait before starting another paid run.")
-        if request.mode in {"scripted", "model_preview"}:
-            if request.workspace != "sandbox":
-                raise HTTPException(422, "The scripted harness supports sandbox only.")
-            adapters = Adapters(DemoData(), {role: ScriptedSpecialist() for role in ["ap", "py", "gr"]}, ScriptedAuditor())
-            model = ScriptedCFO()
-        else:
-            if self.adapters is None:
-                raise HTTPException(503, "Live data/specialist adapters are not registered. Set CFO_ADAPTER_FACTORY; see app/cfo/README.md.")
-            adapters = self.adapters
-            if not {"ap", "py", "gr"}.issubset(adapters.specialists) or adapters.auditor is None:
-                raise HTTPException(503, "Records are registered, but the ap, py, gr and auditor agents are not. "
-                                         "Register them in the adapter factory; see app/cfo/README.md.")
-            if any(adapters.auditor is agent for agent in adapters.specialists.values()):
-                raise HTTPException(503, "The auditor must be a separate agent instance from the preparers.")
-        if request.mode != "scripted":
-            try:
-                model = StructuredCFOModel.from_env()
-            except ImportError:
-                raise HTTPException(503, "Install CFO dependencies with uv sync --extra cfo.")
-            except ValueError as exc:
-                raise HTTPException(503, str(exc))
+        if self.adapters is None:
+            raise HTTPException(503, "Live data/specialist adapters are not registered. Set CFO_ADAPTER_FACTORY; see app/cfo/README.md.")
+        adapters = self.adapters
+        if not {"ap", "py", "gr"}.issubset(adapters.specialists) or adapters.auditor is None:
+            raise HTTPException(503, "Records are registered, but the ap, py, gr and auditor agents are not. "
+                                     "Register them in the adapter factory; see app/cfo/README.md.")
+        if any(adapters.auditor is agent for agent in adapters.specialists.values()):
+            raise HTTPException(503, "The auditor must be a separate agent instance from the preparers.")
+        try:
+            model = StructuredCFOModel.from_env()
+        except ImportError:
+            raise HTTPException(503, "Install CFO dependencies with uv sync --extra cfo.")
+        except ValueError as exc:
+            raise HTTPException(503, str(exc))
         engine = CFOEngine(adapters.data, adapters.specialists, adapters.auditor, model, self.repository)
         run = engine.create(request)
         self.active_workspaces.add(request.workspace)

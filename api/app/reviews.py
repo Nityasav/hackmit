@@ -1,6 +1,5 @@
-"""Unified snapshot reviews, human follow-up and a reproducible fictional demo."""
+"""Unified snapshot reviews over committed records, plus human follow-up."""
 import json
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -58,7 +57,6 @@ def review(ws: str, request: Request):
         scans = [json.loads(r[0]) for r in c.execute("SELECT payload FROM review_scans WHERE ws=? ORDER BY rowid DESC LIMIT 2", (ws,))]
         actions = [json.loads(r[0]) | {"snapshot_id": r[1]} for r in c.execute("SELECT payload,snapshot_id FROM review_actions WHERE ws=?", (ws,))]
         history = [dict(r) | {"payload": json.loads(r["payload"])} for r in c.execute("SELECT * FROM events WHERE ws=? AND kind LIKE 'review.%' ORDER BY rowid DESC LIMIT 100", (ws,))]
-        demo = c.execute("SELECT evidence_added FROM demo_sessions WHERE ws=?", (ws,)).fetchone()
         standalone = [dict(row) for agent in ("cfo", "grants_compliance") if (row := c.execute(
             "SELECT * FROM agent_runs WHERE ws=? AND agent=? AND status='completed' ORDER BY created_at DESC LIMIT 1", (ws, agent)).fetchone())]
         audit_rows = c.execute("SELECT output FROM agent_runs WHERE ws=? AND agent='internal_auditor' AND status='completed' ORDER BY created_at DESC LIMIT 20", (ws,)).fetchall()
@@ -99,8 +97,7 @@ def review(ws: str, request: Request):
                for i in scans[0]["checks"] if i["id"] in prior and (i["status"], i["amount_cents"], i["explanation"]) != (prior[i["id"]]["status"], prior[i["id"]]["amount_cents"], prior[i["id"]]["explanation"])] if scans else []
     return dict(workspace=config, snapshot_id=snapshot, scan=scans[0] if scans else None, live=live,
                 live_stale=bool(latest and latest.scope and latest.scope.snapshot_id != snapshot),
-                findings=findings, changes=changes, history=history, limitations=LIMITATIONS,
-                demo=demo is not None, evidence_added=bool(demo and demo[0]))
+                findings=findings, changes=changes, history=history, limitations=LIMITATIONS)
 
 
 def markdown(view):
@@ -175,46 +172,6 @@ def act(ws: str, body: FollowUp, request: Request):
     return payload
 
 
-def demo_files():
-    sample = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/intake.json").read_text())
-    files = [f for f in sample["files"] if not f.get("later")]
-    files += [dict(name="invoices.csv", role="invoice", content="record_id,vendor_id,invoice_number,service_date,amount,po_id,receipt_id\nINV-1,VENDOR-1,A-101,2026-09-10,1200.00,PO-1,\nINV-2,VENDOR-1,A-101,2026-09-10,1200.00,PO-1,\nINV-3,VENDOR-2,A-101,2026-09-10,1200.00,PO-2,REC-2\n"),
-              dict(name="budget.csv", role="budget", content="record_id,account,amount,approval_reference\nBUD-1,5000,9000.00,BOARD-DEMO-SEP\n")]
-    return files, next(f for f in sample["files"] if f.get("later"))
-
-
-def import_files(ws, files):
-    batch = ingestion.stage(ws, [(f["name"], f["content"].encode(), ingestion.FileOptions(role=f["role"])) for f in files])
-    return ingestion.commit(ws, batch["id"], ingestion.CommitRequest(expected_version=batch["version"], idempotency_key=batch["id"]))
-
-
-@router.post("/review-demo", status_code=201)
-def create_demo():
-    ws = ingestion.create_workspace(ingestion.WorkspaceCreate(name="Maplebridge School District (sample)", start="2026-09-01", end="2026-09-30",
-        scope="Fictional management review: duplicate candidates, budget variance, payroll and grant support."))["id"]
-    files, _ = demo_files()
-    import_files(ws, files)
-    with db.connect() as c:
-        c.execute("INSERT INTO demo_sessions(ws) VALUES (?)", (ws,))
-    return {"workspace": ws, "scan": scan(ws)}
-
-
-@router.post("/workspaces/{ws}/review/demo-evidence")
-def add_demo_evidence(ws: str):
-    with db.connect() as c:
-        row = c.execute("SELECT evidence_added FROM demo_sessions WHERE ws=?", (ws,)).fetchone()
-        if not row:
-            raise HTTPException(409, "This action is only for the generated fictional demo.")
-        if row[0]:
-            return {"already_added": True}
-    _, evidence = demo_files()
-    imported = import_files(ws, [evidence])
-    with db.connect() as c:
-        c.execute("UPDATE demo_sessions SET evidence_added=1 WHERE ws=?", (ws,))
-        db.event(c, ws, "review.demo_evidence", {"snapshot_id": imported["snapshot_id"]})
-    return imported
-
-
 class DeleteWorkspace(BaseModel):
     confirmation: str
 
@@ -240,7 +197,7 @@ def _delete_workspace(ws: str, body: DeleteWorkspace, request: Request):
             raise HTTPException(409, "Wait for the active standalone review before deleting.")
         c.execute("ATTACH DATABASE ? AS cfo_history", (rt.repository.path,))
         c.execute("DELETE FROM cfo_history.cfo_runs WHERE workspace=?", (ws,))
-        for table in ("review_actions", "review_scans", "demo_sessions", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
+        for table in ("review_actions", "review_scans", "agent_requests", "agent_runs", "evidence_requests", "records", "snapshots", "sources", "batches", "events"):
             c.execute(f"DELETE FROM {table} WHERE ws=?", (ws,))
         c.execute("DELETE FROM workspaces WHERE id=?", (ws,))
     return {"deleted": ws, "note": "Logical deletion completed. OS backups and recoverable filesystem remnants are outside this operation."}

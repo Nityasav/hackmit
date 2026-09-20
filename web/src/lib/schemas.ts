@@ -22,18 +22,16 @@ function optional<T extends z.ZodTypeAny>(schema: T) {
   return schema.nullish().transform((v) => v ?? undefined);
 }
 
-export const agentIdSchema = z.enum(["cfo", "ap", "py", "gr", "au"]);
+const agentIdSchema = z.enum(["cfo", "ap", "py", "gr", "au"]);
 
-export const tabIdSchema = z.enum(["command", "board", "findings", "reports", "reasoning"]);
+const tabIdSchema = z.enum(["command", "board", "findings", "reports", "reasoning"]);
 
-export const toneSchema = z.enum(["good", "warn", "neutral"]);
-
-export const workspaceSchema = z.object({
+const workspaceSchema = z.object({
   id: z.string(),
   name: z.string(),
   kind: z.enum(["synthetic", "public"]),
   period: z.string(),
-  mode: z.enum(["live", "recorded", "scripted", "not_started"]),
+  mode: z.enum(["live", "not_started"]),
   snapshot_id: z.string(),
   disabled_tabs: z.array(tabIdSchema),
   model: z.string(),
@@ -44,7 +42,7 @@ export const workspaceSchema = z.object({
   profile: optional(z.string()),
 });
 
-export const agentSchema = z.object({
+const agentSchema = z.object({
   id: agentIdSchema,
   name: z.string(),
   short: z.string(),
@@ -53,7 +51,7 @@ export const agentSchema = z.object({
   doing: z.string(),
 });
 
-export const briefingSchema = z.object({
+const briefingSchema = z.object({
   generated_at: z.string(),
   text: z.string(),
   actions: z.array(z.object({
@@ -65,7 +63,7 @@ export const briefingSchema = z.object({
 
 
 
-export const taskSchema = z.object({
+const taskSchema = z.object({
   id: z.string(),
   agent: agentIdSchema,
   title: z.string(),
@@ -90,7 +88,7 @@ export const taskSchema = z.object({
   approval_id: z.string().optional(),
 });
 
-export const evidenceNodeSchema = z.object({
+const evidenceNodeSchema = z.object({
   label: z.string(),
   kind: z.enum(["record", "award", "doc", "calc", "page"]),
   tone: z.enum(["neutral", "bad", "good"]),
@@ -99,7 +97,7 @@ export const evidenceNodeSchema = z.object({
   source_preview: z.string().optional(),
 });
 
-export const findingSchema = z.object({
+const findingSchema = z.object({
   id: z.string(),
   agent: agentIdSchema,
   title: z.string(),
@@ -115,7 +113,7 @@ export const findingSchema = z.object({
 });
 
 
-export const decisionSchema = z.object({
+const decisionSchema = z.object({
   id: z.string(),
   run: z.string(),
   time: z.string(),
@@ -142,15 +140,6 @@ export const bundleSchema = z.object({
   decisions: z.array(decisionSchema),
 });
 
-export const workspaceSummarySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  kind: z.enum(["synthetic", "public"]),
-  intake: optional(z.boolean()),
-});
-
-export const workspaceSummaryListSchema = z.array(workspaceSummarySchema);
-
 export const starterPackSchema = z.object({
   name: z.string(),
   start: z.string(),
@@ -163,8 +152,6 @@ export const starterPackSchema = z.object({
   })),
 });
 
-export type ParsedBundle = z.infer<typeof bundleSchema>;
-export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 export type StarterPack = z.infer<typeof starterPackSchema>;
 
 /**

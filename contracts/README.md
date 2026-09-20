@@ -44,8 +44,8 @@ Coverage states are source readiness only; full management statements and alloca
 exists. Evidence `supplied` is not `verified`; attachment saves a future-runtime resumption event, and a
 superseding source returns the request to `needs_review`.
 
-The small public synthetic fixture pack is `fixtures/intake.json`; it is developer input, not a hidden
-benchmark or a saved agent run. Existing UI fixtures remain unchanged for teammate compatibility.
+The small synthetic CSV/Markdown pack the intake tests upload lives in `api/tests/conftest.py`. It is
+test input only: the application ships no fixture file pack and no endpoint that loads one.
 
 The seam between the four workstreams. **Change these three together:**
 

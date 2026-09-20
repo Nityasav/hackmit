@@ -125,11 +125,10 @@ class Limits(Contract):
 
 class RunRequest(Contract):
     workflow: Literal["focused", "five_agent"] = "focused"
-    # "sandbox"/"mit" are the fixed demo workspaces; anything else is an intake
-    # workspace ID, which only a registered live data adapter can resolve.
+    # A workspace ID only a registered live data adapter can resolve.
     workspace: str = Field(default="sandbox", pattern=r"^[A-Za-z0-9_-]{1,64}$")
     objective: str = Field(default="Review the current close and prepare a CFO briefing.", min_length=1, max_length=2000)
-    mode: Literal["scripted", "model_preview", "live"] = "scripted"
+    mode: Literal["live"] = "live"
     limits: Limits = Field(default_factory=Limits)
 
 
@@ -177,4 +176,4 @@ class Run(Contract):
     cfo_output_tokens: int = 0
     briefing: str = "Investigation queued. No conclusions yet."
     report_markdown: str = ""
-    model_label: str = "scripted"
+    model_label: str = "not recorded"

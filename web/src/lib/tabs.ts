@@ -1,23 +1,22 @@
-import type { TabId } from "./types";
+/**
+ * The whole navigation. Three destinations, in the order the work happens:
+ * put the books in, let the agents investigate them, hand over the briefing.
+ *
+ * Nothing else is a destination. If a screen is worth reaching, it belongs
+ * inside one of these three.
+ */
+export type NavId = "books" | "investigation" | "briefing";
 
-export interface TabDef {
-  id: TabId;
+export interface NavItem {
+  id: NavId;
   label: string;
   href: string;
-  group: "Review" | "Work product";
+  /** One plain line: what you do here. Used as the link's title. */
+  hint: string;
 }
 
-/**
- * Only sections backed by the review pipeline appear here. Workflows,
- * Approvals and Learning were removed: the bundle never carried rows for them
- * outside the retired demo workspaces.
- */
-export const TABS: TabDef[] = [
-  { id: "command", label: "Records & overview", href: "/command", group: "Review" },
-  { id: "findings", label: "Findings", href: "/findings", group: "Review" },
-  { id: "board", label: "Follow-up", href: "/board", group: "Work product" },
-  { id: "reports", label: "Director briefing", href: "/reports", group: "Work product" },
-  { id: "reasoning", label: "Reasoning log", href: "/reasoning", group: "Work product" },
+export const NAV: NavItem[] = [
+  { id: "books", label: "Books", href: "/", hint: "Add this school's records" },
+  { id: "investigation", label: "Investigation", href: "/investigation", hint: "Watch the five agents check them" },
+  { id: "briefing", label: "Briefing", href: "/briefing", hint: "Hand the director the result" },
 ];
-
-export const TAB_HREF = Object.fromEntries(TABS.map((t) => [t.id, t.href])) as Record<TabId, string>;

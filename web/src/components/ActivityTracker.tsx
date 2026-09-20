@@ -18,9 +18,13 @@ function Tracker() {
     if (last.current === key) return;
     last.current = key;
 
+    // The dashboard store persists under this key; reading it keeps a page view
+    // attributed to the school being looked at without re-rendering on every change.
     let workspaceId: string | null = null;
     try {
-      workspaceId = localStorage.getItem("st.ws");
+      const saved: unknown = JSON.parse(localStorage.getItem("schooltrace.dashboard") ?? "null");
+      const id = (saved as { state?: { workspaceId?: unknown } } | null)?.state?.workspaceId;
+      workspaceId = typeof id === "string" && id ? id : null;
     } catch {}
 
     void track("page_view", { workspaceId, target: pathname, metadata: query ? { query } : {} });

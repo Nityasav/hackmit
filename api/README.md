@@ -45,7 +45,7 @@ consistency remain separate gates, not implied passes from this suite.
 | `app/agents/cfo.py` | Agent design | First live CFO agent, scoped snapshot tools, OpenAI adapter and run persistence |
 | `app/agents/grants.py` | Agent design | Grants & Compliance instructions, award-window checks and exact supplied-payroll totals; shares the triage runtime |
 | `app/agents/auditor.py` | Agent design | Independent direct-run review with pinned targets, original-source reperformance and provenance gates |
-| `app/cfo/` | CFO coordination | Separate bounded coordinator, scripted harness, persisted runs and specialist/reviewer ports |
+| `app/cfo/` | CFO coordination | Separate bounded coordinator, persisted runs and specialist/reviewer ports |
 | `app/integrations/` | Integration | Read-only intake bridge and adapter factory; live specialist and auditor registration pending |
 | `app/workflows/` | Workflows | Workflow definitions, demo scenarios, synthetic fixtures |
 

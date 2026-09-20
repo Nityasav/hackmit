@@ -4,28 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Bot,
-  FileSearch,
-  FileText,
-  LayoutDashboard,
-  LogOut,
-  type LucideIcon,
-  ScrollText,
-  Stamp,
-} from "lucide-react";
-import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "@/components/ui/sidebar";
+import { BookOpen, FileText, LogOut, type LucideIcon, Search } from "lucide-react";
+import { Sidebar, SidebarBody, useSidebar } from "@/components/ui/sidebar";
+import { endActivitySession } from "@/lib/activity";
 import { useData } from "@/lib/data";
-import { TABS } from "@/lib/tabs";
-import type { TabId } from "@/lib/types";
+import { NAV, type NavId } from "@/lib/tabs";
 import { cn } from "@/lib/utils";
 
-const ICON: Record<TabId, LucideIcon> = {
-  command: LayoutDashboard,
-  findings: FileSearch,
-  board: Stamp,
-  reports: FileText,
-  reasoning: ScrollText,
+const ICON: Record<NavId, LucideIcon> = {
+  books: BookOpen,
+  investigation: Search,
+  briefing: FileText,
 };
 
 export function AppSidebar({ userEmail }: { userEmail: string }) {
@@ -80,15 +69,6 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
   const current = workspaces[currentIndex] ?? { id: ws, name: bundle.workspace.name, short: initials(bundle.workspace.name) };
   const nextWorkspace = workspaces.length ? workspaces[(currentIndex + 1) % workspaces.length] : current;
 
-  const links = TABS.map((tab) => ({
-    id: tab.id,
-    label: tab.label,
-    href: tab.href,
-    icon: <NavIcon tab={tab.id} active={isActive(pathname, tab.href)} />,
-    active: isActive(pathname, tab.href),
-    disabled: bundle.workspace.disabled_tabs.includes(tab.id),
-  }));
-
   return (
     <>
       <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -112,33 +92,41 @@ function SidebarContent({ userEmail }: { userEmail: string }) {
           </motion.span>
         </button>
 
-        <div className="mt-8 flex flex-col gap-2">
-          {links.map((link) => (
-            <div key={link.id} className="relative">
-              <SidebarLink
-                link={link}
+        <nav aria-label="Main" className="mt-8 flex flex-col gap-2">
+          {NAV.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                title={item.hint}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-md transition-colors hover:bg-surface-3",
-                  open ? "px-2" : "justify-center px-0",
-                  link.active && "bg-surface-3 [&_span]:!font-semibold [&_span]:!text-ink",
-                  link.disabled && "opacity-50",
+                  "group/sidebar flex items-center gap-2 rounded-md py-2 transition-colors hover:bg-surface-3",
+                  open ? "justify-start px-2" : "justify-center px-0",
+                  active && "bg-surface-3",
                 )}
-              />
-            </div>
-          ))}
-        </div>
+              >
+                <NavIcon id={item.id} active={active} />
+                <motion.span
+                  animate={{ display: open ? "inline-block" : "none", opacity: open ? 1 : 0 }}
+                  className={cn(
+                    "m-0! inline-block whitespace-pre p-0! text-sm transition duration-150 group-hover/sidebar:translate-x-1",
+                    active ? "font-semibold text-ink" : "text-ink-dim",
+                  )}
+                >
+                  {item.label}
+                </motion.span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
       <div className="flex flex-col gap-1">
-        <SidebarLink
-          link={{
-            label: "Five-agent review & activity",
-            href: "/cfo",
-            icon: <Bot className="h-7 w-7 flex-shrink-0 rounded-none p-1 text-ink-dim" />,
-          }}
-        />
-
-        <form action="/auth/signout" method="post">
+        {/* The sign-out POST redirects but never unloads sessionStorage, so the
+            activity session is ended here or the next person inherits it. */}
+        <form action="/auth/signout" method="post" onSubmit={() => endActivitySession()}>
           <button
             type="submit"
             title={`Sign out ${userEmail}`}
@@ -181,8 +169,8 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
-function NavIcon({ tab, active }: { tab: TabId; active: boolean }) {
-  const Icon = ICON[tab];
+function NavIcon({ id, active }: { id: NavId; active: boolean }) {
+  const Icon = ICON[id];
   return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-ink" : "text-ink-dim")} />;
 }
 
