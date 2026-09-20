@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from time import monotonic
 from typing import Literal
 
@@ -257,7 +257,7 @@ class SnapshotTools:
         if not self.context_seen:
             errors.append("Call get_workspace_context to inspect the supplied evidence inventory before submitting.")
         for amount in _money_mentions(result.model_dump_json()):
-            if amount not in self.allowed_amounts:
+            if amount != amount.to_integral_value() or amount not in self.allowed_amounts:
                 errors.append("A monetary amount is unsupported by inspected records. Check cents versus dollars; omit unsupported amounts.")
         for finding in result.findings:
             if finding.status != "needs_evidence" and not finding.citations:
@@ -275,7 +275,14 @@ class SnapshotTools:
 
 def _money_mentions(text):
     pattern = r"(?:\$|\b(?:USD|CAD|EUR|GBP)\s+)(-?\d[\d,]*(?:\.\d+)?)(?![\d.])"
-    return {int(Decimal(value.replace(",", "")) * 100) for value in re.findall(pattern, text)}
+    amounts = set()
+    for value in re.findall(pattern, text):
+        # Preserve fractional cents so validation rejects them, rather than truncating
+        # an unsupported claim to a coincidentally supported integer amount.
+        with localcontext() as context:
+            context.prec = max(32, len(value) + 4)
+            amounts.add(Decimal(value.replace(",", "")) * 100)
+    return amounts
 
 
 def _tool(name: str, description: str, properties: dict, required: list[str]):

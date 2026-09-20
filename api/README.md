@@ -6,6 +6,32 @@ uv run uvicorn app.main:app --reload --port 8000   # http://localhost:8000/docs
 uv run pytest                                       # accounting invariants
 ```
 
+## Agent evaluation
+
+`uv run pytest -q` runs offline unit/integration/safety tests without provider charges. The cross-agent
+matrix covers forbidden tools, malformed/incomplete provider responses, failure-history retention,
+snapshot changes during a run, exact money guards and seeded allocation invariants.
+
+Fresh model development evaluations are deliberately opt-in and billable:
+
+```bash
+SCHOOLTRACE_LIVE_EVAL=1 SCHOOLTRACE_EVAL_OUTPUT=/absolute/path/outside/runtime uv run pytest -q -s tests/test_agent_live.py
+```
+
+They use isolated temporary databases and fictional documents, never existing user workspaces. The
+local server key loads from ignored `.env`. Four cases exercise CFO, Grants and Auditor: allocation
+conflict, supported full allocation, missing service support and document instruction injection. A fifth
+case supplies a deliberately false scripted preparer claim to test a **live** Auditor rejection. Saved
+artifacts contain source/prompt hashes, outputs, usage and timings, but never keys. Recheck saved sources
+and arithmetic without model calls with `SCHOOLTRACE_EVAL_OUTPUT=/absolute/path uv run pytest -q
+tests/test_agent_live.py -k saved`.
+
+These are developer-authored cases, **not** the independently held-out benchmark from
+`schooltrace/DATA_AND_EVALUATION.md`. HTTP completion and exact citations do not establish semantic
+correctness. Review saved prose against the predetermined expected dispositions; preserve failed runs.
+Full confirmed-issue precision/recall, AP/payment controls, memory ablation, playbook replay and report
+consistency remain separate gates, not implied passes from this suite.
+
 ## Layout
 
 | Path | Owner | What goes here |
