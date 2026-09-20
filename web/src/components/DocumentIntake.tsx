@@ -16,6 +16,10 @@ type Correction = { id: string; document_id: string; output: Output; group: stri
 type State = { documents: Doc[]; model: Model[]; prediction: { id: string; document_id: string; output: Output | null; error: string | null }[];
   correction: Correction[]; retirement: { model_id: string }[];
   active: { model_id: string; version: number } | null; schemas: Record<string, string[]>; schema_version: string };
+//: Where in this screen an action was taken, so its outcome can be reported
+//: beside the control rather than only at the top of the page.
+type Scope = "top" | "review" | "combine";
+
 const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
 
@@ -109,6 +113,8 @@ function Lab({ ws }: { ws: string }) {
   const [model, setModel] = useState("");
   const [combine, setCombine] = useState<string[]>([]);
   const [reshaped, setReshaped] = useState(false);
+  const [scope, setScope] = useState<Scope>("top");
+  const [errorScope, setErrorScope] = useState<Scope>("top");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -129,11 +135,27 @@ function Lab({ ws }: { ws: string }) {
     const named = state?.documents.find(d => d.id === c.document_id);
     return !!named && named.role === role && named.text_sha256 === c.text_sha256;
   });
-  async function act(action: () => Promise<unknown>, success: string) {
-    setBusy(true); setError(""); setMessage("");
-    try { await action(); await refresh(); setMessage(success); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  /**
+   * Run one action and report where it was taken.
+   *
+   * `where` matters: the outcome used to render once, near the top of a long
+   * page, while the button that caused it sat far below. A person clicked
+   * Accept, it succeeded, and nothing they could see changed — which is how a
+   * working control comes to look broken.
+   */
+  async function act(action: () => Promise<unknown>, success: string, where: Scope = "top") {
+    setBusy(true); setError(""); setErrorScope(where); setMessage(""); setScope(where);
+    try { await action(); await refresh(); setMessage(success); setScope(where); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setErrorScope(where); }
     finally { setBusy(false); }
+  }
+
+  /** A confirmation rendered where the action was taken, stated plainly. */
+  function Done({ at }: { at: Scope }) {
+    if (!message || scope !== at) return null;
+    return <p role="status" className="mt-2 border-l-4 border-green-700 bg-green-50 p-3 text-[13px] text-green-900">
+      <b>Done.</b> {message}
+    </p>;
   }
   const post = (path: string, body: unknown) => intakeApi(base + path, { method: "POST", body });
   // A field marked present must carry an exact page span: the API rejects the
@@ -191,7 +213,7 @@ function Lab({ ws }: { ws: string }) {
   const availableModels = state?.model.filter(m => !state.retirement.some(r => r.model_id === m.id)) || [];
   return <div className="space-y-4">
     {error && <p role="alert" className="border border-line bg-red-50 p-3 text-[13px] text-accent-bad">{error}</p>}
-    {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
+    {message && scope === "top" && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF only, up to 10 MB and 20 pages. The text is read straight out of the file, so a PDF you can select text in will work. A scan or a photo of a document needs character recognition, which is not installed on this server, and will be rejected rather than guessed at.</p>
         <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
@@ -228,9 +250,10 @@ function Lab({ ws }: { ws: string }) {
         })}</ul>
         <button className={button} disabled={busy || combine.length < 2}
           onClick={() => act(async () => { await post("/stage-set", { correction_ids: combine, include_records: true }); setCombine([]); },
-            "Combined into one import, waiting under Add records above. Open it there to review and commit; nothing is in the books until you do.")}>
+            "One import now holds every row from the documents you selected, plus each document\u2019s own evidence file. It is waiting under \u201cAdd records\u201d at the top of this page. Review it there and commit it; until you do, none of this is in the books.", "combine")}>
           {combine.length < 2 ? "Select at least two" : `Combine ${combine.length} into one import`}
         </button>
+        <Done at="combine" />
       </section>}
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
         <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
@@ -243,9 +266,9 @@ function Lab({ ws }: { ws: string }) {
           <div><p className="mb-2 text-[13px]">Check each value against the source. Citation offsets start at zero; the end position is excluded.</p><FieldEditor text={editor} doc={doc} fields={state.schemas[doc.role]} change={setEditor} /><details className="mt-3"><summary className="text-[13px]">Edit the raw extraction JSON</summary><label>Extraction JSON<textarea aria-label="Extraction JSON" spellCheck={false} className={`${input} h-96 font-mono text-xs`} value={editor} onChange={e => setEditor(e.target.value)} /></label></details></div></div>
         <details className="my-3"><summary className="cursor-pointer text-[13px]">The page text itself is wrong</summary><p className="my-2 text-[13px]">Compare each page image first. Saving this creates a new text revision and invalidates the values already placed against the old one. The original file is never overwritten.</p><textarea aria-label="Page transcription JSON array" className={`${input} h-40 font-mono`} value={transcript} onChange={e => setTranscript(e.target.value)} /><button disabled={busy || !note.trim()} className={button} onClick={() => act(() => post(`/documents/${doc.id}/transcription`, { expected_text_sha256: doc.text_sha256, pages: JSON.parse(transcript), note }), "New text revision saved. Re-open the document and check every value again.")}>Save a corrected transcription</button></details>
         <div className="grid gap-3 text-[13px] md:grid-cols-2"><label>Institution, supplier or template <span className="text-amber-800">(required)</span><input className={input} value={group} onChange={e => setGroup(e.target.value)} placeholder="Keeps related documents together" /></label><label>Review note <span className="text-amber-800">(required)</span><input className={input} value={note} onChange={e => setNote(e.target.value)} /></label><label>Data authorization <span className="text-amber-800">(required)</span><input className={input} value={authorization} onChange={e => setAuthorization(e.target.value)} placeholder="Synthetic data I own, or the restriction that applies" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I am allowed to keep this document for evaluation</label></div>
-        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim() || uncited.length > 0} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Accepted. Nothing has been posted to the books.")}>Accept what I checked</button>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><button className={button} disabled={busy || !group.trim() || !note.trim() || !authorization.trim() || uncited.length > 0} onClick={() => act(() => post("/corrections", { document_id: doc.id, prediction_id: prediction?.id || null, expected_previous: correction?.id || null, text_sha256: doc.text_sha256, output: JSON.parse(editor), group, note, training_authorized: consent, authorization_note: authorization }), "Your checked values are saved against this document, with every citation you confirmed. Nothing has been posted to the books yet — use \u201cStage it for import\u201d next to send them to an import.", "review")}>Accept what I checked</button>
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={includeRecords} onChange={e => setIncludeRecords(e.target.checked)} />Stage new records for import. Leave unchecked if these records are already imported.</label>
-          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged. It is now waiting under Add records above — open it there to review and commit. Nothing is in the books until you do.")}>Stage it for import</button></div>
+          <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "An import has been created and is waiting under \u201cAdd records\u201d at the top of this page, where a banner offers to open it. Review it there and commit it; until you do, none of this is in the books.", "review")}>Stage it for import</button></div>
         {/* A disabled control that does not say why reads as a broken one. */}
         {reshaped &&
           <p className="mt-2 text-[12.5px] text-amber-800">
@@ -260,7 +283,8 @@ function Lab({ ws }: { ws: string }) {
             {uncited.join("; ")}. Either set the page and character positions, or change the status
             to ambiguous or unreadable — a value nobody can point at on the page is not evidence.
           </p>}
-        {error && <p role="alert" className="mt-2 border border-red-300 bg-red-50 p-2 text-[12.5px] text-red-800">{error}</p>}
+        <Done at="review" />
+        {error && errorScope === "review" && <p role="alert" className="mt-2 border border-red-300 bg-red-50 p-2 text-[12.5px] text-red-800">{error}</p>}
         {(!group.trim() || !note.trim() || !authorization.trim()) &&
           <p className="mt-2 text-[12.5px] text-amber-800">Before you can accept: fill in{" "}
             {[!group.trim() && "the institution, supplier or template", !note.trim() && "a review note",
