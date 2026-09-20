@@ -129,6 +129,14 @@ def system_prompt(spec: AgentSpec, *, precedents: bool = False) -> str:
             f"{', '.join(spec.escalate_when.on) or 'none named'}.")
 
 
+def _and_list(reasons: tuple[str, ...] | list[str]) -> str:
+    """Join escalation reasons the way a person would read them aloud."""
+    reasons = list(reasons)
+    if len(reasons) <= 1:
+        return reasons[0] if reasons else "the workspace requires review"
+    return ", ".join(reasons[:-1]) + " and " + reasons[-1]
+
+
 def checked_memory(result: schemas.AgentResult, offered: list[dict],
                    ) -> tuple[list[dict], list[str]]:
     """Keep only checks against precedent this run was actually offered.
@@ -231,12 +239,39 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
         event_id=event_ids[0] if event_ids else None,
         memory_checks=memory_checks)
 
-    # Applied or declined, weighing a precedent is a use of it. Counted after
-    # validation, so an id the model invented can never increment anything.
-    if memory_checks:
+    # One connection for the two writes that follow. Never nest these.
+    if memory_checks or reasons:
         with db.connect() as connection:
-            approvals.note_precedent_uses(
-                connection, ws, [c["precedent_id"] for c in memory_checks])
+            # Applied or declined, weighing a precedent is a use of it. Counted
+            # after validation, so an id the model invented cannot increment.
+            if memory_checks:
+                approvals.note_precedent_uses(
+                    connection, ws, [c["precedent_id"] for c in memory_checks])
+            # An escalation has to become something a person can actually
+            # answer. Without this the runtime decided a conclusion needed
+            # human judgement, wrote that on the decision, and then offered
+            # nobody anywhere to supply it — so no decision was ever made, no
+            # precedent was ever written, and the agents could not learn from
+            # a review that had no way to happen.
+            if reasons:
+                approvals.store(connection, ws, {
+                    "id": "ACK-" + decision_id,
+                    "snapshot_id": toolbox.snapshot_id,
+                    "run_id": thread_id,
+                    "finding_id": decision_id,
+                    "agent": spec.id,
+                    "kind": "decision",
+                    "title": f"Decide how to resolve: {result.summary}",
+                    "summary": (
+                        f"{spec.name} reached this on the evidence it cites, and it needs a "
+                        f"person because {_and_list(reasons)}. {result.rationale} "
+                        f"Proposed: {result.proposed_action} "
+                        "Deciding records your judgement and teaches the next run; it does "
+                        "not approve, post or pay anything."),
+                    # A journal moves money and may only come from an
+                    # independently reviewed claim. This proposes none.
+                    "verified": False,
+                })
 
     _record_match_links(toolbox, spec)
 

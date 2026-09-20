@@ -126,3 +126,66 @@ def test_a_run_records_what_it_did_with_memory_and_counts_the_use(ws):  # noqa: 
         stored = json.loads(row["memory_checks"])
         assert [(c["precedent_id"], c["applied"]) for c in stored] == [("PB-live", False)]
         assert approvals.active_precedents(connection, ws)[0]["uses"] == 1
+
+
+def test_an_escalation_becomes_something_a_person_can_answer(ws):  # noqa: F811
+    """The front half of the loop, which did not exist.
+
+    An agent that escalates is saying the workspace's thresholds put the call
+    beyond its authority. The runtime wrote that on the decision and then
+    offered nobody anywhere to supply the judgement: `approvals.store` had no
+    caller, so no proposal was ever raised, no decision was ever made, and no
+    precedent was ever written. The agents could not learn from a review that
+    had no way to happen.
+    """
+    key = invoice_key(ws, "INV-100")
+    # Confidence below the spec's bar is what escalates this.
+    model = FakeModel([
+        ([("three_way_match", {"invoice_key": key})], None),
+        ([], ap_result(
+            disposition="insufficient_evidence",
+            summary="The invoice cannot be matched to a receipt on the supplied records.",
+            citations=[schemas.Citation(role="vendor_invoices", record_key=key)],
+            memory_checks=[])),
+    ])
+    result = run(ws, "A1", f"Review invoice {key}.", model, record_keys=(key,))
+    assert result.escalated, "this fixture is only meaningful if it escalates"
+
+    with db.connect() as connection:
+        waiting = [a for a in approvals.listing(connection, ws) if a["status"] == "pending"]
+
+    assert len(waiting) == 1, "an escalation must raise exactly one proposal"
+    proposal = waiting[0]
+    assert proposal["finding_id"] == result.decision_id
+    assert proposal["agent"] == "A1"
+    # It must say why a person is needed, not merely that one is.
+    assert "could not reach a conclusion" in proposal["summary"]
+    # A journal moves money and may only come from an independently reviewed
+    # claim; an escalated agent conclusion is not that.
+    assert proposal["journal"] is None and proposal["verified"] is False
+
+
+def test_deciding_an_escalation_writes_the_precedent_the_next_run_reads(ws):  # noqa: F811
+    """End to end, the whole loop: escalate, decide, and the decision is in
+    front of the next agent as guidance it must re-check."""
+    key = invoice_key(ws, "INV-100")
+    model = FakeModel([
+        ([("three_way_match", {"invoice_key": key})], None),
+        ([], ap_result(disposition="insufficient_evidence",
+                       summary="The invoice cannot be matched to a receipt.",
+                       citations=[schemas.Citation(role="vendor_invoices", record_key=key)],
+                       memory_checks=[])),
+    ])
+    run(ws, "A1", f"Review invoice {key}.", model, record_keys=(key,))
+
+    with db.connect() as connection:
+        proposal = next(a for a in approvals.listing(connection, ws) if a["status"] == "pending")
+        assert approvals.active_precedents(connection, ws) == [], "none before a person decides"
+
+    approvals.decide(ws, proposal["id"], "approved")
+
+    with db.connect() as connection:
+        precedent = approvals.active_precedents(connection, ws)
+    assert len(precedent) == 1
+    assert precedent[0]["verdict"] == "approved"
+    assert precedent[0]["decided_by"]

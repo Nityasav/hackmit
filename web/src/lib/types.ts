@@ -157,6 +157,28 @@ export interface Playbook {
   status_note: string;
 }
 
+/**
+ * Something an agent decided needs a person, waiting for one.
+ *
+ * Mirrors `Approval` in api/app/models.py. `decide()` is the only way out of
+ * `pending`, and the only thing that writes precedent — so this is the row a
+ * human acts on to teach the next run.
+ */
+export interface Approval {
+  id: string;
+  agent: AgentId;
+  kind: "journal" | "payment" | "playbook" | "evidence" | "decision";
+  title: string;
+  summary: string;
+  verified: boolean;
+  status: "pending" | "approved" | "rejected";
+  /** A journal moves money, so only an independently reviewed claim proposes one. */
+  journal: { account: string; fund: string; debit_cents: number; credit_cents: number }[] | null;
+  effects: { label: string; value: string; tone?: "good" | "neutral" | null }[] | null;
+  /** The conclusion this would resolve, when it came from one. */
+  finding_id?: string | null;
+}
+
 export interface Bundle {
   contract_version?: number;
   workspace: Workspace;
@@ -166,6 +188,7 @@ export interface Bundle {
   findings: Finding[];
   decisions: Decision[];
   playbooks: Playbook[];
+  approvals: Approval[];
 }
 
 /** Mirrors `api/app/roles.py`. Change both together, and `contracts/` with them. */

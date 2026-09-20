@@ -34,6 +34,7 @@ function emptyBundle(id: string, info?: IntakeWorkspace): Bundle {
     findings: [],
     decisions: [],
     playbooks: [],
+    approvals: [],
   };
 }
 

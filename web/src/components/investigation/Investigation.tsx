@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Decisions } from "@/components/Decisions";
 import { Section } from "@/components/ui";
 import type { AgentNode, AgentRunResult } from "@/lib/types";
 
@@ -79,6 +80,13 @@ export function Investigation({ ws }: { ws: string }) {
 
       <Section title="Agent tasks">
         <AgentBoard />
+      </Section>
+
+      {/* Directly above the precedent it produces, so the loop is one screen:
+          an agent escalates, a person answers, and the answer shows up below
+          as something the next run has to re-check. */}
+      <Section title="Decisions for a person">
+        <Decisions />
       </Section>
 
       <Section title="Previous decisions">
