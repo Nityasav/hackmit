@@ -380,3 +380,40 @@ export interface EventDetail {
   decisions: { id: string; agent: string; action: string; summary: string;
                confidence: number | null; escalated: number; created_at: string }[];
 }
+
+/**
+ * The period on one page. Computed in integer cents by `accounting/`; the renderer
+ * formats and writes nothing, which is what makes a PDF of it defensible.
+ */
+export interface PeriodSnapshot {
+  workspace: { name: string; start: string; end: string; period: string;
+               jurisdiction: string; currency: string };
+  snapshot_id: string | null;
+  prepared_at: string;
+  records: number;
+  result: { revenue_cents: number; expense_cents: number; net_cents: number;
+            expense_by_category_cents: Record<string, number> };
+  position: { assets_cents: number; liabilities_cents: number; equity_cents: number;
+              opening_cash_cents: number; closing_cash_cents: number };
+  /** The identities that decide whether the figures above may be shown at all. */
+  checks: { trial_balance_balances: boolean; balance_sheet_balances: boolean;
+            balance_sheet_difference_cents: number; cash_flow_ties: boolean;
+            reliable: boolean; problems: string[] };
+  close: { ready: boolean; blocked_by: string[]; counts: Record<string, number>;
+           items: { id: string; title: string; state: string; detail: string;
+                    blocking: boolean }[] };
+  controls: { exceptions: { id: string; title: string; amount_cents: number | null;
+                            records: string[]; action: string }[];
+              exception_count: number; passed: string[]; pass_count: number;
+              gap_count: number; omitted: number };
+  variance: { lines: { account: string; name: string; planned_cents: number;
+                       actual_cents: number; variance_cents: number;
+                       favourable: boolean }[];
+              line_count: number; omitted: number;
+              expense_planned_cents: number; expense_actual_cents: number;
+              unplanned: { account: string; name: string }[] };
+  accruals: { count: number; total_cents: number };
+  bank: { bank_lines: number; matched: number; unmatched_bank: number;
+          unmatched_book: number; differing: number } | null;
+  limitations: string[];
+}

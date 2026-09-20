@@ -24,6 +24,7 @@ from . import approvals, ingestion, projection, registers, roles
 from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .agents.chat import router as chat_router
+from .deliverables import router as deliverables_router
 from .reviews import router as review_router
 from . import security
 from .extraction import router as extraction_router
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Sherlock API", version="0.1.0", lifespan=lifespan)
 app.include_router(chat_router)
+app.include_router(deliverables_router)
 app.include_router(review_router)
 app.include_router(security.router)
 app.include_router(extraction_router)

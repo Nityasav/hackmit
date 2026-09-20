@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
 import { API_URL, intakeApi, useData } from "@/lib/data";
+import { Snapshot } from "@/components/investigation/Snapshot";
 import type { SourceDetail } from "@/lib/types";
 
 type FollowUp = { version: number; owner: string; status: string; note: string; actor: string };
@@ -142,7 +143,18 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           comes to review and act, and looking for it here first is the
           reasonable instinct. */}
       <Decisions />
-      {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
+      {section === "reports" ? <>
+        {/* The deliverable comes first. The raw briefing below it is the working text
+            someone edits; this is the thing they hand over. */}
+        <section className="border border-line bg-surface-2 p-5 print:border-0 print:bg-transparent print:p-0">
+          <h2 className="font-semibold print:hidden">One-page snapshot</h2>
+          <p className="mb-4 text-sm text-ink-dim print:hidden">Every figure computed from the ledger in exact cents. Nothing on it was written by a model.</p>
+          <Snapshot ws={ws} />
+        </section>
+        <details className="border border-line p-5 print:hidden"><summary className="cursor-pointer font-semibold">Working briefing (.md)</summary>
+          <div className="mt-4"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a></div>
+          <pre className="mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></details>
+      </> : <>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="agent">Agent conclusions</option></select></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
