@@ -118,6 +118,35 @@ def test_bank_lines_reconcile_to_the_movements_the_books_record(ws):
     assert not result["unmatched_bank"] and not result["unmatched_book"]
 
 
+def test_every_role_that_moves_cash_is_on_the_book_side(ws):
+    """A cash movement the reconciler does not look at reports as unexplained.
+
+    Expenses and payroll were missing from the book side, so a clean period reported
+    twenty-six false exceptions — the kind of noise that teaches a reviewer to stop
+    reading the report. Every role that moves cash has to be indexed, on the figure the
+    bank actually sees: net for a pay run, gross for a bill.
+    """
+    from app.accounting.reconcile import BOOK_SIDE
+
+    assert {"payments", "remittances", "processor_payouts", "expenses", "payroll"} <= set(BOOK_SIDE)
+    # A pay run debits the bank for net pay; matching on gross would differ every time.
+    assert BOOK_SIDE["payroll"] == "net_cents"
+    assert BOOK_SIDE["processor_payouts"] == "net_cents"
+
+
+def test_a_clean_period_reconciles_with_nothing_left_over(ws):
+    """The baseline a planted defect is measured against.
+
+    If a clean period leaves exceptions behind, a real one is indistinguishable from
+    noise and the whole check stops meaning anything.
+    """
+    result = reconcile.reconcile_bank(records_of(ws), ingestion.workspace_config(ws))
+
+    assert result["totals"]["unmatched_bank"] == 0, result["unmatched_bank"][:2]
+    assert result["totals"]["unmatched_book"] == 0, result["unmatched_book"][:2]
+    assert result["totals"]["differing"] == 0
+
+
 def test_an_unreferenced_bank_line_is_reported_not_guessed_at(ws):
     """Two amounts being equal is not evidence that they are the same transaction."""
     extra = ("stray.csv",

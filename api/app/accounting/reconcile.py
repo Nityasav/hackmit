@@ -29,6 +29,20 @@ def _by_role(records: list[dict]) -> dict[str, list[dict]]:
     return grouped
 
 
+#: Roles that record a cash movement, and which field of each the bank sees.
+#: Payroll is the one that differs: a pay run debits the bank for *net* pay, while the
+#: register also carries gross and employer cost. Matching on gross would report a
+#: difference on every payroll batch, which is the sort of false exception that trains
+#: a reviewer to ignore the report.
+BOOK_SIDE: dict[str, str] = {
+    "payments": "amount_cents",
+    "remittances": "amount_cents",
+    "processor_payouts": "net_cents",
+    "expenses": "amount_cents",
+    "payroll": "net_cents",
+}
+
+
 def _reference(payload: dict) -> str:
     """The reference a record was banked under, however the source spelled it."""
     for field in ("bank_reference", "reference", "payment_reference"):
@@ -89,9 +103,11 @@ def reconcile_bank(records: list[dict], config: dict | None = None) -> dict:
     grouped = _by_role(records)
     bank = grouped["bank_transactions"]
 
-    # Book side, indexed by the reference each record says it moved under.
+    # Book side, indexed by the reference each record says it moved under. Every role
+    # that moves cash belongs here: leaving expenses and payroll out did not make them
+    # reconcile, it made every one of their bank lines report as unexplained.
     book: dict[str, list[dict]] = defaultdict(list)
-    for role in ("payments", "remittances", "processor_payouts"):
+    for role in BOOK_SIDE:
         for record in grouped[role]:
             reference = _reference(record["payload"])
             if reference:
@@ -121,11 +137,9 @@ def reconcile_bank(records: list[dict], config: dict | None = None) -> dict:
             continue
 
         seen_references.add(reference)
-        # A payout is compared on its net figure: that is what actually arrives.
-        expected = sum(
-            candidate["payload"].get("net_cents" if candidate["role"] == "processor_payouts"
-                                     else "amount_cents", 0)
-            for candidate in candidates)
+        # Each role is compared on the figure the bank actually sees.
+        expected = sum(candidate["payload"].get(BOOK_SIDE[candidate["role"]], 0)
+                       for candidate in candidates)
         matched.append({
             "bank_key": line["record_key"],
             "reference": reference,
@@ -152,8 +166,7 @@ def reconcile_bank(records: list[dict], config: dict | None = None) -> dict:
                 "role": candidate["role"],
                 "record_key": candidate["record_key"],
                 "reference": reference,
-                "amount_cents": payload.get(
-                    "net_cents" if candidate["role"] == "processor_payouts" else "amount_cents", 0),
+                "amount_cents": payload.get(BOOK_SIDE[candidate["role"]], 0),
                 "citations": [_cite(candidate, "recorded as moved, not seen at the bank")],
                 "reason": "The books record this movement, but no supplied bank line "
                           "carries its reference.",

@@ -417,7 +417,9 @@ def payroll_cycle(books, rng, period, start, end, employees, counter):
             "pay_date": pay_date.isoformat(), "gross": money(gross),
             "deductions": money(deductions), "net": money(gross - deductions),
             "employer_cost": money(employer), "department": employee["department"],
-            "event_ref": ref})
+            # One pay run, one bank debit: every line of the register shares the batch
+            # reference, and the bank sees their net total.
+            "bank_reference": f"PAYRUN-{period}", "event_ref": ref})
     net = total_gross - total_deductions
     books.post(pay_date, ref, "Payroll", [
         (SALARIES, total_gross, 0), (EMPLOYER_COST, total_employer, 0),
@@ -449,7 +451,10 @@ def expense_cycle(books, rng, period, start, end, employees, counter):
             "record_id": record_id, "employee_id": employee["employee_id"],
             "expense_date": spent.isoformat(), "category": category, "amount": money(amount),
             "merchant": f"{rng.choice(VENDOR_STEMS)} {rng.choice(VENDOR_SUFFIXES)}",
-            "department": employee["department"], "event_ref": ref})
+            "department": employee["department"],
+            # The card reference the statement will show. Without it the expense cannot
+            # be traced to its bank line, and the line reports as unexplained.
+            "bank_reference": record_id, "event_ref": ref})
         books.post(spent, ref, f"Expense {record_id}", [(account, amount, 0), (CASH, 0, amount)])
         books.add("bank_transactions", {
             "bank_id": f"BK-{640000 + n}", "bank_account": "Operating",
