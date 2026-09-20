@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, FileText, Files, LogOut, type LucideIcon, Search } from "lucide-react";
+import { BookOpen, FileText, Files, LogOut, type LucideIcon, Search, Users } from "lucide-react";
 import { Sidebar, SidebarBody, useSidebar } from "@/components/ui/sidebar";
 import { SherlockMark } from "@/components/SherlockMark";
 import { endActivitySession } from "@/lib/activity";
@@ -16,6 +16,7 @@ const ICON: Record<NavId, LucideIcon> = {
   books: BookOpen,
   files: Files,
   investigation: Search,
+  agents: Users,
   briefing: FileText,
 };
 

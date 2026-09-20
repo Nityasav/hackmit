@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 
 from .. import approvals, db, ingestion
-from . import schemas
+from . import activity, schemas
 from .budget import Meter, check_day_cap
 from .registry import AGENTS, AgentSpec
 from .tools import ScopeError, Toolbox, dispatch, tool_definitions
@@ -70,6 +70,7 @@ class AgentRun:
     """What one agent did on one task."""
 
     agent_id: str
+    task_id: str
     result: schemas.AgentResult | None
     confidence: int | None
     escalated: bool
@@ -84,6 +85,7 @@ class AgentRun:
         return {
             "agent_id": self.agent_id,
             "agent_name": AGENTS[self.agent_id].name,
+            "task_id": self.task_id,
             "result": self.result.model_dump() if self.result else None,
             "confidence": self.confidence,
             "escalated": self.escalated,
@@ -224,22 +226,44 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
                     parent_toolbox: Toolbox | None = None) -> AgentRun:
     """Execute one agent on one task, inside one run's budget."""
     spec = AGENTS[agent_id]
+
+    # The card is opened first, before anything that can refuse. A task that stops on
+    # its preconditions is a thing that happened to it, and the board is where a person
+    # looks to find out what happened: leaving the refusal off it left four cards
+    # sitting in Queued forever while the run they belonged to was already over.
+    task_id = activity.start(ws, thread_id, spec.id, objective)
+    # The meter counts per agent for the whole run, and one agent can hold several
+    # tasks in a run — a reviewer re-checks each preparer it is assigned. Writing the
+    # meter's total onto every one of its cards reported the same eight tool calls
+    # three times, so each card keeps its own share.
+    spent_before = (meter.tools_by_agent.get(spec.id, 0),
+                    meter.calls_by_agent.get(spec.id, 0),
+                    meter.by_agent.get(spec.id, 0))
+
+    def refuse(message: str) -> AgentFailed:
+        activity.finish(task_id, state="failed", error=message[:400], summary=message)
+        return AgentFailed(message)
+
     config = ingestion.workspace_config(ws)
     inputs = ingestion.financial_records(ws)
     snapshot = ingestion.coverage(ws)["snapshot"]
     if snapshot is None:
-        raise AgentFailed("This workspace has no committed snapshot. Commit records first.")
+        raise refuse("This workspace has no committed snapshot. Commit records first.")
 
     missing = _missing_requirements(spec, ws)
     if missing:
-        raise AgentFailed(
-            f"{spec.name} needs data that has not been supplied yet: {', '.join(missing)}. "
+        raise refuse(
+            f"{spec.name} cannot start without: {', '.join(missing)}. "
             "Books lists what each one unlocks.")
 
-    toolbox = (parent_toolbox.narrow(spec, record_keys=record_keys, event_ids=event_ids)
-               if parent_toolbox else
-               Toolbox(ws, spec, meter, inputs["records"], config, snapshot["id"], thread_id,
-                       record_keys=record_keys, event_ids=event_ids))
+    try:
+        toolbox = (parent_toolbox.narrow(spec, record_keys=record_keys, event_ids=event_ids)
+                   if parent_toolbox else
+                   Toolbox(ws, spec, meter, inputs["records"], config, snapshot["id"], thread_id,
+                           record_keys=record_keys, event_ids=event_ids))
+    except ScopeError as exc:
+        raise refuse(str(exc)) from exc
+    toolbox.task_id = task_id
 
     # One connection for both: `db.connect()` takes an immediate write lock, so
     # opening a second where the first would serve is avoidable contention.
@@ -255,10 +279,20 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
         precedents = approvals.active_precedents(connection, ws)
 
     client = client or build_client()
-    result, usage = await _converse(spec, objective, toolbox, meter, client, precedents)
+    try:
+        result, usage = await _converse(spec, objective, toolbox, meter, client, precedents)
 
-    confidence, amount_cents = _computed_confidence(toolbox, record_keys)
-    toolbox.validate_citations(result.citations)
+        confidence, amount_cents = _computed_confidence(toolbox, record_keys)
+        toolbox.validate_citations(result.citations)
+    except BaseException as exc:
+        # A task that ends without a result must say so on the board. Left in `working`
+        # it would claim to still be running, and a card that claims that when nothing
+        # is running is worse than no card at all.
+        activity.finish(task_id, state="failed", error=f"{type(exc).__name__}: {exc}"[:400],
+                        cost_cents=meter.by_agent.get(spec.id, 0) - spent_before[2],
+                        tool_calls=meter.tools_by_agent.get(spec.id, 0) - spent_before[0],
+                        model_calls=meter.calls_by_agent.get(spec.id, 0) - spent_before[1])
+        raise
     reasons = escalation_reasons(spec, result, confidence, amount_cents,
                                  engine_exceptions(toolbox.calculations))
     memory_checks, memory_notes = checked_memory(result, precedents)
@@ -307,12 +341,41 @@ async def run_agent(ws: str, agent_id: str, objective: str, *, meter: Meter,
 
     _record_match_links(toolbox, spec)
 
+    activity.finish(
+        task_id, state="needs_you" if reasons else "done",
+        summary=result.summary, confidence=confidence, decision_id=decision_id,
+        escalated=bool(reasons), reasons=reasons, result=result.model_dump(),
+        cost_cents=meter.by_agent.get(spec.id, 0) - spent_before[2],
+        tool_calls=meter.tools_by_agent.get(spec.id, 0) - spent_before[0],
+        model_calls=meter.calls_by_agent.get(spec.id, 0) - spent_before[1])
+    if reasons:
+        activity.attach_approval(ws, decision_id, "ACK-" + decision_id)
+
     return AgentRun(
-        agent_id=spec.id, result=result, confidence=confidence,
+        agent_id=spec.id, task_id=task_id, result=result, confidence=confidence,
         escalated=bool(reasons), escalation_reasons=reasons, decision_id=decision_id,
         calculations=dict(toolbox.calculations), cost_cents=meter.by_agent.get(spec.id, 0),
         model_calls=meter.calls_by_agent.get(spec.id, 0),
         tool_calls=meter.tools_by_agent.get(spec.id, 0))
+
+
+def attach_review(ws: str, decision_id: str, reviewer: str, verdict: str) -> None:
+    """Record, on the preparer's own decision, who checked it and what they concluded.
+
+    The trail has carried `reviewer` and `review_verdict` columns since it was written,
+    and nothing filled them: every finding read as unreviewed because the review step
+    was declared in the registry and never wired. A reviewer's own conclusion is a
+    decision in its own right and is written separately; this is the back-reference.
+    """
+    with db.connect() as connection:
+        connection.execute(
+            "UPDATE agent_decisions SET reviewer=?, review_verdict=? WHERE ws=? AND id=?",
+            (reviewer, verdict, ws, decision_id))
+
+
+#: What a reviewer's disposition means about the work it reviewed.
+VERDICT = {"clear": "accepted", "exception": "rejected",
+           "insufficient_evidence": "needs_evidence"}
 
 
 def _missing_requirements(spec: AgentSpec, ws: str) -> list[str]:
@@ -414,6 +477,8 @@ async def _converse(spec: AgentSpec, objective: str, toolbox: Toolbox, meter: Me
             # a 500 with the run lost. Feed it back and let the agent fix it,
             # which is what the loop was always for.
             last_error = exc
+            activity.step(toolbox.task_id, "A draft result was refused",
+                          detail=_readable(exc), state="todo", counts_as_model=True)
             messages.append({"role": "user", "content":
                              "That result was refused: " + _readable(exc) +
                              " Return a corrected result in the same schema."})
@@ -425,6 +490,9 @@ async def _converse(spec: AgentSpec, objective: str, toolbox: Toolbox, meter: Me
 
         calls = [item for item in (response.output or []) if getattr(item, "type", "") == "function_call"]
         if calls:
+            activity.step(toolbox.task_id, "Chose what evidence to retrieve",
+                          detail=", ".join(sorted({c.name for c in calls})),
+                          counts_as_model=True)
             for call in calls:
                 messages.append({"type": "function_call", "name": call.name,
                                  "arguments": call.arguments, "call_id": call.call_id})
@@ -443,9 +511,16 @@ async def _converse(spec: AgentSpec, objective: str, toolbox: Toolbox, meter: Me
         if parsed is None:
             raise AgentFailed("The model returned no usable structured result.")
         try:
-            return spec.output_schema.model_validate(parsed), usage
+            validated = spec.output_schema.model_validate(parsed)
+            activity.step(toolbox.task_id, "Wrote its conclusion",
+                          detail=validated.disposition, counts_as_model=True)
+            return validated, usage
         except ValidationError as exc:
             last_error = exc
+            # Self-correction is work, and hiding it makes a run that struggled look
+            # identical to one that did not.
+            activity.step(toolbox.task_id, "A draft result was refused",
+                          detail=_readable(exc), state="todo", counts_as_model=True)
             messages.append({"role": "user", "content":
                              "That result was refused: " + _readable(exc) +
                              " Return a corrected result in the same schema."})

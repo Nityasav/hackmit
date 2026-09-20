@@ -347,7 +347,9 @@ def _clear_model():
         spec = _spec(kwargs)
         if spec and "three_way_match" in spec.tools and "vendor_invoices" in roles:
             return [("read_records", {"role": "vendor_invoices"})]
-        return [("read_records", {"role": roles[0]})]
+        # D3 assembles the trail and declares no roles of its own. Routing now reaches
+        # it, so the double has to answer for an agent with nothing to read.
+        return [("read_records", {"role": roles[0]})] if roles else []
 
     def score(kwargs):
         spec = _spec(kwargs)
@@ -442,8 +444,15 @@ def test_the_run_reports_a_status_and_a_briefing_with_no_authored_figures(ws):
         or "No agent produced" in final["briefing"]
 
 
-def test_a_run_shares_one_budget_across_every_agent_in_it(ws):
-    """A per-branch meter would let four agents each spend the whole run's cap."""
+def test_a_run_shares_one_budget_across_every_agent_in_it(ws, monkeypatch):
+    """A per-branch meter would let four agents each spend the whole run's cap.
+
+    The cap only stops anything where a deployment turned enforcement on, so this
+    turns it on; what is under test is that the meter is shared, not that it bites.
+    """
+    from app.agents import budget as budget_module
+
+    monkeypatch.setattr(budget_module, "ENFORCE", True)
     model = FakeModel([([], ap_result(disposition="insufficient_evidence",
                                       summary="n/a", rationale="n/a", citations=[]))])
     final = asyncio.run(run_investigation(

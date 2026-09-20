@@ -219,7 +219,9 @@ def test_an_unknown_model_is_priced_at_the_most_expensive_tier():
         cost_cents("gpt-5.6-sol", 1_000_000, 0)
 
 
-def test_a_task_stops_at_its_own_budget(ws):
+def test_a_task_stops_at_its_own_budget(ws, monkeypatch):
+    """With enforcement on. It is off by default, so this turns it on deliberately."""
+    monkeypatch.setattr(budget_module, "ENFORCE", True)
     spec = AGENTS["A1"]
     meter = Meter()
     for _ in range(spec.budget.model_calls):
@@ -230,7 +232,8 @@ def test_a_task_stops_at_its_own_budget(ws):
         meter.check_model_call("A1", spec.model, spec.budget)
 
 
-def test_a_run_stops_at_its_cap_even_when_a_task_has_room(ws):
+def test_a_run_stops_at_its_cap_even_when_a_task_has_room(ws, monkeypatch):
+    monkeypatch.setattr(budget_module, "ENFORCE", True)
     spec = AGENTS["A1"]
     meter = Meter(run_cap_cents=1)
 
@@ -238,8 +241,13 @@ def test_a_run_stops_at_its_cap_even_when_a_task_has_room(ws):
         meter.check_model_call("A1", spec.model, spec.budget)
 
 
-def test_evidence_calls_are_bounded_too(ws):
-    """An agent that reads without concluding is a loop, not a cheap agent."""
+def test_evidence_calls_are_bounded_too(ws, monkeypatch):
+    """An agent that reads without concluding is a loop, not a cheap agent.
+
+    With enforcement on, which is not the default: the bound is reported rather than
+    imposed unless a deployment asks for it.
+    """
+    monkeypatch.setattr(budget_module, "ENFORCE", True)
     spec = AGENTS["A1"]
     meter = Meter()
     for _ in range(spec.budget.tool_calls):
@@ -402,7 +410,7 @@ def test_an_agent_whose_inputs_are_missing_says_so_instead_of_guessing(tmp_path,
     ingestion.commit(workspace, batch["id"], ingestion.CommitRequest(
         expected_version=batch["version"], idempotency_key="k"))
 
-    with pytest.raises(AgentFailed, match="needs data that has not been supplied"):
+    with pytest.raises(AgentFailed, match="cannot start without"):
         run(workspace, "A1", "Review payables.", FakeModel([([], ap_result())]))
 
 

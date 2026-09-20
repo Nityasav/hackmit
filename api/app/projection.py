@@ -109,7 +109,28 @@ def _findings(decisions: list[dict], previews: dict[str, str]) -> list[dict]:
     return out
 
 
-def _tasks(decisions: list[dict]) -> list[dict]:
+def _tasks(ws: str, decisions: list[dict]) -> list[dict]:
+    """The board, from what the runs recorded while they ran.
+
+    `agent_tasks` is the real thing: opened when a task is delegated, appended to on
+    every tool call, closed with what it produced. Decisions written before that table
+    existed have no task row, so they are rendered as the finished cards they are —
+    marked as such rather than given a fabricated progress bar and an invented tool
+    count, which is what this function used to do for every card on the screen.
+    """
+    from .agents import activity
+
+    live = activity.board(ws)
+    with db.connect() as connection:
+        recorded = {row["decision_id"] for row in connection.execute(
+            "SELECT decision_id FROM agent_tasks WHERE ws=? AND decision_id IS NOT NULL",
+            (ws,))}
+
+    return live + _legacy_tasks([d for d in decisions if d["id"] not in recorded])
+
+
+def _legacy_tasks(decisions: list[dict]) -> list[dict]:
+    """Cards for decisions that predate the task table. History, not live work."""
     out = []
     for decision in decisions:
         agent = decision["agent"] if decision["agent"] in AGENTS else "orchestrator"
@@ -123,12 +144,15 @@ def _tasks(decisions: list[dict]) -> list[dict]:
             "progress": 100,
             "eta_s": None,
             "started_at": decision["created_at"],
+            # No task row was ever written for this one, so there is no tool count to
+            # report. Zero of a budget is the honest rendering of "not recorded".
             "tool_calls": {"used": 0, "budget": AGENTS[agent].budget.tool_calls},
             "steps": [{"title": decision["summary"][:200], "state": "done", "memory": False}],
             "todos": [],
             "rationale": decision["why"] or None,
-            "note": "Waiting on your decision" if escalated else None,
-            "note_tone": "warn" if escalated else None,
+            "note": ("Waiting on your decision" if escalated
+                     else "Recorded before step-by-step tracking; no live detail"),
+            "note_tone": "warn" if escalated else "info",
         })
     return out
 
@@ -322,7 +346,7 @@ def _derived(ws):
         },
         "kpis": _kpis(cov, decisions, len(timeline)),
         "workflows": [],
-        "tasks": _tasks(decisions),
+        "tasks": _tasks(ws, decisions),
         "findings": findings,
         "approvals": [_with_known_agent(row) for row in approval_rows],
         "decisions": _reasoning(decisions) + human_decisions,

@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .. import db, ingestion
+from . import activity
 from .budget import BudgetExceeded, DAY_CAP_CENTS, Meter, RUN_CAP_CENTS, spent_today
 from .registry import AGENTS, children
 from .runtime import AgentFailed, run_agent
@@ -81,6 +82,23 @@ def organization(ws: str):
         "note": "An agent is ready when the data it declared has been supplied. Ready "
                 "does not mean its conclusions are verified.",
     }
+
+
+@router.get("/activity")
+def board(ws: str):
+    """What every agent is doing right now, and what each one did.
+
+    Polled by the board. It is a read of `agent_tasks`, which the runtime writes as the
+    work happens — so a task appears when it is delegated, its steps appear as its tool
+    calls land, and its card closes when it ends. Nothing here is a projection of what a
+    model claimed about itself.
+    """
+    ingestion.workspace_config(ws)
+    with db.connect() as connection:
+        today = spent_today(connection, ws)
+    return {**activity.live(ws),
+            "spend": {"today_cents": today, "day_cap_cents": DAY_CAP_CENTS,
+                      "run_cap_cents": RUN_CAP_CENTS}}
 
 
 @router.get("/{agent_id}/decisions")

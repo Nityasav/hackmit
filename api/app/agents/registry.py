@@ -89,6 +89,16 @@ class AgentSpec:
     tools: tuple[str, ...] = ()
     #: Requirement ids from `requirements.py`.
     requires: tuple[str, ...] = ()
+    #: The subset of `requires` this agent cannot start without.
+    #:
+    #: `requires` is scope — everything this agent may read. It is not a precondition,
+    #: and treating it as one is what stopped the organization dead: an agent holding
+    #: the ledger, the chart and the opening balances refused to run because a fiscal
+    #: year end nobody reads was unanswered. The engine is built to degrade — an
+    #: invoice with no order loses exactly the match weights it should, an unset
+    #: approval limit stands the test down and says so — so the only thing that should
+    #: block an agent is the record its work is *about*.
+    essential: tuple[str, ...] = ()
     output_schema: type = schemas.AgentResult
     reviewer: str | None = None
     escalate_when: EscalationRule = field(default_factory=EscalationRule)
@@ -167,7 +177,8 @@ TREASURER = (
                   "approvals", "policy", "approval_limit_cents",
                   # The documents behind the register rows: the invoice as it was
                   # issued, and evidence that what is billed for was delivered.
-                  "invoice", "service"),
+                  "invoice", "service"),essential=("vendors", "vendor_invoices",),
+        
         output_schema=schemas.APResult, reviewer="D2",
         escalate_when=EscalationRule(
             confidence_below=85, amount_above_cents=500_000,
@@ -178,7 +189,8 @@ TREASURER = (
         id="A2", name="Accounts Receivable", tier="subagent", parent="A",
         charter="Track what customers owe, age it, and apply incoming cash to the right invoices.",
         tools=("read_records", "read_source", "age_receivables", "match_remittance"),
-        requires=("customers", "customer_invoices", "remittances"),
+        requires=("customers", "customer_invoices", "remittances"),essential=("customer_invoices",),
+        
         llm=True, reviewer="D2",
         escalate_when=EscalationRule(confidence_below=80, on=("ambiguous_remittance", "partial_payment")),
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=40)),
@@ -187,7 +199,8 @@ TREASURER = (
         charter="Agree bank activity to the ledger, including payouts that arrive net of "
                 "fees, refunds and chargebacks.",
         tools=("read_records", "read_source", "reconcile_bank", "decompose_payout"),
-        requires=("bank_transactions", "payments", "remittances", "ledger", "processor_payouts"),
+        requires=("bank_transactions", "payments", "remittances", "ledger", "processor_payouts"),essential=("bank_transactions", "ledger",),
+        
         reviewer="D2",
         escalate_when=EscalationRule(confidence_below=80, on=("unmatched_difference", "duplicate_posting")),
         budget=Budget(model_calls=3, tool_calls=24, usd_cents=48)),
@@ -196,7 +209,8 @@ TREASURER = (
         charter="Maintain the near-term cash position and flag a shortfall before it happens.",
         llm=False, model=MODEL_LUNA,
         tools=("read_records", "project_cash"),
-        requires=("bank_transactions", "vendor_invoices", "customer_invoices", "payroll"),
+        requires=("bank_transactions", "vendor_invoices", "customer_invoices", "payroll"),essential=("bank_transactions",),
+        
         budget=Budget(model_calls=2, tool_calls=16, usd_cents=12)),
 )
 
@@ -207,7 +221,8 @@ CONTROLLER = (
                 "period is ready to lock.",
         model=MODEL_SOL,
         tools=("read_records", "read_event", "close_checklist", "delegate"),
-        requires=("chart", "opening", "ledger", "period_locks", "fiscal_year_end", "close_target_day"),
+        requires=("chart", "opening", "ledger", "period_locks", "fiscal_year_end", "close_target_day"),essential=("chart", "opening", "ledger",),
+        
         reviewer="B4",
         escalate_when=EscalationRule(confidence_below=90, on=("unreconciled_account", "missing_entry")),
         budget=Budget(model_calls=8, tool_calls=40, usd_cents=120)),
@@ -216,7 +231,8 @@ CONTROLLER = (
         charter="Recognize what the period incurred but was not billed for, and support "
                 "every adjustment with evidence.",
         tools=("read_records", "read_source", "propose_journal"),
-        requires=("ledger", "vendor_invoices", "purchase_orders", "goods_receipts", "contract"),
+        requires=("ledger", "vendor_invoices", "purchase_orders", "goods_receipts", "contract"),essential=("ledger", "goods_receipts",),
+        
         reviewer="B4",
         escalate_when=EscalationRule(confidence_below=85, amount_above_cents=1_000_000,
                                      on=("estimate_without_evidence",)),
@@ -229,7 +245,8 @@ CONTROLLER = (
         # and the agent's only job is to notice when it fails to tie.
         llm=False, model=MODEL_LUNA,
         tools=("read_records", "build_statements"),
-        requires=("chart", "opening", "ledger", "fiscal_year_end"),
+        requires=("chart", "opening", "ledger", "fiscal_year_end"),essential=("chart", "opening", "ledger",),
+        
         reviewer="B4",
         budget=Budget(model_calls=2, tool_calls=16, usd_cents=12)),
     AgentSpec(
@@ -238,7 +255,8 @@ CONTROLLER = (
                 "escalate what is material.",
         model=MODEL_SOL,
         tools=("read_records", "read_source", "read_event", "reperform"),
-        requires=("ledger", "approvals", "materiality_cents"),
+        requires=("ledger", "approvals", "materiality_cents"),essential=("ledger",),
+        
         escalate_when=EscalationRule(confidence_below=95, on=("unsupported_entry", "material_difference")),
         budget=Budget(model_calls=4, tool_calls=30, usd_cents=100)),
 )
@@ -248,13 +266,15 @@ FPA = (
         id="C1", name="Budgeting", tier="subagent", parent="C",
         charter="Maintain the approved operating budget and the assumptions behind it.",
         tools=("read_records", "roll_up"),
-        requires=("chart", "budgets", "payroll", "headcount", "budget"),
+        requires=("chart", "budgets", "payroll", "headcount", "budget"),essential=("chart", "budgets",),
+        
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=40)),
     AgentSpec(
         id="C2", name="Forecasting", tier="subagent", parent="C",
         charter="Maintain forward revenue, expense and cash forecasts, and explain a miss.",
         tools=("read_records", "forecast_series"),
-        requires=("ledger", "customer_invoices", "forecasts", "headcount", "fiscal_year_end"),
+        requires=("ledger", "customer_invoices", "forecasts", "headcount", "fiscal_year_end"),essential=("ledger",),
+        
         escalate_when=EscalationRule(confidence_below=75),
         budget=Budget(model_calls=3, tool_calls=24, usd_cents=48)),
     AgentSpec(
@@ -262,7 +282,8 @@ FPA = (
         charter="Explain why actuals differ from plan, tracing each driver to the "
                 "transactions that caused it.",
         tools=("read_records", "read_event", "decompose_variance"),
-        requires=("chart", "ledger", "budgets", "forecasts", "budget"),
+        requires=("chart", "ledger", "budgets", "forecasts", "budget"),essential=("ledger", "budgets",),
+        
         reviewer="D2",
         escalate_when=EscalationRule(confidence_below=80, on=("unexplained_residual",)),
         budget=Budget(model_calls=4, tool_calls=28, usd_cents=64)),
@@ -272,7 +293,8 @@ FPA = (
                 "never a measured result.",
         model=MODEL_SOL,
         tools=("read_records", "model_scenario"),
-        requires=("ledger", "budgets", "forecasts", "headcount"),
+        requires=("ledger", "budgets", "forecasts", "headcount"),essential=("ledger",),
+        
         # Nothing here can be scored against an outcome, so it always goes to a person.
         # Stated outright: a threshold of 101 would have looked equivalent and was not,
         # because a threshold is only consulted when a score exists at all.
@@ -283,7 +305,8 @@ FPA = (
         charter="Assemble management and board reporting from figures that already tie to "
                 "the ledger. Writes prose, never numbers.",
         tools=("read_records", "read_event", "build_report"),
-        requires=("chart", "ledger", "budgets"),
+        requires=("chart", "ledger", "budgets"),essential=("chart", "ledger",),
+        
         reviewer="B4",
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=48)),
 )
@@ -300,7 +323,8 @@ AUDIT = (
                   "payments", "approvals", "bank_transactions", "materiality_cents",
                   # "trace them end to end, from source document" is the charter;
                   # without these the trail stops at the register row.
-                  "invoice", "service", "contract"),
+                  "invoice", "service", "contract"),essential=("ledger",),
+        
         escalate_when=EscalationRule(confidence_below=90, on=("broken_trail", "missing_approval")),
         budget=Budget(model_calls=4, tool_calls=36, usd_cents=120)),
     AgentSpec(
@@ -313,7 +337,8 @@ AUDIT = (
         tools=("read_records", "read_source", "run_controls", "check_policy",
                "check_precedents"),
         requires=("vendors", "vendor_invoices", "payments", "expenses", "approvals",
-                  "period_locks", "ledger", "policy", "materiality_cents"),
+                  "period_locks", "ledger", "policy", "materiality_cents"),essential=("ledger",),
+        
         escalate_when=EscalationRule(confidence_below=90, on=("control_failure",)),
         budget=Budget(model_calls=4, tool_calls=32, usd_cents=100)),
     AgentSpec(
@@ -329,7 +354,8 @@ AUDIT = (
         charter="Assemble recurring audit and regulatory packages, and say what each is "
                 "missing before a deadline.",
         tools=("read_records", "read_event", "build_report"),
-        requires=("ledger", "tax_registrations", "home_jurisdiction"),
+        requires=("ledger", "tax_registrations", "home_jurisdiction"),essential=("ledger",),
+        
         reviewer="D1",
         budget=Budget(model_calls=3, tool_calls=20, usd_cents=48)),
 )
@@ -376,6 +402,52 @@ def children(agent_id: str) -> tuple[AgentSpec, ...]:
     return tuple(spec for spec in AGENTS.values() if spec.parent == agent_id)
 
 
+def blocked(present_roles, settings: dict) -> dict[str, list[str]]:
+    """What each agent is still missing before it can be asked to do anything.
+
+    A leaf is blocked by the `essential` inputs it does not have. A parent is blocked
+    only when every one of its children is: a Treasurer with no vendor bills but a full
+    bank statement still has bank reconciliation and the cash position to run, and
+    reporting it as blocked would stand down work that is perfectly possible.
+
+    Nothing here consults `requires`. That is scope, and an agent is not prevented from
+    working by evidence it is allowed to read but has not been given — it says what is
+    missing in its result, which is the honest output and the whole reason the engine
+    reports gaps rather than raising on them.
+    """
+    present = set(present_roles)
+
+    def missing(spec: AgentSpec) -> list[str]:
+        out = []
+        for requirement_id in spec.essential:
+            requirement = requirements.BY_ID[requirement_id]
+            if not requirements.satisfied(requirement, present, settings):
+                out.append(requirement_id)
+        return out
+
+    leaves = {spec.id: missing(spec) for spec in AGENTS.values()}
+
+    result: dict[str, list[str]] = {}
+    for agent_id, spec in AGENTS.items():
+        own = leaves[agent_id]
+        kids = children(agent_id)
+        if kids:
+            # Every child blocked, so there is nothing to delegate. What a person would
+            # have to supply is whatever the children are jointly waiting on.
+            joint = sorted({rid for child in kids for rid in leaves[child.id]})
+            if all(leaves[child.id] for child in kids):
+                result[agent_id] = sorted(set(own) | set(joint))
+        elif own:
+            result[agent_id] = sorted(own)
+    return result
+
+
+def ready(present_roles, settings: dict) -> tuple[str, ...]:
+    """Every agent that can be asked to work right now."""
+    stalled = blocked(present_roles, settings)
+    return tuple(agent_id for agent_id in AGENTS if agent_id not in stalled)
+
+
 def ancestry(agent_id: str) -> tuple[str, ...]:
     """From this agent up to the orchestrator."""
     chain, current = [], AGENTS[agent_id]
@@ -411,7 +483,20 @@ def _check() -> None:
                 problems.append(
                     f"{spec.id} may spend more than its parent {parent.id}; a delegation "
                     "cannot widen a budget")
-        # 4. Nobody reviews themselves, and reviewers are independent.
+        # 4. An agent cannot be blocked by data it is not even allowed to read.
+        outside = set(spec.essential) - set(spec.requires)
+        if outside:
+            problems.append(
+                f"{spec.id} treats {sorted(outside)} as essential but does not require it")
+        settings_blocking = [rid for rid in spec.essential
+                             if requirements.BY_ID[rid].kind == "setting"]
+        if settings_blocking:
+            problems.append(
+                f"{spec.id} is blocked by the setting(s) {settings_blocking}; a setting "
+                "describes how to judge what was read, so it narrows a conclusion rather "
+                "than preventing the work")
+
+        # 5. Nobody reviews themselves, and reviewers are independent.
         if spec.reviewer:
             if spec.reviewer == spec.id:
                 problems.append(f"{spec.id} is its own reviewer")

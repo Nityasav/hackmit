@@ -13,7 +13,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -60,6 +60,37 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     status TEXT NOT NULL, model TEXT NOT NULL, focus TEXT NOT NULL,
     created_at TEXT NOT NULL, completed_at TEXT,
     output TEXT NOT NULL DEFAULT '{}', error TEXT
+);
+-- What an agent is doing, written while it does it.
+-- `agent_decisions` is the trail of what was concluded, and it can only be written at
+-- the end. A board that reads it can therefore only ever show finished work, which is
+-- how the task board came to report every card as done at 100% with no tool calls.
+-- This table is the other half: one row per delegated task, opened before the model is
+-- called, appended to on every tool call, and closed when the task ends. It is the
+-- live view, and it is derived from what the run actually did rather than from what a
+-- model said about itself.
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    id TEXT PRIMARY KEY, ws TEXT NOT NULL REFERENCES workspaces(id),
+    thread_id TEXT NOT NULL, agent TEXT NOT NULL, parent_agent TEXT,
+    objective TEXT NOT NULL DEFAULT '',
+    -- queued | working | auditor_review | needs_you | done | failed
+    state TEXT NOT NULL,
+    steps TEXT NOT NULL DEFAULT '[]',
+    tool_calls INTEGER NOT NULL DEFAULT 0, tool_budget INTEGER NOT NULL DEFAULT 0,
+    model_calls INTEGER NOT NULL DEFAULT 0, model_budget INTEGER NOT NULL DEFAULT 0,
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    confidence INTEGER, decision_id TEXT, approval_id TEXT,
+    escalated INTEGER NOT NULL DEFAULT 0,
+    escalation_reasons TEXT NOT NULL DEFAULT '[]',
+    summary TEXT NOT NULL DEFAULT '', error TEXT,
+    -- Everything the agent returned, exactly as it returned it: disposition,
+    -- rationale, citations, exceptions, what it proposes and what it could not
+    -- settle. The decision trail keeps the summary and the evidence; this keeps the
+    -- whole output, so a finished card can show the work rather than a headline.
+    result TEXT NOT NULL DEFAULT '{}',
+    -- What the independent reviewer made of it, once one has looked.
+    review TEXT,
+    created_at TEXT NOT NULL, started_at TEXT, updated_at TEXT NOT NULL, finished_at TEXT
 );
 CREATE TABLE IF NOT EXISTS agent_requests (
     ws TEXT NOT NULL REFERENCES workspaces(id), request_id TEXT NOT NULL,
@@ -208,6 +239,8 @@ CREATE INDEX IF NOT EXISTS event_links ON links(ws, event_id);
 CREATE INDEX IF NOT EXISTS link_endpoints ON links(ws, from_type, from_id);
 CREATE INDEX IF NOT EXISTS event_decisions ON agent_decisions(ws, event_id);
 CREATE INDEX IF NOT EXISTS thread_decisions ON agent_decisions(ws, thread_id);
+CREATE INDEX IF NOT EXISTS workspace_agent_tasks ON agent_tasks(ws, updated_at);
+CREATE INDEX IF NOT EXISTS thread_agent_tasks ON agent_tasks(ws, thread_id);
 """ + f"PRAGMA user_version = {SCHEMA_VERSION};"
 
 #: Columns added to tables that predate them. `CREATE TABLE IF NOT EXISTS` cannot add a
@@ -221,6 +254,8 @@ ADDED_COLUMNS = (
     # rather than in a side table: it is part of the reasoning that produced
     # that decision, and a reviewer reading the row should see it there.
     ("agent_decisions", "memory_checks", "TEXT NOT NULL DEFAULT '[]'"),
+    ("agent_tasks", "result", "TEXT NOT NULL DEFAULT '{}'"),
+    ("agent_tasks", "review", "TEXT"),
 )
 
 

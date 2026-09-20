@@ -31,7 +31,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules",
-    "src/components/ui/line-graph-statistics.tsx"
-  ]
+  // iCloud Drive resolves a sync collision by writing "vault 2.ts" beside
+  // "vault.ts". .gitignore keeps those out of git, but include is **/*.ts, so
+  // they get compiled next to the real file and fail on duplicate symbols.
+  // This is the compiler's copy of that rule.
+  "exclude": ["node_modules", "**/* [0-9].ts", "**/* [0-9].tsx", "**/* [0-9].mts", "**/* [0-9].cts"]
 }

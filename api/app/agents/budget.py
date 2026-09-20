@@ -12,9 +12,14 @@ Three rules:
 - **Charge before the call, reconcile after.** A call is refused when its worst case
   would breach a cap. The estimate is replaced by the provider's reported usage once the
   call returns, so the meter tracks reality rather than the guess.
-- **Fail closed.** Exceeding a cap raises. It never silently truncates the work and
-  returns a thinner answer, because a thinner answer is indistinguishable from a
-  complete one to whoever reads it.
+- **Fail closed, when it is asked to.** Exceeding a cap raises rather than silently
+  truncating the work, because a thinner answer is indistinguishable from a complete
+  one to whoever reads it. Enforcement is off by default: the caps stopped a reviewer
+  re-checking its third preparer in the middle of a run, and a review that did not
+  happen is worse than a bill. Set `AGENT_ENFORCE_BUDGET=1` to turn the stops back on.
+
+Counting never stops. Every call is still priced and attributed, so what a run cost is
+always on the record whether or not anything was allowed to interrupt it.
 """
 
 from __future__ import annotations
@@ -39,6 +44,11 @@ UNKNOWN_PRICE = (400, 2000)
 #: what stops a loop somewhere else from draining the account overnight.
 RUN_CAP_CENTS = int(os.getenv("AGENT_RUN_CAP_CENTS", "1000"))
 DAY_CAP_CENTS = int(os.getenv("AGENT_DAY_CAP_CENTS", "7500"))
+
+#: Whether a cap stops the work. Off by default; the numbers above are then reported
+#: rather than imposed. Module-level rather than read per call so a test can turn it on
+#: for the case it is actually testing.
+ENFORCE = os.getenv("AGENT_ENFORCE_BUDGET", "0") == "1"
 
 #: Assumed worst case for one call before it is made, used only for the pre-flight
 #: check. Replaced by reported usage immediately afterwards.
@@ -93,6 +103,8 @@ class Meter:
 
     def check_model_call(self, agent_id: str, model: str, budget) -> None:
         """Refuse a call whose worst case would breach a cap, before it is made."""
+        if not ENFORCE:
+            return
         if self.calls_by_agent.get(agent_id, 0) >= budget.model_calls:
             raise BudgetExceeded(
                 f"{agent_id} has used its {budget.model_calls} model call(s) for this task.")
@@ -118,7 +130,7 @@ class Meter:
         """Evidence reads cost no money but are still bounded, because an agent that
         reads without concluding is a loop rather than a cheap agent."""
         used = self.tools_by_agent.get(agent_id, 0)
-        if used >= budget.tool_calls:
+        if ENFORCE and used >= budget.tool_calls:
             raise BudgetExceeded(
                 f"{agent_id} has used its {budget.tool_calls} evidence call(s) for this task.")
         self.tools_by_agent[agent_id] = used + 1
@@ -146,6 +158,8 @@ def spent_today(connection, ws: str) -> int:
 
 
 def check_day_cap(connection, ws: str, about_to_spend: int = 0) -> None:
+    if not ENFORCE:
+        return
     already = spent_today(connection, ws)
     if already + about_to_spend > DAY_CAP_CENTS:
         raise BudgetExceeded(

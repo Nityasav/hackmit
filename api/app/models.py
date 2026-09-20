@@ -97,6 +97,8 @@ class TaskStep(BaseModel):
     detail: str | None = None
     state: Literal["done", "running", "todo"]
     memory: bool = False
+    #: When it happened. Absent on a card written before steps carried a clock.
+    at: str | None = None
 
 
 class ToolCalls(BaseModel):
@@ -120,6 +122,9 @@ class Task(BaseModel):
     note: str | None = None
     note_tone: Literal["warn", "info"] | None = None
     approval_id: str | None = None
+    decision_id: str | None = None
+    #: Everything else the run recorded about this task, for the drawer.
+    detail: dict | None = None
 
 
 class EvidenceNode(BaseModel):

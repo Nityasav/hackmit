@@ -81,6 +81,8 @@ class Finding(TypedDict, total=False):
     citations: list[dict]
     decision_id: str
     cost_cents: int
+    #: What the independent reviewer made of it, when one looked.
+    review: dict | None
 
 
 class RunState(TypedDict, total=False):
@@ -96,6 +98,13 @@ class RunState(TypedDict, total=False):
     plan: list[str]
     #: Why it chose them. Shown to the person, so it is never omitted.
     plan_rationale: str
+    #: Subagent ids actually asked to work. A blocked agent is not asked at all, so
+    #: the node for it runs and returns nothing rather than failing in the middle of
+    #: the graph.
+    assigned: list[str]
+    #: preparer id -> the independent agent that will re-check its conclusion, for the
+    #: pairs where that reviewer can actually run against this workspace.
+    reviewers: dict[str, str]
     #: Events this run is about, when it is about specific ones.
     event_ids: list[str]
 
@@ -125,7 +134,8 @@ def initial(ws: str, thread_id: str, objective: str, snapshot_id: str,
             period: str, event_ids: list[str] | None = None) -> RunState:
     return RunState(
         ws=ws, thread_id=thread_id, objective=objective, snapshot_id=snapshot_id,
-        period=period, plan=[], plan_rationale="", event_ids=event_ids or [],
+        period=period, plan=[], plan_rationale="", assigned=[], reviewers={},
+        event_ids=event_ids or [],
         findings=[], events_touched=[], unresolved=[], results={},
         spend_cents=0, model_calls=0, tool_calls=0,
         escalated=False, status="queued", briefing="",

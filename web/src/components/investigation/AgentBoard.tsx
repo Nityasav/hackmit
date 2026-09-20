@@ -2,11 +2,11 @@
 
 import { useState, useSyncExternalStore } from "react";
 
-import { AGENT_NAME, AgentAvatar, Pill, ProgressBar, Pulse } from "@/components/ui";
-import { useData } from "@/lib/data";
+import { AGENT_NAME, AgentAvatar, ProgressBar, Pulse } from "@/components/ui";
 import { duration, elapsedSeconds } from "@/lib/format";
 import type { Column, Task } from "@/lib/types";
 
+import { useBoard } from "./board";
 import { TaskDrawer } from "./TaskDrawer";
 
 /** Left to right, the order work actually moves in. */
@@ -62,35 +62,68 @@ function useNow(): number | null {
  * The agent board: every task the run handed out, in the column that matches
  * what its agent is doing, with the clock running against it.
  *
- * Nothing here is authored. Each card is one entry of bundle.tasks, and the
- * column, the percentage, the tool budget and the start time are the fields
- * the run emitted. A task the run did not describe does not appear.
+ * Nothing here is authored. Each card is one row of `agent_tasks`, which the
+ * runtime opens when a task is delegated, appends to on every tool call, and
+ * closes with what the task produced. The column, the percentage, the tool
+ * count and the start time are all things the run did.
+ *
+ * It refreshes itself while work is in flight, so a task appears when it is
+ * handed out and its steps appear as they land, rather than all at once at the
+ * end.
  */
-export function AgentBoard() {
-  const { bundle } = useData();
+export function AgentBoard({ ws }: { ws: string }) {
+  const board = useBoard(ws);
   const now = useNow();
   const [openId, setOpenId] = useState<string | null>(null);
-  const open = bundle.tasks.find((task) => task.id === openId) ?? null;
+  const open = board.tasks.find((task) => task.id === openId) ?? null;
 
-  if (bundle.tasks.length === 0) {
+  if (board.error) {
     return (
       <p className="max-w-prose border border-line bg-surface p-5 text-[14px] leading-relaxed text-ink-dim">
-        No tasks yet. Once an investigation runs, every task the coordinator hands out appears here, in the column that
-        matches what its agent is doing at that moment.
+        The board could not be read: {board.error}
+      </p>
+    );
+  }
+
+  if (board.loading && board.tasks.length === 0) {
+    return (
+      <p className="max-w-prose border border-line bg-surface p-5 text-[14px] leading-relaxed text-ink-dim">
+        Reading the board&hellip;
+      </p>
+    );
+  }
+
+  if (board.tasks.length === 0) {
+    return (
+      <p className="max-w-prose border border-line bg-surface p-5 text-[14px] leading-relaxed text-ink-dim">
+        No tasks yet. Ask the organization something on Investigation, or run one agent on its own, and every task it
+        hands out appears here as it happens &mdash; in the column that matches what its agent is doing at that moment.
       </p>
     );
   }
 
   return (
     <>
-      <p className="mb-5 max-w-prose text-[13.5px] leading-relaxed text-ink-dim">
-        Every task an agent is running. A card&rsquo;s column is derived from what the agent is actually doing, so it is
-        not something you can drag. Each time is counted from the moment that task started.
-      </p>
+      <div className="mb-5 flex max-w-prose flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="text-[13.5px] leading-relaxed text-ink-dim">
+          Every task an agent is running. A card&rsquo;s column is derived from what the agent is actually doing, so it
+          is not something you can drag. Each time is counted from the moment that task started.
+        </p>
+        <span className="flex items-center gap-2 font-accent text-[12.5px] text-ink-dim">
+          {board.live ? (
+            <>
+              <Pulse />
+              {board.active} running &middot; refreshing as it happens
+            </>
+          ) : (
+            <>Nothing running. This checks again every few seconds.</>
+          )}
+        </span>
+      </div>
 
       <div className="grid gap-px border border-line bg-line md:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0">
         {COLUMNS.map((column) => {
-          const tasks = bundle.tasks.filter((task) => task.column === column.id);
+          const tasks = board.tasks.filter((task) => task.column === column.id);
           return (
             <section key={column.id} className="bg-surface-2 p-3">
               <div className="flex items-baseline gap-2">
@@ -164,24 +197,21 @@ function TaskCard({ task, now, onOpen }: { task: Task; now: number | null; onOpe
           {task.todos.length > 0 && <span>{task.todos.length} still owed</span>}
         </div>
 
+        {/* Wraps rather than runs off the card: a note can be a one-word status or the
+            whole reason a run stopped, and a pill would clip the second kind. The
+            drawer has it in full. */}
         {task.note && (
-          <div className="mt-2">
-            <Pill tone={task.note_tone === "warn" ? "red" : "gray"}>{task.note}</Pill>
-          </div>
+          <p
+            className={`mt-2 line-clamp-3 break-words px-2 py-1 text-[12px] leading-snug ${
+              task.note_tone === "warn"
+                ? "bg-red-50 text-red-800 ring-1 ring-red-200"
+                : "bg-surface-2 text-ink-dim ring-1 ring-line"
+            }`}
+          >
+            {task.note}
+          </p>
         )}
       </button>
-
-      {/* The one place a card is more than a card: where it hands off to you. */}
-      {task.column === "needs_you" && (
-        <p className="border-t border-line px-2.5 py-1.5 text-[12px] text-ink-dim">
-          Waiting on a person, not on a decision screen. Open the task for what it asked for.
-        </p>
-      )}
-      {task.column === "auditor_review" && (
-        <p className="border-t border-line px-2.5 py-1.5 text-[12px] text-ink-dim">
-          The Internal Auditor is re-reading the sources and redoing the math.
-        </p>
-      )}
     </div>
   );
 }

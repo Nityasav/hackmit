@@ -32,7 +32,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from .. import db, ingestion
-from ..agents import runtime
+from ..agents import activity, runtime
 from ..agents.budget import BudgetExceeded, Meter, RUN_CAP_CENTS, check_day_cap
 from ..agents.registry import AGENTS, children
 from ..agents.runtime import AgentFailed
@@ -78,6 +78,13 @@ def _subagent_node(agent_id: str):
         runtime_config = config.get("configurable", {})
         meter: Meter = runtime_config["meter"]
         event_ids = tuple(state.get("event_ids") or ())
+
+        # The graph is compiled once and holds a node for every subagent, but which of
+        # them can work depends on what this workspace has committed. The plan decides
+        # that; a node nobody assigned returns without spending anything.
+        if agent_id not in (state.get("assigned") or []):
+            return {}
+
         try:
             run = await runtime.run_agent(
                 state["ws"], agent_id,
@@ -91,6 +98,9 @@ def _subagent_node(agent_id: str):
                     "results": {agent_id: {"error": str(exc), "type": type(exc).__name__}}}
 
         finding = _finding(run, event_ids[0] if event_ids else None)
+        review = await _review(state, run, spec, runtime_config)
+        if review:
+            finding["review"] = review
         return {
             "findings": [finding],
             "results": {agent_id: run.as_dict()},
@@ -103,6 +113,57 @@ def _subagent_node(agent_id: str):
         }
 
     return node
+
+
+async def _review(state: RunState, run, spec, runtime_config) -> dict | None:
+    """Have the declared independent agent re-check what this one concluded.
+
+    The registry has named a reviewer for most of the organization since it was
+    written, and nothing ever called one: `reviewer` was a field the graph did not
+    read, so "Auditor review" was a column no card could reach and every finding went
+    to a person marked as nobody's work but its own.
+
+    A review is a real task with a real card. It is skipped, and says so, when the
+    reviewer cannot read this workspace or the run has no budget left — a review that
+    silently did not happen is worse than one that plainly did not.
+    """
+    reviewer_id = (state.get("reviewers") or {}).get(spec.id)
+    if not reviewer_id or run.result is None:
+        return None
+
+    activity.mark(run.task_id, "auditor_review")
+    reviewer = AGENTS[reviewer_id]
+    try:
+        verdict_run = await runtime.run_agent(
+            state["ws"], reviewer_id,
+            f"Re-check {spec.name}'s conclusion, independently.\n"
+            f"It concluded: {run.result.summary}\n"
+            f"Because: {run.result.rationale}\n"
+            "Read the evidence it cited from the originals and reperform every "
+            "calculation behind it. Accept only what the records support, and say "
+            "plainly which part does not hold if any does not.",
+            meter=runtime_config["meter"], thread_id=state["thread_id"],
+            event_ids=tuple(state.get("event_ids") or ()),
+            client=runtime_config.get("client"))
+    except (AgentFailed, BudgetExceeded, ScopeError) as exc:
+        activity.mark(run.task_id, "needs_you" if run.escalated else "done")
+        skipped = {"reviewer": reviewer_id, "reviewer_name": reviewer.name,
+                   "verdict": "not_reviewed", "summary": str(exc)}
+        activity.attach_review(run.task_id, skipped)
+        return skipped
+
+    verdict = runtime.VERDICT.get(
+        verdict_run.result.disposition if verdict_run.result else "", "needs_evidence")
+    runtime.attach_review(state["ws"], run.decision_id, reviewer_id, verdict)
+    review = {
+        "reviewer": reviewer_id, "reviewer_name": reviewer.name, "verdict": verdict,
+        "summary": verdict_run.result.summary if verdict_run.result else "",
+        "rationale": verdict_run.result.rationale if verdict_run.result else "",
+        "decision_id": verdict_run.decision_id,
+    }
+    activity.attach_review(run.task_id, review)
+    activity.mark(run.task_id, "needs_you" if run.escalated else "done")
+    return review
 
 
 def _decision_node(agent_id: str):
@@ -154,13 +215,68 @@ def _worker_subgraph(worker_id: str):
     return graph.compile()
 
 
-async def _plan_node(state: RunState) -> dict:
-    """Decide which domains this objective touches.
+#: What a worker contributes back to the run, as opposed to what it was handed. Every
+#: one of these has a reducer in `state.py`.
+CONTRIBUTED = ("findings", "events_touched", "unresolved", "results",
+               "spend_cents", "model_calls", "tool_calls", "escalated")
 
-    Deliberately not a model call. Routing between four domains from a sentence is a
-    keyword decision, and spending an orchestrator model call on it buys nothing but
-    latency and a way to be wrong. The orchestrator's model budget is for synthesis,
-    where judgment is actually required.
+
+def _worker_node(worker_id: str):
+    """A worker subgraph as a node, returning only what it added.
+
+    A compiled subgraph sharing its parent's schema returns the *whole* state it
+    finished with, and the parent then applies that as an update. With one worker that
+    is harmless. With two it is not: both write `ws`, which has no reducer, and the run
+    dies with "can receive only one value per step" — and the additive channels are
+    worse than that, because each worker would return the findings it was handed plus
+    its own, and the parent would add the handed-in ones a second time.
+
+    The keyword router only ever picked one domain, so nothing exercised it. Routing on
+    the records as well means two domains now run together routinely, so the node hands
+    back its delta rather than its state.
+    """
+    subgraph = _worker_subgraph(worker_id)
+
+    async def node(state: RunState, config) -> dict:
+        out = await subgraph.ainvoke(state, config)
+        delta: dict = {}
+        for key in ("findings", "events_touched", "unresolved"):
+            before = len(state.get(key) or [])
+            added = (out.get(key) or [])[before:]
+            if added:
+                delta[key] = added
+        added_results = {k: v for k, v in (out.get("results") or {}).items()
+                         if k not in (state.get("results") or {})}
+        if added_results:
+            delta["results"] = added_results
+        for key in ("spend_cents", "model_calls", "tool_calls"):
+            spent = (out.get(key) or 0) - (state.get(key) or 0)
+            if spent:
+                delta[key] = spent
+        if out.get("escalated"):
+            delta["escalated"] = True
+        return delta
+
+    return node
+
+
+async def _plan_node(state: RunState) -> dict:
+    """Decide who is asked to do what.
+
+    Two inputs, not one. The objective says which domains are *relevant*; the committed
+    records say which agents can *work*. Routing on the objective alone is what produced
+    a run that delegated four tasks to a Treasurer with no bank statement and no vendor
+    bills: every one of them refused in its first few milliseconds, the board filled with
+    cards that never moved, and a Controller holding a complete ledger was never asked.
+
+    So an agent is assigned when its domain is in scope and the records its work is
+    about are present, and the agents that were passed over say what they are waiting
+    for. If the objective names nothing this organization recognizes, every agent that
+    can work is put on it — which is what a finance team does with "how are we doing".
+
+    Deliberately not a model call. Choosing among four domains from a sentence is a
+    keyword decision; the orchestrator's model budget is for synthesis, where judgment
+    is actually required.
     """
     text = state["objective"].lower()
     domains = {
@@ -172,23 +288,60 @@ async def _plan_node(state: RunState) -> dict:
         "D": ("audit", "control", "test", "evidence", "compliance", "duplicate",
               "approval", "policy"),
     }
-    chosen = [worker for worker, words in domains.items() if any(w in text for w in words)]
-    if not chosen:
-        # Nothing matched: the treasury view is the one that answers "how are we doing"
-        # without assuming a close is in progress.
-        chosen = ["A"]
+    view = ingestion.coverage(state["ws"])
+    stalled: dict[str, list[str]] = view["blocked_agents"]
+    labels = {r["id"]: r["label"] for r in view["requirements"]}
 
-    wired = [w for w in chosen if w in WIRED_WORKERS]
-    not_wired = [w for w in chosen if w not in WIRED_WORKERS]
+    def runnable(worker: str) -> list[str]:
+        return [child.id for child in children(worker) if child.id not in stalled]
+
+    matched = [w for w in domains if any(word in text for word in domains[w])]
+    wired = [w for w in matched if w in WIRED_WORKERS]
+    chosen = [w for w in wired if runnable(w)]
+
+    rationale = ("Routed to " + ", ".join(AGENTS[w].name for w in chosen)
+                 + " from the objective." if chosen else "")
+    if not chosen:
+        chosen = [w for w in WIRED_WORKERS if runnable(w)]
+        rationale = (
+            "Nothing in the objective named a domain that can work from the committed "
+            "records, so it went to every domain that can: "
+            + ", ".join(AGENTS[w].name for w in chosen) + "."
+            if chosen else
+            "No agent can work from the committed records yet.")
+
+    assigned = [agent_id for worker in chosen for agent_id in runnable(worker)]
+
+    # Who was passed over, and for what. An agent missing from the board with no
+    # explanation is the same failure as a card that never moves.
+    considered = wired or list(WIRED_WORKERS)
+    held = {child.id: stalled[child.id]
+            for worker in considered for child in children(worker)
+            if child.id in stalled}
     unresolved = [
+        f"{AGENTS[agent_id].name} ({agent_id}) was not asked: it needs "
+        + ", ".join(labels.get(rid, rid) for rid in missing) + ". Supply it on Books."
+        for agent_id, missing in sorted(held.items())]
+    unresolved += [
         f"{AGENTS[w].name} ({w}) is part of this objective but its subagents are not "
-        "wired yet, so nothing was asked of it." for w in not_wired]
+        "wired yet, so nothing was asked of it."
+        for w in matched if w not in WIRED_WORKERS]
+
+    # Who re-checks whom. A review is only scheduled where the reviewer can actually
+    # read this workspace; a reviewer that would refuse is no review at all.
+    reviewers = {agent_id: AGENTS[agent_id].reviewer for agent_id in assigned
+                 if AGENTS[agent_id].reviewer and AGENTS[agent_id].reviewer not in stalled}
+
+    # Write the plan down before any of it runs. A delegation only visible once it
+    # finishes is indistinguishable from one that never happened, and the board's
+    # first column exists to show exactly that gap.
+    activity.seed(state["ws"], state["thread_id"], assigned, state["objective"])
 
     return {
-        "plan": wired,
-        "plan_rationale": "Routed to " + ", ".join(AGENTS[w].name for w in wired)
-                          + " from the objective." if wired else
-                          "No wired domain matched this objective.",
+        "plan": chosen,
+        "plan_rationale": rationale,
+        "assigned": assigned,
+        "reviewers": reviewers,
         "unresolved": unresolved,
         "status": "running",
     }
@@ -261,7 +414,7 @@ def build_graph(checkpointer=None):
     graph = StateGraph(RunState)
     graph.add_node("plan", _plan_node)
     for worker_id in WIRED_WORKERS:
-        graph.add_node(worker_id, _worker_subgraph(worker_id))
+        graph.add_node(worker_id, _worker_node(worker_id))
         graph.add_edge(worker_id, "synthesize")
     graph.add_node("synthesize", _synthesize_node)
 

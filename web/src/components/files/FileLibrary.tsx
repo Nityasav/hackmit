@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FileCard } from "@/components/ui/file-card-collections";
 import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
-import { Pill, Section } from "@/components/ui";
-import { API_URL, intakeApi, useData } from "@/lib/data";
+import { Section } from "@/components/ui";
+import { intakeApi, useData } from "@/lib/data";
 import { displayLabel } from "@/lib/format";
-import { buildFileLibrary, type FileNode, type LibraryDocument } from "@/lib/fileLibrary";
+import { buildFileLibrary, type LibraryDocument } from "@/lib/fileLibrary";
 import type { Coverage } from "@/lib/types";
 import { FileGraph } from "./FileGraph";
+import { FilePreview, type PreviewJoin } from "./FilePreview";
 
 /** Only the part of the extraction payload this screen reads. */
 interface ExtractionState { documents: LibraryDocument[] }
@@ -18,19 +19,6 @@ interface ExtractionState { documents: LibraryDocument[] }
 interface Loaded { coverage: Coverage | null; documents: LibraryDocument[] }
 
 type Filter = "all" | "document" | "source";
-
-/** A file the open one is joined to, and which way the join runs. */
-interface Join { node: FileNode; label: string; direction: "from" | "to" }
-
-function shortHash(sha: string) {
-  return sha ? sha.slice(0, 8) : "";
-}
-
-function uploadedOn(value: string | null) {
-  if (!value) return null;
-  const at = new Date(value);
-  return Number.isNaN(at.getTime()) ? null : at.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-}
 
 /**
  * Everything this institution holds, as files.
@@ -86,7 +74,7 @@ export function FileLibrary({ ws }: { ws: string }) {
   const open = useMemo(() => library.nodes.find((n) => n.id === selected) ?? null, [library, selected]);
 
   const joins = useMemo(() => {
-    const found: Join[] = [];
+    const found: PreviewJoin[] = [];
     if (!open) return found;
     const byId = new Map(library.nodes.map((n) => [n.id, n]));
     for (const edge of library.edges) {
@@ -169,48 +157,13 @@ export function FileLibrary({ ws }: { ws: string }) {
       </Section>
 
       {open && (
-        <Section title={open.name}>
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={open.current ? "green" : "gray"}>{open.current ? "In use" : "Superseded"}</Pill>
-            <Pill tone="gray">{open.kind === "document" ? "Uploaded document" : "Committed file"}</Pill>
-            <Pill tone="gray">{displayLabel(open.role)}</Pill>
-            <Pill tone="gray">Version {open.version}</Pill>
-          </div>
-          <dl className="mt-4 grid gap-x-8 gap-y-2 text-[13px] sm:grid-cols-2">
-            <div className="flex gap-2"><dt className="text-ink-dim">Checksum</dt><dd className="font-mono">{shortHash(open.sha256)}</dd></div>
-            {uploadedOn(open.uploadedAt) && (
-              <div className="flex gap-2"><dt className="text-ink-dim">Uploaded</dt><dd>{uploadedOn(open.uploadedAt)}</dd></div>
-            )}
-            {open.pageCount !== null && (
-              <div className="flex gap-2"><dt className="text-ink-dim">Pages read</dt><dd>{open.pageCount}</dd></div>
-            )}
-            {open.recordCount !== null && (
-              <div className="flex gap-2"><dt className="text-ink-dim">Live records</dt><dd>{open.recordCount}</dd></div>
-            )}
-          </dl>
-          <p className="mt-4 text-[13px]">
-            <a
-              className="font-semibold underline"
-              target="_blank"
-              rel="noreferrer"
-              href={open.kind === "document"
-                ? `${API_URL}/api/workspaces/${encodeURIComponent(ws)}/extraction/documents/${open.id.slice(4)}/original`
-                : `${API_URL}/api/workspaces/${encodeURIComponent(ws)}/sources/${open.id.slice(4)}/download`}
-            >
-              Open the original
-            </a>
-          </p>
-          {joins.length > 0 && (
-            <ul className="mt-4 space-y-1 text-[13px]">
-              {joins.map((join) => (
-                <li key={`${join.direction}:${join.node.id}`}>
-                  <span className="text-ink-dim">{join.direction === "to" ? `${join.label} → ` : `← ${join.label} `}</span>
-                  <button type="button" className="underline" onClick={() => setSelected(join.node.id)}>{join.node.name}</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <FilePreview
+          ws={ws}
+          file={open}
+          joins={joins}
+          onSelect={setSelected}
+          onClose={() => setSelected(null)}
+        />
       )}
 
       <Section title="How these files connect" right={`${library.edges.length} link${library.edges.length === 1 ? "" : "s"}`}>
