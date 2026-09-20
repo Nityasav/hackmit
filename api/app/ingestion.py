@@ -6,7 +6,7 @@ Documents are evidence, never executable instructions or automatic postings.
 from __future__ import annotations
 
 import csv
-from datetime import date, timedelta
+from datetime import date
 import hashlib
 import io
 import json

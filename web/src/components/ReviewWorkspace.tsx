@@ -5,6 +5,7 @@ import { displayLabel } from "@/lib/format";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Decisions } from "@/components/Decisions";
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { SourceDetail } from "@/lib/types";
 
@@ -137,7 +138,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           reasonable instinct. */}
       <Decisions />
       {section === "reports" ? <section className="border border-line p-5"><a className={primary + " inline-block"} href={`${API_URL}/api/workspaces/${ws}/review/report`}>Download briefing (.md)</a><button className={control + " ml-2"} onClick={() => window.print()}>Print / save PDF</button><pre className="print-report mt-5 whitespace-pre-wrap font-sans text-sm leading-relaxed">{briefing(view)}</pre></section> : <>
-        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <select className={control} value={filter} onChange={e => setFilter(e.target.value)}><option value="attention">Attention + gaps</option><option value="all">All checks</option><option value="pass">Narrow passes</option><option value="gap">Evidence gaps</option><option value="rc">Money coming in</option></select></label></div>
+        <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold">Checks & reviewed findings</h2><label className="ml-auto text-sm">Show <AnimatedDropdown
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "attention", label: "Attention + gaps" },
+            { value: "all", label: "All checks" },
+            { value: "pass", label: "Narrow passes" },
+            { value: "gap", label: "Evidence gaps" },
+            { value: "rc", label: "Money coming in" },
+          ]}
+        /></label></div>
         {!view.findings.length && <p className="border border-line p-5">No scan results yet. Commit records on the Records page, then start a scan above. An empty list is not a clean audit.</p>}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]"><div className="space-y-2">{filtered.map((f, i) => <Fragment key={f.id}>
           {f.role === "rc" && filtered[i - 1]?.role !== "rc" && <h3 className="pt-3 text-xs font-semibold uppercase tracking-widest text-ink-dim">Money coming in · fees, collections, deposits, pledges</h3>}
@@ -160,12 +171,17 @@ function WorkspaceReview({ ws, section }: { ws: string; section: string }) {
           <label>From<input type="date" className={control + " ml-2"} value={fromDate} onChange={e => setFromDate(e.target.value)} /></label>
           <label>To<input type="date" className={control + " ml-2"} value={toDate} onChange={e => setToDate(e.target.value)} /></label>
           <label>Raised by
-            <select className={control + " ml-2"} value={byAgent} onChange={e => setByAgent(e.target.value)}>
-              <option value="">Any agent</option>
-              {historyAgents.map(a => <option key={a} value={a}>{agentName(a)}</option>)}
-              {/* A record check is arithmetic over rows, not an agent's conclusion. */}
-              <option value="__none">Record checks (no agent)</option>
-            </select>
+            <AnimatedDropdown
+              className="ml-2"
+              value={byAgent}
+              onChange={setByAgent}
+              placeholder="Any agent"
+              options={[
+                ...historyAgents.map(a => ({ value: a, label: agentName(a) })),
+                // A record check is arithmetic over rows, not an agent's conclusion.
+                { value: "__none", label: "Record checks (no agent)" },
+              ]}
+            />
           </label>
           {(fromDate || toDate || byAgent) &&
             <button className={control} onClick={() => { setFromDate(""); setToDate(""); setByAgent(""); }}>Clear</button>}
@@ -190,7 +206,18 @@ function FollowUpForm({ ws, finding: f, saved }: { ws: string; finding: Finding;
   }
   return <form onSubmit={submit} className="mt-5 space-y-3 border-t border-line pt-4"><h3 className="font-semibold">Record human follow-up</h3>
     <label className="block text-sm">Owner / team<input className={control + " mt-1 w-full"} value={owner} onChange={e => setOwner(e.target.value)} maxLength={120} placeholder="e.g. Finance operations" /></label>
-    <label className="block text-sm">Next action<select className={control + " mt-1 w-full"} value={status} onChange={e => setStatus(e.target.value)}><option value="open">Assign / add a note</option><option value="evidence_requested">Request supporting evidence</option><option value="proposed">Propose a correction for review</option><option disabled={f.follow_up?.status !== "proposed"} value="approved_proposal">Approve the proposal (no posting)</option><option disabled={f.follow_up?.status !== "proposed"} value="rejected_proposal">Reject the proposal</option></select></label>
+    <label className="block text-sm">Next action<AnimatedDropdown
+      className="mt-1 w-full"
+      value={status}
+      onChange={setStatus}
+      options={[
+        { value: "open", label: "Assign / add a note" },
+        { value: "evidence_requested", label: "Request supporting evidence" },
+        { value: "proposed", label: "Propose a correction for review" },
+        { value: "approved_proposal", label: "Approve the proposal (no posting)", disabled: f.follow_up?.status !== "proposed" },
+        { value: "rejected_proposal", label: "Reject the proposal", disabled: f.follow_up?.status !== "proposed" },
+      ]}
+    /></label>
     <label className="block text-sm">Reason / requested evidence<textarea required maxLength={2000} value={note} onChange={e => setNote(e.target.value)} className={control + " mt-1 min-h-20 w-full"} /></label>
     <button className={primary} disabled={busy || f.stale || !note.trim()}>{busy ? "Saving…" : f.stale ? "Rerun before deciding" : "Save follow-up"}</button><p className="text-xs text-ink-dim">Saved to this snapshot’s history. No email sent, journal posted or payment released.</p>{message && <p role="alert" className="text-red-700">{message}</p>}
   </form>;

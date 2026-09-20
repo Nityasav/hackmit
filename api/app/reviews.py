@@ -10,7 +10,6 @@ from . import db, ingestion
 from .accounting.controls import checks
 
 router = APIRouter(prefix="/api", tags=["Director review"])
-ACTIVE = {"queued", "planning", "running"}
 LIMITATIONS = [
     "Supplied records only; no assurance of completeness, fraud determination or audit opinion.",
     "USD accrual profile for a single operating entity; not a statutory or consolidated adapter.",

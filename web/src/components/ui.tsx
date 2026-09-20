@@ -102,17 +102,6 @@ export function Section({
   );
 }
 
-/** One figure in the numbers strip: label above, figure, accent note under. */
-export function Figure({ label, value, note }: { label: string; value: React.ReactNode; note?: string }) {
-  return (
-    <div className="px-5 first:pl-0 last:pr-0">
-      <div className="text-[12.5px] text-ink-dim">{label}</div>
-      <div className="mt-1.5 font-num text-[26px] font-semibold leading-none tracking-tight tabular-nums">{value}</div>
-      {note && <div className="mt-2 font-accent text-[13px] text-ink-dim">{note}</div>}
-    </div>
-  );
-}
-
 /** How far through its steps a task is, as the run reports it. */
 export function ProgressBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
   return (

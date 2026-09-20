@@ -160,13 +160,6 @@ LABELS: dict[str, str] = {
 
 ACCOUNT_TYPES: frozenset[str] = frozenset({"asset", "liability", "equity", "revenue", "expense"})
 DIRECTIONS: frozenset[str] = frozenset({"in", "out"})
-#: A period label is a month. Quarterly and annual plans are supplied as their months.
-PERIOD_PATTERN = r"\d{4}-\d{2}"
-
-
-def structured_roles() -> list[str]:
-    """Every tabular role, in declaration order."""
-    return list(FIELDS)
 
 
 def key_of(role: str, payload: dict) -> str:

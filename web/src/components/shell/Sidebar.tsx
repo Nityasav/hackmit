@@ -176,7 +176,7 @@ function NavIcon({ id, active }: { id: NavId; active: boolean }) {
   return <Icon className={cn("h-5 w-5 flex-shrink-0", active ? "text-ink" : "text-ink-dim")} />;
 }
 
-export const Logo = () => {
+const Logo = () => {
   return (
     <Link
       href="/"
@@ -194,7 +194,7 @@ export const Logo = () => {
   );
 };
 
-export const LogoIcon = () => {
+const LogoIcon = () => {
   return (
     <Link
       href="/"

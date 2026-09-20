@@ -29,7 +29,7 @@ from pydantic import ValidationError
 
 from .. import approvals, db, ingestion
 from . import schemas
-from .budget import BudgetExceeded, Meter, check_day_cap
+from .budget import Meter, check_day_cap
 from .registry import AGENTS, AgentSpec
 from .tools import ScopeError, Toolbox, dispatch, tool_definitions
 

@@ -17,12 +17,11 @@ create, alter or supersede a record, post a journal, or decide an approval.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from .. import db
 from ..accounting import cash, match, reconcile
-from .budget import BudgetExceeded, Meter
+from .budget import Meter
 
 
 class ScopeError(PermissionError):

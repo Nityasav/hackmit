@@ -12,7 +12,7 @@ const raleway = Raleway({ subsets: ["latin"], variable: "--font-raleway" });
 // Poppins sets every number, so figures line up column to column.
 const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-poppins" });
 // Playfair is the small accent: meta lines, notes, the quiet second line.
-const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
+const playfair = Playfair_Display({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-playfair" });
 // Kept for money, IDs and the decision records, where columns have to line up.
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 

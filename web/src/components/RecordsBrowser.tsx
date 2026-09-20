@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AnimatedDropdown } from "@/components/ui/animated-dropdown";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import { displayLabel } from "@/lib/format";
 
@@ -106,11 +107,14 @@ export function RecordsBrowser() {
 
       <div className="my-3 flex flex-wrap items-end gap-3 text-[13px]">
         <label>Kind of record
-          <select className={control + " ml-2"} value={role} disabled={busy}
-            onChange={e => { setRole(e.target.value); setField(""); setRegister(null); setError(""); }}>
-            <option value="">Choose…</option>
-            {populated.map(r => <option key={r} value={r}>{displayLabel(r)} ({counts[r]})</option>)}
-          </select>
+          <AnimatedDropdown
+            className="ml-2"
+            value={role}
+            disabled={busy}
+            placeholder="Choose…"
+            options={populated.map(r => ({ value: r, label: `${displayLabel(r)} (${counts[r]})` }))}
+            onChange={value => { setRole(value); setField(""); setRegister(null); setError(""); }}
+          />
         </label>
         <label>From<input type="date" className={control + " ml-2"} value={start} disabled={busy}
           onChange={e => setStart(e.target.value)} /></label>
@@ -118,11 +122,14 @@ export function RecordsBrowser() {
           onChange={e => setEnd(e.target.value)} /></label>
         {(dates[role]?.dates.length || 0) > 1 && (
           <label>Date to use
-            <select className={control + " ml-2"} value={field} disabled={busy}
-              onChange={e => { setField(e.target.value); setError(""); }}>
-              {!dates[role].default && <option value="">Choose…</option>}
-              {dates[role].dates.map(d => <option key={d} value={d}>{displayLabel(d)}</option>)}
-            </select>
+            <AnimatedDropdown
+              className="ml-2"
+              value={field}
+              disabled={busy}
+              placeholder="Choose…"
+              options={dates[role].dates.map(d => ({ value: d, label: displayLabel(d) }))}
+              onChange={value => { setField(value); setError(""); }}
+            />
           </label>
         )}
         <button className={control} disabled={busy || !role} onClick={() => void run()}>

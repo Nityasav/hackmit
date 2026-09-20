@@ -45,7 +45,7 @@ function readDetail(detail: unknown): string | null {
 }
 
 /** Turns a request failure into a message worth showing someone. */
-export function describeApiError(error: unknown): string {
+function describeApiError(error: unknown): string {
   if (!axios.isAxiosError(error)) {
     return error instanceof Error ? error.message : "Something went wrong.";
   }
@@ -133,9 +133,3 @@ export function intakeApi<T>(path: string, options: RequestOptions = {}): Promis
  * and a second copy here would mean adding a record type silently stopped it being
  * detected. Cached for the page's lifetime; it only changes when the API is redeployed.
  */
-let vocabularyCache: Promise<unknown> | null = null;
-
-export function recordVocabulary<T>(): Promise<T> {
-  vocabularyCache ??= intakeApi<T>("/api/roles");
-  return vocabularyCache as Promise<T>;
-}

@@ -16,7 +16,7 @@ export type WorkspaceId = string;
 /**
  * The tab ids the API emits, mirroring `TabId` in api/app/models.py.
  *
- * This is not the navigation — that is `NavId` in lib/tabs.ts, which is three
+ * This is not the navigation — that is `NavId` in lib/tabs.ts, which is four
  * destinations. This list has to stay as wide as the producer's, because the
  * bundle is parsed against it: when the screens were cut back, this enum was
  * narrowed but `_disabled_tabs` still returned "learning" and briefings still
