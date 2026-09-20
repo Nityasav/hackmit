@@ -214,7 +214,10 @@ def test_factory_omits_the_payroll_agent_when_no_specialist_model_is_configured(
     with pytest.raises(HTTPException) as error:
         runtime.start(RunRequest(workspace="ws-abc123", mode="live"))
     assert error.value.status_code == 503
-    assert "agents are not" in error.value.detail
+    # The message must name the real cause. It used to say "register them in the
+    # adapter factory", which sent people to edit code when they needed a key.
+    assert "No model key is configured" in error.value.detail
+    assert "OPENAI_API_KEY" in error.value.detail
 
 
 def test_factory_registers_all_snapshot_agents(tmp_path, monkeypatch):
