@@ -87,6 +87,16 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Override the client's default deadline, in milliseconds.
+   *
+   * The default is short on purpose, so an unresponsive service surfaces as an
+   * error instead of a spinner nobody ever cancels. A few routes legitimately
+   * outlast it: running a document through the local extraction model takes
+   * roughly half a minute on this hardware. Those requests say so here rather
+   * than the whole client waiting longer for everything.
+   */
+  timeout?: number;
 }
 
 async function request<T>(client: AxiosInstance, path: string, options: RequestOptions): Promise<T> {
@@ -102,6 +112,7 @@ async function request<T>(client: AxiosInstance, path: string, options: RequestO
       data: options.body,
       headers,
       signal: options.signal,
+      ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
     });
     return response.data;
   } catch (error) {
