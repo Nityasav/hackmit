@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, useData } from "@/lib/data";
+import { CFO_API_URL as API, cfoRequest, cfoRequestOptional, isAbort } from "@/lib/api";
+import { useData } from "@/lib/data";
 import { Button, Card, CardTitle, PageHeader, Pill } from "@/components/ui";
 
-const API = process.env.NEXT_PUBLIC_CFO_API_URL || API_URL;
 const ACTIVE = new Set(["queued", "planning", "running"]);
 const AGENTS: Record<string, string> = { cfo: "CFO Agent", ap: "AP & Payments", py: "Payroll & Budget", gr: "Grants & Compliance", au: "Internal Auditor" };
 type Mode = "scripted" | "model_preview" | "live";
@@ -23,10 +23,8 @@ interface CFORun {
   events: { at: string; actor: string; action: string; detail: string; task_id: string | null }[];
 }
 
-async function loadRun(id: string, signal?: AbortSignal): Promise<CFORun> {
-  const response = await fetch(`${API}/api/cfo/runs/${encodeURIComponent(id)}`, { credentials: "include", cache: "no-store", signal });
-  if (!response.ok) throw new Error(`Could not load run (${response.status}).`);
-  return response.json();
+function loadRun(id: string, signal?: AbortSignal): Promise<CFORun> {
+  return cfoRequest<CFORun>(`/api/cfo/runs/${encodeURIComponent(id)}`, { signal });
 }
 
 export default function CFOPage() {
@@ -47,13 +45,13 @@ function CFOInvestigation() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`${API}/api/cfo/workspaces/${encodeURIComponent(ws)}/latest`, { credentials: "include", cache: "no-store", signal: controller.signal })
-      .then(async response => {
-        if (response.status === 404) return;
-        if (!response.ok) throw new Error("Could not load the latest investigation. Check access.");
-        const latest: CFORun = await response.json();
-        if (!controller.signal.aborted && latest.request.workspace === ws) { setRun(current => current || latest); setSavedId(current => current || latest.id); }
-      }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to load investigation."); });
+    void cfoRequestOptional<CFORun>(`/api/cfo/workspaces/${encodeURIComponent(ws)}/latest`, { signal: controller.signal })
+      .then(latest => {
+        if (!latest || controller.signal.aborted || latest.request.workspace !== ws) return;
+        setRun(current => current || latest);
+        setSavedId(current => current || latest.id);
+      })
+      .catch(e => { if (!isAbort(e)) setError(e instanceof Error ? e.message : "Unable to load investigation."); });
     return () => controller.abort();
   }, [ws]);
 
@@ -66,7 +64,7 @@ function CFOInvestigation() {
         const next = await loadRun(runId, controller.signal);
         if (!controller.signal.aborted) { setRun(next); setError(null); }
       } catch (e) {
-        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Unable to refresh run.");
+        if (!controller.signal.aborted && !isAbort(e)) setError(e instanceof Error ? e.message : "Unable to refresh run.");
       }
       if (!controller.signal.aborted) timer = setTimeout(poll, 1500);
     };
@@ -78,15 +76,10 @@ function CFOInvestigation() {
     setStarting(true);
     setError(null);
     try {
-      const response = await fetch(`${API}/api/cfo/runs`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspace: ws, objective, mode, workflow: mode === "live" ? "five_agent" : "focused" }),
+      const next = await cfoRequest<CFORun>("/api/cfo/runs", {
+        method: "POST",
+        body: { workspace: ws, objective, mode, workflow: mode === "live" ? "five_agent" : "focused" },
       });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new Error(typeof body.detail === "string" ? body.detail : `Run could not start (${response.status}).`);
-      }
-      const next: CFORun = await response.json();
       setRun(next);
       setSavedId(next.id);
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to start run."); }

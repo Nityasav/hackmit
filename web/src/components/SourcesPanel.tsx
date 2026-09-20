@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createClient } from "@/lib/supabase/client";
+import { getSupabaseClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 import type { AgentRun, Coverage, ImportBatch, IntakeWorkspace, SourceDetail, SourceOptions, SourceRole } from "@/lib/types";
@@ -77,7 +77,7 @@ export function SourcesPanel() {
   // than being compiled into the bundle.
   useEffect(() => {
     let mounted = true;
-    void createClient()
+    void getSupabaseClient()
       .rpc("get_starter_pack")
       .then(({ data }) => { if (mounted && data) setSample(data as StarterPack); });
     return () => { mounted = false; };
@@ -150,9 +150,9 @@ export function SourcesPanel() {
           <button disabled={busy || agentBusy || agentRunning || !snapshot || !agentFocus.trim()} className={primary + " whitespace-nowrap"} onClick={async () => {
             setAgentBusy(true); setError(""); setMessage("");
             try {
-              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: JSON.stringify({
+              const run = await intakeApi<AgentRun>(base + "/agent-runs", { method: "POST", body: {
                 agent: selectedAgent, focus: agentFocus, snapshot_id: snapshot!.id, request_id: crypto.randomUUID(),
-              }) });
+              } });
               setAgentRuns((runs) => [run, ...runs.filter((r) => r.id !== run.id)]);
               await refreshBundle();
               setMessage(`${AGENTS[selectedAgent].label} review saved. Review the candidate findings and suggested evidence below.`);
@@ -197,9 +197,9 @@ export function SourcesPanel() {
             <b>Suggested evidence: {request.title}</b><p className="my-1">{request.reason}</p>
             <button className={button} disabled={busy || !agentRuns[0].current_snapshot || Boolean(coverage?.requests.some((r) => r.task_id === agentRuns[0].id && r.title === request.title))}
               onClick={() => act(async () => {
-                setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: JSON.stringify({
+                setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: {
                   title: request.title, role: request.role, task_id: agentRuns[0].id,
-                }) }));
+                } }));
               })}>Add evidence request</button>
           </div>)}
           {agentRuns[0].result.analysis.limitations.length > 0 && <p className="mt-3 text-xs text-slate-500"><b>Run limitations:</b> {agentRuns[0].result.analysis.limitations.join("; ")}</p>}
@@ -286,11 +286,11 @@ export function SourcesPanel() {
         {batch.changes.length > 0 && <details className="my-2"><summary className="font-semibold">Review {batch.changes.length} superseding record changes</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(batch.changes, null, 2)}</pre></details>}
         {batch.status !== "committed" ? <div className="mt-3 flex flex-wrap gap-2">
           <button disabled={busy} className={button} onClick={() => act(async () => showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/mapping", {
-            method: "PATCH", body: JSON.stringify({ expected_version: batch.version, files: draft }),
+            method: "PATCH", body: { expected_version: batch.version, files: draft },
           }))) }>Save mappings & revalidate</button>
           <button disabled={busy || batch.status !== "ready_to_commit" || Boolean(draftChanged)} className={primary} onClick={() => act(async () => {
             showBatch(await intakeApi<ImportBatch>(base + "/imports/" + batch.id + "/commit", {
-              method: "POST", body: JSON.stringify({ expected_version: batch.version, idempotency_key: batch.id + ":" + batch.version }),
+              method: "POST", body: { expected_version: batch.version, idempotency_key: batch.id + ":" + batch.version },
             }));
             setFiles([]); if (fileInput.current) fileInput.current.value = "";
             await Promise.all([refresh(), refreshBundle()]);
@@ -310,7 +310,7 @@ export function SourcesPanel() {
         <div><h3 className="font-semibold">Missing evidence requests</h3>
           <p className="my-2 text-[11px] text-slate-500">Track evidence for later review. Attaching a document does not mean an auditor verified it.</p>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const d = new FormData(form);
-            act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: JSON.stringify({ title: d.get("title"), role: d.get("role") }) })); form.reset(); }); }}>
+            act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests", { method: "POST", body: { title: d.get("title"), role: d.get("role") } })); form.reset(); }); }}>
             <input required name="title" aria-label="Evidence request" placeholder="What evidence is missing?" className={input} />
             <select name="role" defaultValue="service" aria-label="Requested evidence role" className={input}>{Object.entries(ROLES).map(([r, label]) => <option key={r} value={r}>{label}</option>)}</select>
             <button disabled={busy} className={button}>Add request</button>
@@ -320,7 +320,7 @@ export function SourcesPanel() {
             <select aria-label={`Attach evidence for ${r.title}`} disabled={busy} className={input + " mt-2"} value="" onChange={(e) => {
               const id = e.target.value; if (!id) return;
               act(async () => { setCoverage(await intakeApi<Coverage>(base + "/evidence-requests/" + r.id + "/responses", {
-                method: "POST", body: JSON.stringify({ source_id: id, expected_version: r.version }),
+                method: "POST", body: { source_id: id, expected_version: r.version },
               })); setMessage("Evidence linked. A resumption event is saved for the future agent runtime; review is still required."); });
             }}><option value="">Attach a committed {ROLES[r.role].toLowerCase()} source…</option>
               {coverage.sources.filter((s) => s.active && s.role === r.role).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -333,7 +333,7 @@ export function SourcesPanel() {
 
     {creating && <Modal title="Create an institution workspace" close={() => !busy && setCreating(false)}>
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const d = Object.fromEntries(new FormData(e.currentTarget));
-        act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: JSON.stringify(d) });
+        act(async () => { const w = await intakeApi<IntakeWorkspace>("/api/workspaces", { method: "POST", body: d });
           await refreshWorkspaces(); setCreating(false); setWs(w.id); }); }}>
         <label className="text-xs">Institution name<input name="name" required maxLength={120} placeholder="Your fictional school or public-report institution" className={input} /></label>
         <label className="text-xs">Institution type<select name="entity_type" className={input}>{["school", "district", "board", "university"].map((v) => <option key={v}>{v}</option>)}</select></label>

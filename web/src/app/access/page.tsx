@@ -10,12 +10,12 @@ export default function AccessPage() {
   useEffect(() => { intakeApi<Access>("/api/access/status").then(setAccess).catch(e => setMessage(e.message)); }, []);
   async function login(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
-    try { await intakeApi("/api/access/login", { method: "POST", body: JSON.stringify({ username, password }) }); setPassword(""); window.location.reload(); }
+    try { await intakeApi("/api/access/login", { method: "POST", body: { username, password } }); setPassword(""); window.location.reload(); }
     catch (e) { setMessage(e instanceof Error ? e.message : "Sign-in failed"); } finally { setBusy(false); }
   }
   async function remove() {
     setBusy(true);
-    try { await intakeApi(`/api/workspaces/${ws}`, { method: "DELETE", body: JSON.stringify({ confirmation }) }); setWs("sandbox"); await refreshWorkspaces(); setConfirmation(""); setMessage("Workspace logically deleted, including original uploads, reviews and follow-up. OS backups and filesystem remnants are not erased."); }
+    try { await intakeApi(`/api/workspaces/${ws}`, { method: "DELETE", body: { confirmation } }); setWs("sandbox"); await refreshWorkspaces(); setConfirmation(""); setMessage("Workspace logically deleted, including original uploads, reviews and follow-up. OS backups and filesystem remnants are not erased."); }
     catch (e) { setMessage(e instanceof Error ? e.message : "Deletion failed"); } finally { setBusy(false); }
   }
   return <div className="mx-auto max-w-3xl space-y-6"><h1 className="text-3xl font-semibold">Access, privacy & demo limits</h1><section className="border border-line p-5"><h2 className="text-xl font-semibold">Laptop-only by design</h2><p className="mt-3">Use fictional or approved public records. The server refuses non-loopback connections and untrusted browser origins. This is not authorization to use confidential employee, student or school-board records.</p><p className="mt-3 text-sm text-ink-dim">Local database files have restricted permissions, not application-level encryption. Enterprise identity, managed encrypted backups, legal/privacy review and an Ontario accounting adapter remain deployment gates.</p></section>

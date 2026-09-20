@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 /**
  * What the person is doing, recorded as it happens.
@@ -35,7 +35,7 @@ async function sessionId(): Promise<string | null> {
     return null;
   }
 
-  const supabase = createClient();
+  const supabase = getSupabaseClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
@@ -61,7 +61,7 @@ export async function track(
   options: { workspaceId?: string | null; target?: string | null; metadata?: Record<string, unknown> } = {},
 ): Promise<void> {
   try {
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return;
 

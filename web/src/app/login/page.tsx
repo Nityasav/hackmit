@@ -1,13 +1,21 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
 
-import { createClient } from "@/lib/supabase/client";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import { markReturningVisitor, returningVisitorStore } from "@/lib/session-cookie";
+import { track } from "@/lib/activity";
 
 type Mode = "signin" | "signup";
 
 function AuthForm() {
+  const supabase = getSupabaseClient();
+  const returning = useSyncExternalStore(
+    returningVisitorStore.subscribe,
+    returningVisitorStore.getSnapshot,
+    returningVisitorStore.getServerSnapshot,
+  );
   const router = useRouter();
   const params = useSearchParams();
   // Only ever redirect within this site. A bare "/..." path is fine; anything
@@ -28,7 +36,6 @@ function AuthForm() {
     setBusy(true);
     setError("");
     setNotice("");
-    const supabase = createClient();
 
     try {
       if (mode === "signup") {
@@ -55,6 +62,9 @@ function AuthForm() {
         if (error) throw error;
       }
 
+      markReturningVisitor();
+      void track(mode === "signup" ? "sign_up" : "sign_in");
+
       // Full reload so the proxy re-reads the session cookie it just set.
       router.push(next);
       router.refresh();
@@ -72,7 +82,9 @@ function AuthForm() {
       <div className="w-full max-w-[400px]">
         <h1 className="text-2xl font-bold tracking-tight">SchoolTrace</h1>
         <p className="mt-2 font-accent text-[14px] text-ink-dim">
-          An Office of the CFO for schools, run by AI agents.
+          {returning
+            ? "Welcome back. Sign in to pick up where you left off."
+            : "An Office of the CFO for schools, run by AI agents."}
         </p>
 
         <div className="mt-8 flex border-b border-line">

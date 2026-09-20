@@ -113,7 +113,7 @@ function FollowUpForm({ ws, finding: f, saved }: { ws: string; finding: Finding;
   const [status, setStatus] = useState("open"); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setMessage("");
-    try { await intakeApi(`/api/workspaces/${ws}/review/actions`, { method: "POST", body: JSON.stringify({ finding_id: f.id, snapshot_id: f.snapshot_id, expected_version: f.follow_up?.version || 0, owner, note, status }) }); await saved(); }
+    try { await intakeApi(`/api/workspaces/${ws}/review/actions`, { method: "POST", body: { finding_id: f.id, snapshot_id: f.snapshot_id, expected_version: f.follow_up?.version || 0, owner, note, status } }); await saved(); }
     catch (e) { setMessage(e instanceof Error ? e.message : "Unable to save"); } finally { setBusy(false); }
   }
   return <form onSubmit={submit} className="mt-5 space-y-3 border-t border-line pt-4"><h3 className="font-semibold">Record human follow-up</h3>
