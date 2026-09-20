@@ -85,6 +85,16 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Override the client's default deadline, in milliseconds.
+   *
+   * The default is short on purpose, so an unresponsive service surfaces as an
+   * error instead of a spinner nobody ever cancels. A few routes legitimately
+   * outlast it: running a document through the local extraction model takes
+   * roughly half a minute on this hardware. Those requests say so here rather
+   * than the whole client waiting longer for everything.
+   */
+  timeout?: number;
 }
 
 async function request<T>(client: AxiosInstance, path: string, options: RequestOptions): Promise<T> {
@@ -100,6 +110,7 @@ async function request<T>(client: AxiosInstance, path: string, options: RequestO
       data: options.body,
       headers,
       signal: options.signal,
+      ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
     });
     return response.data;
   } catch (error) {
@@ -114,3 +125,17 @@ export function intakeApi<T>(path: string, options: RequestOptions = {}): Promis
   return request<T>(api, path, options);
 }
 
+
+/**
+ * The record vocabulary, so the browser can work out a file's type before upload.
+ *
+ * Fetched rather than restated in TypeScript: `api/app/roles.py` is the one definition,
+ * and a second copy here would mean adding a record type silently stopped it being
+ * detected. Cached for the page's lifetime; it only changes when the API is redeployed.
+ */
+let vocabularyCache: Promise<unknown> | null = null;
+
+export function recordVocabulary<T>(): Promise<T> {
+  vocabularyCache ??= intakeApi<T>("/api/roles");
+  return vocabularyCache as Promise<T>;
+}

@@ -2,7 +2,7 @@
 
 import { displayLabel } from "@/lib/format";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, intakeApi, useData } from "@/lib/data";
 
 type Observation = { status: "present" | "missing" | "ambiguous" | "unreadable"; value: string | null; page: number | null; start: number | null; end: number | null };
@@ -16,7 +16,7 @@ type Correction = { id: string; document_id: string; output: Output; group: stri
 type State = { documents: Doc[]; model: Model[]; prediction: { id: string; document_id: string; output: Output | null; error: string | null }[];
   correction: Correction[]; retirement: { model_id: string }[];
   active: { model_id: string; version: number } | null; schemas: Record<string, string[]>; schema_version: string };
-const button = "border border-line px-3 py-2 text-sm disabled:opacity-40";
+const button = "min-h-11 border border-line px-3 py-2 text-sm disabled:opacity-40";
 const input = "w-full border border-line bg-white p-2 text-sm";
 
 function FieldEditor({ text, doc, fields, change }: { text: string; doc: Doc; fields: string[]; change: (text: string) => void }) {
@@ -76,6 +76,7 @@ function Lab({ ws }: { ws: string }) {
   const [selected, setSelected] = useState("");
   const [role, setRole] = useState("invoice");
   const [file, setFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [replaces, setReplaces] = useState("");
   const [editor, setEditor] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -115,15 +116,27 @@ function Lab({ ws }: { ws: string }) {
     {message && <p role="status" className="border border-line bg-surface-2 p-3 text-[13px]">{message}</p>}
     {!state ? <p className="text-[13px] text-ink-dim">Opening this workspace&rsquo;s documents…</p> : <>
       <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Add a document</h3><p className="my-2 max-w-prose text-[13px] leading-relaxed text-ink-dim">PDF, PNG, JPEG, TXT or Markdown. Up to 10 MB, 20 pages and 12 megapixels per page.</p>
-        <div className="flex flex-wrap items-end gap-3 text-[13px]"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
-          <label>Choose document<input className={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+        <p className="mb-4 text-[13px] text-ink-dim">For CSV files, <a href="#source-records" className="font-semibold text-ink underline">use Add records above</a> to preview columns and import rows.</p>
+        <div className="grid items-end gap-4 text-[13px] sm:grid-cols-2"><label>Kind of document<select className={input} value={role} onChange={e => setRole(e.target.value)}>{Object.keys(state.schemas).map(r => <option key={r} value={r}>{displayLabel(r)}</option>)}</select></label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+            <span>Choose document</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={`${button} font-semibold`} style={{ background: "#09090b", color: "white", border: "1px solid #09090b", padding: "10px 16px" }} disabled={busy} onClick={() => fileInput.current?.click()}>Choose document</button>
+              <span className="min-w-0 break-all text-xs text-ink-dim" aria-live="polite">{file?.name || "No document selected"}</span>
+            </div>
+            <input ref={fileInput} style={{ display: "none" }} aria-label="Select document file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} />
+          </div>
           <label>New file or a replacement<select className={input} value={replaces} onChange={e => setReplaces(e.target.value)}><option value="">New document</option>{state.documents.filter(d => d.role === role).map(d => <option key={d.id} value={d.id}>Replaces {d.name} v{d.version}</option>)}</select></label>
           <button className={button} disabled={busy || !file} onClick={() => act(async () => { const form = new FormData(); form.append("file", file!); form.append("role", role); if (replaces) form.append("replaces_id", replaces); const d = await intakeApi<Doc>(base + "/documents", { method: "POST", body: form }); choose(d); }, "Document saved and read. Check any warnings before using the text.")}>Upload &amp; read</button></div>
         <div className="mt-3 flex flex-wrap gap-2">{state.documents.map(d => <button className={button} key={d.id} onClick={() => choose(d)}>{d.name} · {d.role} · v{d.version}</button>)}</div>
       </section>
       {doc && <section className="border border-line p-5"><h3 className="text-[15px] font-semibold tracking-tight">Check {doc.name} against its pages</h3><p className="break-all font-mono text-[11px] text-ink-faint">SHA-256 {doc.sha256}</p><a className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/original`}>Download the preserved original</a>
         <div className="my-3 flex flex-wrap gap-2"><select aria-label="Extraction model" className={button} value={model} onChange={e => setModel(e.target.value)}><option value="">Active model {state.active ? `(${state.active.model_id})` : "— none configured"}</option>{availableModels.map(m => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
-          <button className={button} disabled={busy || (!model && !state.active)} onClick={() => act(async () => { const p = await intakeApi<{ output: Output | null; error: string | null }>(base + "/predict", { method: "POST", body: { document_id: doc.id, model_id: model || null } }); if (p.error) throw new Error(p.error); setEditor(JSON.stringify(p.output, null, 2)); }, "A first pass is ready for you to check. Nothing has been accepted.")}>Read it with the configured model</button></div>
+          {/* The local model takes roughly half a minute per document, so this
+              one request opts out of the client's short default deadline. At 20s
+              the browser gave up on work the model went on to finish, and the
+              screen simply stayed blank. */}
+          <button className={button} disabled={busy || (!model && !state.active)} onClick={() => act(async () => { const p = await intakeApi<{ output: Output | null; error: string | null }>(base + "/predict", { method: "POST", body: { document_id: doc.id, model_id: model || null }, timeout: 180_000 }); if (p.error) throw new Error(p.error); setEditor(JSON.stringify(p.output, null, 2)); }, "A first pass is ready for you to check. Nothing has been accepted.")}>Read it with the configured model</button></div>
         <div className="grid gap-4 lg:grid-cols-2"><div className="max-h-[650px] overflow-auto">{doc.pages.map(p => <article className="mb-4 border border-line p-3" key={p.page}><h4 className="text-[13px] font-semibold">Page {p.page} · {p.method}</h4>{p.warnings.map(w => <p className="text-[12px] text-amber-800" key={w}>{w}</p>)}{![".txt", ".md"].includes(doc.suffix) && <a target="_blank" rel="noreferrer" className="text-[13px] underline" href={`${API_URL}${base}/documents/${doc.id}/pages/${p.page}`}>View the original page image</a>}<pre className="whitespace-pre-wrap text-xs">{p.text}</pre></article>)}</div>
           <div><p className="mb-2 text-[13px]">Check each value against the source. Citation offsets start at zero; the end position is excluded.</p><FieldEditor text={editor} doc={doc} fields={state.schemas[doc.role]} change={setEditor} /><details className="mt-3"><summary className="text-[13px]">Edit the raw extraction JSON</summary><label>Extraction JSON<textarea aria-label="Extraction JSON" spellCheck={false} className={`${input} h-96 font-mono text-xs`} value={editor} onChange={e => setEditor(e.target.value)} /></label></details></div></div>
         <details className="my-3"><summary className="cursor-pointer text-[13px]">The page text itself is wrong</summary><p className="my-2 text-[13px]">Compare each page image first. Saving this creates a new text revision and invalidates the values already placed against the old one. The original file is never overwritten.</p><textarea aria-label="Page transcription JSON array" className={`${input} h-40 font-mono`} value={transcript} onChange={e => setTranscript(e.target.value)} /><button disabled={busy || !note.trim()} className={button} onClick={() => act(() => post(`/documents/${doc.id}/transcription`, { expected_text_sha256: doc.text_sha256, pages: JSON.parse(transcript), note }), "New text revision saved. Re-open the document and check every value again.")}>Save a corrected transcription</button></details>
@@ -133,6 +146,6 @@ function Lab({ ws }: { ws: string }) {
           <button className={button} disabled={busy || !correction || correction.text_sha256 !== doc.text_sha256} onClick={() => act(() => post("/stage", { correction_id: correction!.id, include_records: includeRecords }), "Staged for import. Scroll up to the import, check it, then commit it.")}>Stage it for import</button></div>
       </section>}
     </>}
-    {busy && <p role="status" className="text-[13px]">Working… keep this open. The original is safe; do not repeat the action.</p>}
+    {busy && <p role="status" className="text-[13px]">Working… keep this open. Reading a document with the model takes about half a minute. The original is safe; do not repeat the action.</p>}
   </div>;
 }

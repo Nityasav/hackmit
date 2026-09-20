@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from . import approvals, ingestion, projection
+from . import approvals, ingestion, projection, roles
 from .agents import api as agents_api
 from .models import ApprovalDecision, Bundle, WorkspaceId
 from .reviews import router as review_router
@@ -179,6 +179,30 @@ def mapping(ws: str, bid: str, body: ingestion.MappingUpdate):
 @app.post("/api/workspaces/{ws}/imports/{bid}/commit")
 def commit(ws: str, bid: str, body: ingestion.CommitRequest):
     return ingestion.commit(ws, bid, body)
+
+
+@app.post("/api/workspaces/{ws}/sources/detect")
+def detect_saved_sources(ws: str):
+    """Find committed documents that are really structured records, and stage them."""
+    return ingestion.detect_saved_sources(ws)
+
+
+@app.get("/api/roles")
+def record_roles():
+    """The record vocabulary, so the browser can detect a file's type before upload.
+
+    Served rather than restated in TypeScript: the frontend detector used to carry its
+    own copy of every role's columns, which meant adding a role silently stopped it
+    being detected. One definition, `app/roles.py`, and both sides read it.
+    """
+    return {
+        "roles": [{"id": role, "label": roles.LABELS[role], "required": fields,
+                   "key": list(roles.KEY_FIELDS[role])}
+                  for role, fields in roles.FIELDS.items()],
+        "documents": [{"id": role, "label": roles.LABELS[role]}
+                      for role in sorted(roles.DOCUMENT_ROLES)],
+        "optional": roles.OPTIONAL_FIELDS,
+    }
 
 
 @app.get("/api/workspaces/{ws}/coverage")

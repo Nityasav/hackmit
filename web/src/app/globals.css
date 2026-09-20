@@ -115,6 +115,7 @@ label:has(> textarea.w-full) {
   min-width: 0;
   flex-direction: column;
   gap: 0.375rem;
+  line-height: 1.5;
 }
 
 label > input.w-full,
@@ -122,6 +123,58 @@ label > select.w-full,
 label > textarea.w-full {
   display: block;
   min-width: 0;
+}
+
+/* Native selects otherwise retain platform-specific heights. Keep text fields
+   aligned, and draw focus inside controls so it cannot cross a nearby label. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Compact, consistent fields without enlarging every control in the app. */
+.institution-form input,
+.institution-form select {
+  box-sizing: border-box;
+  height: 2.125rem;
+  padding: 0.375rem 0.625rem;
+  line-height: 1.25rem;
+  appearance: none;
+}
+
+.institution-form select {
+  appearance: auto;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+}
+
+input[type="file"] {
+  width: 100%;
+  overflow: hidden;
+  font-size: 0.8125rem;
+}
+
+input[type="file"]::file-selector-button {
+  min-height: 2.625rem;
+  margin-right: 0.75rem;
+  border: 1px solid var(--color-ink);
+  background: var(--color-ink);
+  color: white;
+  padding: 0.625rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+input[type="file"]:disabled::file-selector-button {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Keyboard focus is always visible; mouse focus never draws a ring. */

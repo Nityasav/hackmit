@@ -17,8 +17,20 @@ and everything under the name "money-in". That was a deliberate removal, not an 
 `accounting/{payroll,grants,collections,ap,review}.py` and `agents/{cfo,grants,auditor}.py`
 were deleted with their tests.
 
-If you have money-in work in flight, stop and talk to the team before writing more. The
-question is not how to merge it; it is whether the pivot is agreed.
+`main` was merged into this work rather than replaced by it, so every commit made
+while the rework was in progress is still in the history. What was *carried across*:
+
+| Ported | How |
+| --- | --- |
+| `detect_saved_sources` | Verbatim. It read `roles.FIELDS` instead of restating role names, so it recognizes the new twenty-one roles with no edit |
+| `source-detection.ts` | Rewritten to fetch `/api/roles` rather than carry its own copy of the schema table, which is what used to make it go stale |
+| `extraction/serve.py` and its benchmark | Untouched. Extraction survives the pivot, and the measured results stand |
+| The 20s client timeout fix, the health probe and origin regex | Untouched |
+
+What was **not** carried across, and why: the money-in checks, the triage agent's
+guardrails, and the rubric benchmark built on them. They test behaviour this rework
+deleted. The grading principle behind that benchmark is worth keeping, though, and is
+written down under "Evaluating" below.
 
 ## Safe to build on
 
@@ -113,10 +125,19 @@ These are load-bearing. Breaking one is a bug even when the tests pass.
    duplicate candidate is not a duplicate payment. Amounts from different checks are
    never summed.
 
+## Evaluating
+
+From the evaluation harness that was retired with the school domain, one principle is
+worth carrying into phase 7: **an evaluation must grade independently of the product**.
+Re-read citations from the bytes the evaluation itself supplied and compare figures
+against what those bytes contain — never against what the system under test was willing
+to accept. A benchmark that asks the system whether it passed measures nothing.
+
 ## Running it
 
 ```bash
-cd api && uv sync && uv run pytest          # 187 passing
+cd api && uv sync && uv run pytest          # 191 passing
+cd web && node --experimental-strip-types --test src/lib/*.test.ts
 cd api && uv run uvicorn app.main:app --reload --port 8000
 cd web && bun install && bun dev            # http://localhost:3000
 cd web && npx tsc --noEmit && npx eslint src

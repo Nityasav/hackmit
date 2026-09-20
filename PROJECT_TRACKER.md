@@ -10,7 +10,8 @@ This tracker replaces accumulated historical checkpoints that contradicted the c
 | Three-screen UI | Implemented: Books, Investigation, Briefing | `web/src/lib/tabs.ts`, `web/src/app/` |
 | Empty institutions | Implemented; preset content and loading paths removed | `SourcesPanel.tsx`, `store.ts`, `ingestion.py` |
 | Financial intake | Implemented: upload, map, validate, commit, provenance, revisions | `ingestion.py`, `SourcesPanel.tsx` |
-| Continuous updates | Implemented: snapshot differences and explicit rescans | `updates.py`, `FileUpdates.tsx` |
+| Continuous updates | Revision imports retained; checks available on Investigation and Books coverage cards; stale snapshot results excluded | `updates.py`, `RecordChecks.tsx`, `SourcesPanel.tsx` |
+| Coverage results | Run rules-based checks and inspect amounts/citations per card; closing balances and period result implemented, not statutory statements | `accounting/review.py`, `ingestion.py`, `test_coverage_checks.py` |
 | Five-agent workflow | Connected coordinator and specialist/reviewer adapters | `cfo/`, `agents/team.py`, `integrations/` |
 | Standalone reviews | CFO, Grants, Auditor; separate loop from coordinator | `agents/cfo.py`, `grants.py`, `auditor.py` |
 | Evidence and reports | Saved runs, calculations, citations, review feed and exports | `projection.py`, `reviews.py`, `accounting/` |
@@ -42,7 +43,7 @@ This tracker replaces accumulated historical checkpoints that contradicted the c
 1. Connect hosted API storage and authorization to the signed-in institution context for public use.
 2. Integrate the partner's extraction artifact and run paired held-out benchmarks using existing gates.
 3. Test the complete upload → committed snapshot → five-agent review → decision → briefing flow with representative authorized records.
-4. Resolve duplicate standalone controls on Books and coordinator controls on Investigation if simplifying navigation further.
+4. Preserve the Books institution dashboard, workflow guidance and coverage cards. Only File Updates, standalone Open Investigation and missing-evidence request panels are removed from intake. Keep forms compact; fix border overlap with label spacing and inset focus, not global height increases.
 5. Address client timeout versus synchronous standalone review duration before relying on long reviews remotely.
 
 ## Handoff template

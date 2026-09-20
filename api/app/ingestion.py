@@ -533,6 +533,55 @@ def source_bytes(ws, sid):
         return source["name"], bytes(source["original"])
 
 
+def detect_saved_sources(ws):
+    """Recover structured records from files that were saved as plain documents.
+
+    Ported across the SaaS rework unchanged, because it was written against
+    `roles.FIELDS` rather than against a list of role names: it detects the new
+    twenty-one roles with no edit, which is what reading the vocabulary rather than
+    restating it buys.
+
+    Prepare a normal validated import; never relabel evidence as accounting.
+
+    Historical originals remain intact. A committed structured copy with the
+    same bytes prevents repeat recovery, including after later supersession.
+    """
+    with db.connect() as connection:
+        config = workspace(connection, ws)
+        if config["kind"] == "public":
+            return {"batch": None, "detected": 0}
+        active_ids = {r["source_id"] for r in active_records(connection, ws)}
+        sources = list(connection.execute("SELECT * FROM sources WHERE ws=? AND committed=1 ORDER BY rowid", (ws,)))
+        represented = {s["sha256"] for s in sources if json.loads(s["options"])["role"] in FIELDS}
+        uploads = []
+        for source in sources:
+            options = FileOptions.model_validate_json(source["options"])
+            if source["id"] not in active_ids or options.role != "document" or source["sha256"] in represented:
+                continue
+            if PurePath(source["name"]).suffix.lower() != ".csv":
+                continue
+            content = bytes(source["original"])
+            try:
+                columns = next(csv.reader(io.StringIO(content.decode("utf-8-sig")), strict=True))
+            except (UnicodeError, csv.Error, StopIteration):
+                continue
+            normalized = [re.sub(r"[ -]+", "_", c.strip().lower()) for c in columns]
+            if len(set(normalized)) != len(columns):
+                continue
+            matches = [role for role, fields in FIELDS.items() if set(fields) <= set(normalized)]
+            if len(matches) != 1:
+                continue
+            options.role = matches[0]
+            allowed = set(FIELDS[options.role]) | set(OPTIONAL_FIELDS)
+            options.mapping = {key: value for key, value in zip(normalized, columns) if key in allowed}
+            uploads.append((source["name"], content, options))
+            represented.add(source["sha256"])
+        if not uploads:
+            return {"batch": None, "detected": 0}
+        # Apply standard limits and all row/accounting validation, atomically.
+        batch = stage_in_transaction(connection, ws, uploads)
+        return {"batch": batch, "detected": len(uploads)}
+
 def coverage(ws):
     with db.connect() as connection:
         config = workspace(connection, ws)

@@ -4,6 +4,8 @@ Updated: 2026-09-20. This is the canonical specification for the merged implemen
 
 ## 1. Product and user intent
 
+Intake file detection: `web/src/lib/source-detection.ts` matches full CSV header schemas for all eleven structured roles and maps case/space/hyphen variants to canonical columns. TXT/Markdown policy and service roles use conservative content cues and remain suggestions. Detection reads at most 64 KiB locally, makes no model call, permits manual overrides, and leaves ambiguous files as Other document with a review message. Public workspaces always retain document mode. Backend validation and explicit commit remain required; coverage reflects committed role assignments, not suggestions. Refresh sources calls `POST /api/workspaces/{ws}/sources/detect` to prepare a validated recovery import for active CSVs previously committed as Other document. It matches unique complete schemas using backend FIELDS, preserves original metadata and bytes, and requires confirmation before publishing a new snapshot. Historical document records remain intact; already recovered content hashes are skipped. Ambiguous files remain unchanged, invalid rows block commit, and public workspaces cannot be promoted to accounting. No paid model calls or automatic investigations occur. Tests: `bun test src/lib/source-detection.test.ts` and `api/tests/test_source_recovery.py`.
+
 Sherlock helps education finance teams review supplied financial records with five cooperating agents. A director creates an institution, uploads records, commits a validated snapshot, asks an investigation question, examines cited findings, records decisions, and exports a briefing. Institutions are user-created; no specific school is the target.
 
 The interface must remain compact, professional, and understandable without a demonstration. Preserve the existing monochrome palette, typography, magnifying-glass identity, and three main destinations. Do not reintroduce preset institutions, starter packs, recorded findings, scripted investigations, or automatic paid runs. Test data stays in isolated test environments.
@@ -16,7 +18,7 @@ Product copy should name the task and next action directly. Prefer short heading
 
 | Screen | Route | Implementation | User action |
 | --- | --- | --- | --- |
-| Books | `/` | `SourcesPanel`, `DocumentIntake`, `FileUpdates`, `GuidedWorkflow` | Create institution; upload, map, validate and commit records; add later revisions |
+| Books | `/` | `GuidedWorkflow`, `SourcesPanel`, `DocumentIntake` | Institution dashboard and intake guidance; upload, map, validate and commit records; add later revisions |
 | Investigation | `/investigation` | `components/investigation/` | Set objective; start five-agent review; inspect progress, sources, findings and precedent |
 | Briefing | `/briefing` | `ReviewWorkspace` with `section="reports"` | Review snapshot findings, limitations and saved follow-up; export Markdown or print |
 | Access | `/access` | Access page and local API access routes | Inspect local access, sign in when configured, delete a workspace |
@@ -24,7 +26,7 @@ Product copy should name the task and next action directly. Prefer short heading
 
 `web/src/lib/tabs.ts` owns primary navigation. Historical `/command`, `/board`, `/findings`, `/reports`, `/learning`, and `/cfo` page references are not current destinations. Some legacy tab identifiers remain in bundle contracts; do not confuse them with public routes. Current `disabled_tabs` is empty to avoid returning removed navigation identifiers to the frontend schema.
 
-The normal sequence is create → upload → preview/map → commit → investigate → review/export. Committing data does not call a model. Starting a live investigation does. Books still exposes separate CFO, Grants and Auditor controls as well as the main Investigation flow; this is existing duplication, not an additional orchestration system to build.
+The normal sequence is create → upload → preview/map → commit → investigate → review/export. Committing data does not call a model. Starting a live investigation does. Books retains its institution dashboard, creation guidance, workflow progress and coverage cards. Only the standalone Open Investigation agent panel, File Updates panel and missing-evidence request form were removed from intake. Agent execution and record checks remain on Investigation. Evidence-request and update APIs remain available; removing their intake panels does not delete stored evidence or disable revision imports. Native file selectors have contrasting buttons. Labels have a small gap and focus outlines are inset; institution fields are compact (34px), not globally enlarged.
 
 ## 3. Architecture and ownership
 
@@ -84,6 +86,8 @@ Standalone routes `/api/workspaces/{ws}/agent-runs` support `cfo`, `grants_compl
 Models interpret sources; accounting code supplies monetary results. A supported amount requires a published calculation and provenance. Auditor acceptance is a bounded claim review; human approval remains separate. Agents cannot post journals, release real payments or change payroll through their evidence tools. Uploaded instructions are untrusted document content.
 
 ## 6. Findings, decisions, reports and memory
+
+Coverage cards now expose explicit rules-based check actions using the existing `POST /api/workspaces/{ws}/review/scans` endpoint (one scan calculates all available checks; no model calls). Cards display per-area results with amounts, next actions and clickable source lines. `coverage` projects only the latest scan when its snapshot matches the current committed snapshot; new commits clear displayed results until rerun. Missing inputs remain visible even when partial checks run. Statuses distinguish ready_to_check, checks_passed, differences_found and evidence_gaps; none is an Auditor verdict. Public-document workspaces cannot run USD accounting checks. Management calculations in `accounting/review.py` now include opening-plus-activity closing account balances, a closing trial-balance difference and period revenue less expenses. Positive account balances are debits, negative credits; positive period result is surplus. These are supplied-record management summaries, not complete statutory statements. Budget checks retain their explicit assumption that the supplied approved budget covers the workspace period; collection checks retain their reference-matching and completeness limitations. Regression tests: `tests/test_coverage_checks.py` cover exact amounts, provenance, missing evidence, stale snapshots and public-mode refusal.
 
 `projection.py` derives dashboard tasks, findings, decisions, approvals, reports and precedent from saved runs. It must never populate an empty workspace with unrelated results. `reviews.py` also exposes a snapshot review feed that combines deterministic checks, standalone candidates, coordinator claims and follow-up history; the Briefing screen currently consumes this feed.
 
