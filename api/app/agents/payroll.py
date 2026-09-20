@@ -193,6 +193,8 @@ class PayrollBudgetSpecialist:
                 break
             order.append(source_id)
             spent += 1
+        # Record this before calculation prerequisites extend `order` and hide it.
+        chosen_dropped = len(order) < len(chosen)
         for calculation_id in requested_calculations:
             missing = [s for s in offered_calculations[calculation_id].source_ids if s not in order]
             if spent + len(missing) + 1 > budget:
@@ -200,7 +202,7 @@ class PayrollBudgetSpecialist:
             order.extend(missing)
             wanted_calculations.append(calculation_id)
             spent += len(missing) + 1
-        if len(order) < len(chosen) or len(wanted_calculations) < len(requested_calculations):
+        if chosen_dropped or len(wanted_calculations) < len(requested_calculations):
             notes.append("The evidence budget for this task did not cover everything this payroll review "
                          "selected; the remaining payroll evidence is unreviewed.")
 
